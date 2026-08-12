@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TrackSessionTimer GPS track definition",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "track_id",
+    "name",
+    "reference",
+    "geofence",
+    "start_finish"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "track_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "country": {
+      "type": "string"
+    },
+    "reference": {
+      "$ref": "#/$defs/point"
+    },
+    "geofence": {
+      "type": "object",
+      "required": [
+        "center_lat_deg",
+        "center_lon_deg",
+        "radius_m"
+      ],
+      "properties": {
+        "center_lat_deg": {
+          "type": "number"
+        },
+        "center_lon_deg": {
+          "type": "number"
+        },
+        "radius_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "start_finish": {
+      "type": "object",
+      "required": [
+        "a",
+        "b",
+        "direction_heading_deg",
+        "heading_tolerance_deg",
+        "minimum_lap_time_s"
+      ],
+      "properties": {
+        "a": {
+          "$ref": "#/$defs/point"
+        },
+        "b": {
+          "$ref": "#/$defs/point"
+        },
+        "direction_heading_deg": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        },
+        "heading_tolerance_deg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180
+        },
+        "minimum_lap_time_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "sectors": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "$defs": {
+    "point": {
+      "type": "object",
+      "required": [
+        "lat_deg",
+        "lon_deg"
+      ],
+      "properties": {
+        "lat_deg": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lon_deg": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      }
+    }
+  }
+}
