@@ -1,0 +1,9 @@
+Ref,Qty,Category,Description,Manufacturer,ManufacturerPart,PreferredUKSupplier,SupplierPart,IndicativePriceExVAT_GBP,IndicativePriceIncVAT_GBP,ProcurementURL,Priority,Notes
+H1,1,Display/controller,Waveshare ESP32-S3 2.41 inch AMOLED Touch Display Dev Board with case,Waveshare,ESP32-S3-Touch-AMOLED-2.41-B,The Pi Hut,WAV-30589,,51.90,https://thepihut.com/collections/waveshare/products/esp32-s3-2-41-amoled-touch-display-dev-board-with-case-600x450,Core,Selected UK baseline; 600x450 AMOLED; 800 cd/m2 stated; case; QMI8658; microSD
+H2,1,GNSS breakout,SparkFun GPS Breakout NEO-M9N SMA (Qwiic),SparkFun Electronics,GPS-17285 / 17285,DigiKey UK,1568-17285-ND,57.99,69.59,https://www.digikey.co.uk/en/products/detail/sparkfun-electronics/GPS-17285/13561758,Core,Selected UK baseline; genuine u-blox NEO-M9N; 25 Hz max; 3.3V UART/I2C; UBX; integrated SMA
+H3,1,GNSS antenna,Active GNSS antenna with SMA male connector,TBD,TBD,UK supplier required,TBD,,,TBD,Core,Selection pending; external automotive mount; active 50 ohm; match M9N L1 constellation bands and bias requirements
+H4,1,microSD,High-endurance 8-32GB microSD,TBD,TBD,UK supplier,TBD,,,TBD,Core,FAT32 during development; session trace and event logging
+H5,1,USB-C cable,Quality USB-C data/power cable,TBD,TBD,UK supplier,TBD,,,TBD,Core,Programming and bench power
+H6,1,Vehicle power,Fused/protected 5V USB automotive adaptor,TBD,TBD,UK supplier,TBD,,,TBD,Prototype,Do not connect raw vehicle 12V directly to the Waveshare board
+H7,1,Enclosure extension,3D-printed rear GNSS pod,Custom,Custom,UK fabrication / in-house,Custom,,,n/a,Prototype,Mount GPS-17285 securely; expose/protect SMA; strain relief; vehicle mount interface
+H8,1 set,Fasteners,M2/M3 screws threaded inserts and spacers,TBD,TBD,UK supplier,TBD,,,TBD,Prototype,Vibration-resistant assembly
