@@ -52,7 +52,9 @@ make simulator-run
 The simulator opens a fixed 600 x 450 ready dashboard. Use its large controls with a
 pointer/touchscreen, or keyboard focus and Enter. Every input path dispatches the same
 deterministic navigation actions. Setup edits the complete versioned device-settings
-record and makes Save, Cancel, and Defaults confirmation explicit. On Linux its
+record and makes Save, Cancel, and Defaults confirmation explicit. It also provides a
+local track selector with deterministic selected, suggested, ambiguous, missing,
+invalid, and unavailable fixtures. On Linux its
 persistent simulator record is kept at
 `/tmp/track-session-timer-simulator/settings-v2.bin`, never in the checkout. Active,
 GNSS-loss/recovery, and

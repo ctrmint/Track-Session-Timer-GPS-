@@ -61,6 +61,27 @@ int main()
     assert(std::strcmp(degraded.logging.text.data(), "NO LOGGING") == 0);
     assert(degraded.start_enabled);
 
+    ready.gnss_health = track_timer::domain::GnssHealth::good;
+    struct TrackTimingExpectation {
+        ReadyTrackState state;
+        const char* text;
+    };
+    for (const auto expectation : {
+             TrackTimingExpectation{ReadyTrackState::selected, "LAP TIMING READY"},
+             TrackTimingExpectation{ReadyTrackState::suggested,
+                                    "TIMER ONLY - CONFIRM TRACK"},
+             TrackTimingExpectation{ReadyTrackState::ambiguous,
+                                    "TIMER ONLY - SELECT TRACK"},
+             TrackTimingExpectation{ReadyTrackState::missing,
+                                    "TIMER ONLY - TRACK MISSING"},
+             TrackTimingExpectation{ReadyTrackState::invalid,
+                                    "TIMER ONLY - TRACK DATA"},
+             TrackTimingExpectation{ReadyTrackState::none, "TIMER ONLY - NO TRACK"},
+         }) {
+        ready.track_state = expectation.state;
+        assert(std::strcmp(present_ready(ready).timing_mode.data(), expectation.text) == 0);
+    }
+
     ready.session_active = true;
     const auto active = present_ready(ready);
     assert(!active.setup_enabled);

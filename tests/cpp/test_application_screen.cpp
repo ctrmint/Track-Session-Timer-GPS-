@@ -1,4 +1,5 @@
 #include "application_screen.hpp"
+#include "track_timer/simulator/track_fixtures.hpp"
 
 #include <SDL2/SDL.h>
 #include <lvgl.h>
@@ -43,7 +44,10 @@ int main()
     MemoryStore store{};
     settings::SettingsManager settings_manager{store};
     (void)settings_manager.load();
-    simulator::ApplicationScreen screen{lv_screen_active(), settings_manager};
+    const auto tracks = simulator::make_track_fixture(simulator::TrackFixtureId::suggested);
+    const auto track_match = track::match_track_geofences(tracks.catalog(), tracks.request);
+    simulator::ApplicationScreen screen{lv_screen_active(), settings_manager, tracks.catalog(),
+                                        track_match};
     ui::ReadySnapshot snapshot{};
     std::strcpy(snapshot.selected_track.data(), "Synthetic Test Loop");
     snapshot.gnss_health = domain::GnssHealth::searching;
@@ -69,6 +73,17 @@ int main()
 
     click(screen.ready_screen().button_for(ui::NavigationAction::open_setup));
     assert(screen.destination() == ui::Destination::setup);
+    assert(screen.setup_page() == simulator::SetupPage::menu);
+    for (const auto action : {ui::SetupMenuAction::track_selection,
+                              ui::SetupMenuAction::device_settings,
+                              ui::SetupMenuAction::back}) {
+        auto* button = screen.setup_menu_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+    click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::device_settings));
+    assert(screen.setup_page() == simulator::SetupPage::device_settings);
     assert(std::strcmp(lv_label_get_text(screen.settings_screen().field_label_object()),
                        "TRACK SESSION") == 0);
     assert(std::strcmp(lv_label_get_text(screen.settings_screen().value_label_object()),
@@ -94,6 +109,34 @@ int main()
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::save));
     assert(settings_manager.current().session_duration_minutes == 25);
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel));
+    assert(screen.destination() == ui::Destination::setup);
+    assert(screen.setup_page() == simulator::SetupPage::menu);
+
+    click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::track_selection));
+    assert(screen.setup_page() == simulator::SetupPage::track_selection);
+    assert(std::strcmp(lv_label_get_text(screen.track_selection_screen().track_name_object()),
+                       "Synthetic Test Loop") == 0);
+    for (const auto action : {ui::TrackSelectionAction::previous,
+                              ui::TrackSelectionAction::select,
+                              ui::TrackSelectionAction::next,
+                              ui::TrackSelectionAction::timer_only,
+                              ui::TrackSelectionAction::capture_information,
+                              ui::TrackSelectionAction::back}) {
+        auto* button = screen.track_selection_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+    click(screen.track_selection_screen().button_for(ui::TrackSelectionAction::select));
+    assert(std::strcmp(settings_manager.current().selected_track_id.data(),
+                       "synthetic_test_loop") == 0);
+    click(screen.track_selection_screen().button_for(
+        ui::TrackSelectionAction::capture_information));
+    assert(screen.track_selection().status() ==
+           ui::TrackSelectionStatus::capture_information);
+    click(screen.track_selection_screen().button_for(ui::TrackSelectionAction::back));
+    assert(screen.setup_page() == simulator::SetupPage::menu);
+    click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::back));
     assert(screen.destination() == ui::Destination::ready);
 
     click(screen.ready_screen().button_for(ui::NavigationAction::open_review));
