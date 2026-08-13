@@ -6,6 +6,8 @@
 #include "track_timer/logger/summary_provider.hpp"
 #include "track_timer/track/matching.hpp"
 #include "track_timer/ui/navigation.hpp"
+#include "track_timer/ui/diagnostics.hpp"
+#include "track_timer/ui/diagnostics_screen.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
@@ -33,7 +35,8 @@ class ApplicationScreen {
                       const track::TrackMatchResult& track_match,
                       logger::SessionSummaryProvider* summary_provider) noexcept;
 
-    void update(const ui::ReadyViewModel& ready, const ui::DeviceViewModel& active) noexcept;
+    void update(const ui::ReadyViewModel& ready, const ui::DeviceViewModel& active,
+                const diagnostics::DiagnosticsSnapshot& diagnostics) noexcept;
     [[nodiscard]] ui::NavigationResult navigate(ui::NavigationAction action) noexcept;
     void synchronize_session(bool active) noexcept;
     void update_track_match(const track::TrackMatchResult& match) noexcept;
@@ -52,8 +55,9 @@ class ApplicationScreen {
     [[nodiscard]] const ui::TrackSelectionController& track_selection() const noexcept;
     [[nodiscard]] ui::SessionReviewScreen& session_review_screen() noexcept;
     [[nodiscard]] const ui::SessionReviewController& session_review() const noexcept;
+    [[nodiscard]] ui::DiagnosticsScreen& diagnostics_screen() noexcept;
+    [[nodiscard]] const ui::DiagnosticsController& diagnostics() const noexcept;
     [[nodiscard]] SetupPage setup_page() const noexcept;
-    [[nodiscard]] lv_obj_t* back_button_object() const noexcept;
 
     ApplicationScreen(const ApplicationScreen&) = delete;
     ApplicationScreen& operator=(const ApplicationScreen&) = delete;
@@ -64,15 +68,17 @@ class ApplicationScreen {
     static void settings_action(ui::SettingsScreenAction action, void* context) noexcept;
     static void track_action(ui::TrackSelectionAction action, void* context) noexcept;
     static void review_action(ui::SessionReviewAction action, void* context) noexcept;
-    static void back_event(lv_event_t* event) noexcept;
+    static void diagnostics_action(ui::DiagnosticsAction action, void* context) noexcept;
     void show_destination() noexcept;
     void refresh_settings() noexcept;
     void refresh_track_selection() noexcept;
     void refresh_session_review() noexcept;
+    void refresh_diagnostics() noexcept;
 
     settings::SettingsManager& settings_manager_;
     track::TrackCatalogView track_catalog_{};
     track::TrackMatchResult track_match_{};
+    diagnostics::DiagnosticsSnapshot diagnostics_snapshot_{};
     logger::SessionSummaryProvider* summary_provider_{nullptr};
     ui::NavigationController navigation_{};
     SetupPage setup_page_{SetupPage::menu};
@@ -86,10 +92,7 @@ class ApplicationScreen {
     lv_obj_t* settings_root_{nullptr};
     lv_obj_t* track_selection_root_{nullptr};
     lv_obj_t* session_review_root_{nullptr};
-    lv_obj_t* destination_root_{nullptr};
-    lv_obj_t* destination_title_{nullptr};
-    lv_obj_t* destination_message_{nullptr};
-    lv_obj_t* back_button_{nullptr};
+    lv_obj_t* diagnostics_root_{nullptr};
     ui::ReadyScreen ready_screen_;
     DeviceScreen active_screen_;
     ui::SetupMenuScreen setup_menu_screen_;
@@ -99,6 +102,8 @@ class ApplicationScreen {
     ui::TrackSelectionScreen track_selection_screen_;
     ui::SessionReviewController session_review_{};
     ui::SessionReviewScreen session_review_screen_;
+    ui::DiagnosticsController diagnostics_{};
+    ui::DiagnosticsScreen diagnostics_screen_;
 };
 
 [[nodiscard]] const char* setup_page_name(SetupPage page) noexcept;

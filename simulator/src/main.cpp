@@ -2,6 +2,7 @@
 
 #include "track_timer/settings/settings.hpp"
 #include "track_timer/simulator/file_settings_store.hpp"
+#include "track_timer/simulator/diagnostics_fixtures.hpp"
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/simulator/summary_fixtures.hpp"
 #include "track_timer/simulator/track_fixtures.hpp"
@@ -45,6 +46,8 @@ struct Options {
     bool track_fixture_explicit{false};
     track_timer::simulator::SummaryFixtureId summary_fixture{
         track_timer::simulator::SummaryFixtureId::complete};
+    track_timer::simulator::DiagnosticsFixtureId diagnostics_fixture{
+        track_timer::simulator::DiagnosticsFixtureId::normal};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -107,9 +110,10 @@ Options parse_options(const int argc, char** argv)
             options.initial_screen = require_value(argc, argv, index);
             if (options.initial_screen != "ready" && options.initial_screen != "setup" &&
                 options.initial_screen != "settings" && options.initial_screen != "tracks" &&
-                options.initial_screen != "review") {
+                options.initial_screen != "review" &&
+                options.initial_screen != "diagnostics") {
                 throw std::invalid_argument(
-                    "--screen must be ready, setup, settings, tracks, or review");
+                    "--screen must be ready, setup, settings, tracks, review, or diagnostics");
             }
         }
         else if (argument == "--review-state") {
@@ -128,11 +132,20 @@ Options parse_options(const int argc, char** argv)
             }
             options.track_fixture_explicit = true;
         }
+        else if (argument == "--diagnostics-state") {
+            const auto value = require_value(argc, argv, index);
+            if (!track_timer::simulator::parse_diagnostics_fixture(
+                    value, options.diagnostics_fixture)) {
+                throw std::invalid_argument(
+                    "--diagnostics-state must be normal, degraded, missing, or recovery");
+            }
+        }
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|review] "
-                         "[--track-state STATE] [--review-state STATE] [--snapshot FILE]\n"
+                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|review|diagnostics] "
+                         "[--track-state STATE] [--review-state STATE] "
+                         "[--diagnostics-state STATE] [--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure\n"
                          "Use pointer/touch controls or keyboard focus and Enter to navigate.\n";
             std::exit(0);
@@ -181,6 +194,7 @@ struct ApplicationContext {
     track_timer::simulator::ApplicationScreen* screen;
     track_timer::settings::SettingsManager* settings;
     const track_timer::simulator::TrackFixture* track_fixture;
+    track_timer::simulator::DiagnosticsFixtureId diagnostics_fixture;
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
@@ -190,9 +204,11 @@ struct ApplicationContext {
                        track_timer::simulator::ApplicationScreen* application_screen,
                        track_timer::settings::SettingsManager* settings_manager,
                        const track_timer::simulator::TrackFixture* fixture_tracks,
+                       const track_timer::simulator::DiagnosticsFixtureId fixture_diagnostics,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
-          settings(settings_manager), track_fixture(fixture_tracks), display(target_display)
+          settings(settings_manager), track_fixture(fixture_tracks),
+          diagnostics_fixture(fixture_diagnostics), display(target_display)
     {
     }
 };
@@ -253,8 +269,13 @@ void update_screen(ApplicationContext& context)
     ready.logging_available = active_snapshot.logging_available;
     ready.session_active = active_snapshot.session_active;
 
+    const auto diagnostics = track_timer::simulator::make_diagnostics_snapshot(
+        context.diagnostics_fixture,
+        static_cast<std::uint64_t>(context.player.elapsed_ms()), context.player.diagnostics(),
+        context.player.device().storage().status(), context.player.logger_metrics(),
+        context.profiler.metrics());
     context.screen->update(track_timer::ui::present_ready(ready),
-                           track_timer::ui::present(active_snapshot));
+                           track_timer::ui::present(active_snapshot), diagnostics);
 }
 
 void render_screen(ApplicationContext& context)
@@ -343,6 +364,9 @@ int run(const Options& options)
         if (options.initial_screen == "review") {
             (void)screen.navigate(track_timer::ui::NavigationAction::open_review);
         }
+        else if (options.initial_screen == "diagnostics") {
+            (void)screen.navigate(track_timer::ui::NavigationAction::open_diagnostics);
+        }
         else {
             (void)screen.navigate(track_timer::ui::NavigationAction::open_setup);
             if (options.initial_screen == "settings") {
@@ -354,7 +378,8 @@ int run(const Options& options)
         }
     }
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
-                               &settings_manager, &track_fixture, display};
+                               &settings_manager, &track_fixture,
+                               options.diagnostics_fixture, display};
     render_screen(context);
 
     if (options.headless) {
@@ -393,6 +418,10 @@ int run(const Options& options)
     const auto& storage = context.player.device().storage();
     const auto logger_metrics = context.player.logger_metrics();
     const auto render_metrics = context.profiler.metrics();
+    const auto diagnostics_snapshot = track_timer::simulator::make_diagnostics_snapshot(
+        options.diagnostics_fixture,
+        static_cast<std::uint64_t>(context.player.elapsed_ms()), diagnostics,
+        storage.status(), logger_metrics, render_metrics);
     auto final_track_request = track_fixture.request;
     final_track_request.selected_track_id = settings_manager.current().selected_track_id.data();
     const auto final_track_match = track_timer::track::match_track_geofences(
@@ -425,6 +454,11 @@ int run(const Options& options)
                      screen.session_review().view_model().status)
               << " review-fixture="
               << track_timer::simulator::summary_fixture_name(options.summary_fixture)
+              << " diagnostics-state="
+              << track_timer::ui::diagnostics_overall_name(diagnostics_snapshot.overall)
+              << " diagnostics-fixture="
+              << track_timer::simulator::diagnostics_fixture_name(
+                     options.diagnostics_fixture)
               << " render-frames=" << render_metrics.frame_count
               << " render-average-us=" << render_metrics.average_render_us()
               << " render-maximum-us=" << render_metrics.maximum_render_us
