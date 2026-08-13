@@ -1,21 +1,22 @@
 # Application navigation
 
-The hardware-independent UI starts at the ready dashboard and has five top-level
+The hardware-independent UI starts at the ready dashboard and has six top-level
 destinations:
 
 ```text
                          +--> Setup --> Track Selection --+
                          |          +-> Device Settings --+--> Setup --> Back --> Ready
                          |          +-> G-meter / IMU -----+
-Ready -- Start --> Active+--> Review -- Rest/Ready -------+--> Ready
+Ready -- Start --> Active+--> Review -- Ready ------------+--> Ready
+                         |          +-> Rest -- expiry/skip+--> Ready
                          +--> Diagnostics ----------------+
 ```
 
 Start changes the navigation controller to `active` and emits a single start request
 for the session service. While active, Setup, Review, Diagnostics, and Back actions
 are rejected. A completed session or service synchronization returns navigation to
-Ready. This makes timing authority explicit and prevents a UI gesture from bypassing
-the session state.
+Ready or advances it to the dedicated Rest destination. This makes timing authority
+explicit and prevents a UI gesture from bypassing the session state.
 
 Pointer clicks, touchscreen taps, keyboard activation, and injected abstract actions
 all dispatch `ui::NavigationAction`; there is no separate simulator-only navigation
@@ -73,9 +74,17 @@ previous laps use text plus colour emphasis. Empty history, partial logs, unavai
 storage, corrupt summaries, and unsupported summary versions remain distinct states.
 
 The screen reads only the `SessionSummaryProvider` contract; it never opens session
-files or loads a GNSS trace. REST and READY emit separate handoff requests for the
-session service before returning to the ready destination. Deterministic simulator
+files or loads a GNSS trace. REST and READY emit separate handoff requests to the
+session service, which advances to Rest or Ready respectively. Deterministic simulator
 fixtures exercise all summary states while physical storage is unavailable.
+
+## Rest
+
+Rest presents the remaining recovery time, the prior completion reason, and the
+automatic next step without relying on colour. It exits automatically at zero. An
+early skip requires a 1.5-second hold, release, and explicit confirmation; short
+presses, cancelled input, taps, gestures, and Back do not change lifecycle state.
+The countdown is monotonic and independent of GNSS, IMU, and storage availability.
 
 ## Diagnostics
 

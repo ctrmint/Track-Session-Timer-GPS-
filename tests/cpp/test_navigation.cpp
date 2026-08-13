@@ -38,6 +38,13 @@ int main()
     result = navigation.dispatch(NavigationAction::session_ended);
     assert(result.accepted && result.current == Destination::ready);
 
+    result = navigation.dispatch(NavigationAction::rest_started);
+    assert(result.accepted && result.current == Destination::rest);
+    assert(std::strcmp(destination_name(Destination::rest), "rest") == 0);
+    assert(!navigation.dispatch(NavigationAction::open_setup).accepted);
+    result = navigation.dispatch(NavigationAction::session_ended);
+    assert(result.accepted && result.current == Destination::ready);
+
     navigation.synchronize_session(true);
     assert(navigation.destination() == Destination::active);
     navigation.synchronize_session(false);

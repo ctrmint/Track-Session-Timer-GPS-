@@ -11,6 +11,7 @@ enum class Destination : std::uint8_t {
     setup,
     review,
     diagnostics,
+    rest,
 };
 
 enum class NavigationAction : std::uint8_t {
@@ -20,6 +21,7 @@ enum class NavigationAction : std::uint8_t {
     open_diagnostics,
     back,
     session_ended,
+    rest_started,
 };
 
 struct NavigationResult {
