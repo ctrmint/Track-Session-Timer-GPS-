@@ -96,7 +96,8 @@ ScenarioId next_scenario(const ScenarioId id) noexcept
 }
 
 ScenarioPlayer::ScenarioPlayer(const ScenarioId id, GnssFixture fixture, const GnssReplayRate rate)
-    : id_(id), snapshot_(initial_snapshot(id)), device_(std::move(fixture), rate)
+    : id_(id), snapshot_(initial_snapshot(id)), device_(std::move(fixture), rate),
+      logger_(device_.storage())
 {
     apply_fault_schedule();
 }
@@ -107,6 +108,7 @@ void ScenarioPlayer::reset(const ScenarioId id) noexcept
     elapsed_ms_ = 0;
     snapshot_ = initial_snapshot(id);
     device_.reset();
+    logger_.reset();
     apply_fault_schedule();
 }
 
@@ -157,6 +159,11 @@ const domain::UiSnapshot& ScenarioPlayer::snapshot() const noexcept
 DeviceDiagnostics ScenarioPlayer::diagnostics() const noexcept
 {
     return device_.diagnostics();
+}
+
+logger::LoggerMetrics ScenarioPlayer::logger_metrics() const noexcept
+{
+    return logger_.metrics();
 }
 
 SimulatedDevice& ScenarioPlayer::device() noexcept
@@ -224,13 +231,15 @@ void ScenarioPlayer::consume_inputs() noexcept
         record.sequence_number = fix.sequence_number;
         record.payload_size = static_cast<std::uint16_t>(sizeof(fix.sequence_number));
         record.type = domain::LogRecordType::gnss_fix;
-        device_.storage().append(record);
+        (void)logger_.enqueue(record);
     }
 
     board::ImuSample imu_sample{};
     while (device_.imu().try_read(imu_sample)) {
         (void)imu_sample;
     }
+
+    (void)logger_.service(device_.clock().now_us());
 
     const auto storage_health = device_.storage().status().health;
     snapshot_.logging_available = storage_health == board::StorageHealth::ready ||

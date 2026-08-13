@@ -103,12 +103,37 @@ serializers must write named fields and must never dump native struct bytes.
 
 ## 7. Write strategy
 
-- producers enqueue compact records
-- one logger task serializes/writes
-- use buffered writes
-- flush periodically and at state transitions
-- do not `fsync` on every GNSS fix
-- count queue overflow and write errors
+`AsyncLogger` is the only owner of `StorageBackend` during normal operation. GNSS,
+timing, and session producers receive only its non-blocking `enqueue` and
+`request_flush` operations; they cannot call storage. A short try-lock protects the
+fixed ring. Contention drops instead of blocking a timing producer and is counted
+separately from capacity overflow.
+
+Version 1 budgets are:
+
+| Item | Budget/policy |
+|---|---|
+| producer queue | 256 compact `LogRecord` values (at least 10.24 s at 25 Hz before event overhead) |
+| writer batch | up to 16 records per storage call |
+| logger task | 4096-byte stack, priority 5, 10 ms service period |
+| periodic drain | at most 250 ms between partial-batch writes |
+| explicit flush | session state transition, stop, and orderly shutdown |
+
+The ESP-IDF `session_logger` task owns `service()`. It copies one bounded batch out of
+the producer ring before any storage call, so enqueue never waits for SD latency. A
+failed or unavailable write retains that staged batch for retry while new records can
+continue filling the main queue. Storage batch failure must be atomic: `false` means no
+record in that batch was accepted. Periodic draining writes into the storage backend's
+buffer; explicit flush completes that buffer but must not imply per-fix `fsync`.
+
+Metrics expose accepted/written records, depth/high-water, full and contention drops,
+invalid records, batch count/size, unavailable-storage attempts, failed write attempts,
+flush requests/completions, maximum latency, average latency, and bounded-histogram
+p50/p95/p99 estimates. The simulator prints the operational subset in its final status
+line. Deterministic stress runs cover 30 simulated minutes at both 20 Hz and 25 Hz on a
+40 ms display cadence with zero producer drops; missing/full/slow/write-failed storage
+remains separately fault-injectable. Physical SD contention and durability still need
+confirmation on the target board.
 
 ## 8. Power-loss tolerance
 

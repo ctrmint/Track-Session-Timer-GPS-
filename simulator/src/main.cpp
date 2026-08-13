@@ -371,6 +371,7 @@ int run(const Options& options)
     const auto diagnostics = context.player.diagnostics();
     const auto& gnss = context.player.device().gnss();
     const auto& storage = context.player.device().storage();
+    const auto logger_metrics = context.player.logger_metrics();
     const auto render_metrics = context.profiler.metrics();
     auto final_track_request = track_fixture.request;
     final_track_request.selected_track_id = settings_manager.current().selected_track_id.data();
@@ -388,6 +389,13 @@ int run(const Options& options)
               << " storage-mode=" << track_timer::simulator::storage_mode_name(storage.mode())
               << " storage-failures=" << storage.status().write_failures
               << " storage-recoveries=" << diagnostics.storage.recoveries
+              << " logger-depth=" << logger_metrics.queue.depth
+              << " logger-high-water=" << logger_metrics.queue.high_water_mark
+              << " logger-dropped=" << logger_metrics.queue.dropped()
+              << " logger-storage-unavailable="
+              << logger_metrics.storage_unavailable_attempts
+              << " logger-write-failures=" << logger_metrics.failed_batch_attempts
+              << " logger-p95-us=" << logger_metrics.latency.p95_upper_bound_us
               << " screen=" << track_timer::ui::destination_name(screen.destination())
               << " setup-page=" << track_timer::simulator::setup_page_name(screen.setup_page())
               << " track-state="

@@ -84,6 +84,20 @@ class StorageBackend {
     virtual ~StorageBackend() = default;
     [[nodiscard]] virtual StorageStatus status() const noexcept = 0;
     virtual bool append(const domain::LogRecord& record) noexcept = 0;
+    virtual bool append_batch(const domain::LogRecord* records, std::size_t count) noexcept
+    {
+        if (count == 0) {
+            return true;
+        }
+        if (records == nullptr || count != 1) {
+            return false;
+        }
+        return append(records[0]);
+    }
+    virtual bool flush() noexcept
+    {
+        return true;
+    }
 };
 
 static_assert(sizeof(TouchSample) <= 16);
