@@ -31,7 +31,9 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 add_library(
     track_timer_simulator_model
     ../firmware/components/ui/presenter.cpp
+    ../firmware/components/settings/component.cpp
     src/device_backends.cpp
+    src/file_settings_store.cpp
     src/fixed_cell_text.cpp
     src/scenario.cpp
 )
@@ -41,6 +43,7 @@ target_include_directories(
         include
         ../firmware/components/board/include
         ../firmware/components/domain/include
+        ../firmware/components/settings/include
         ../firmware/components/ui/include
 )
 target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
@@ -72,6 +75,32 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_settings_test
+        ../tests/cpp/test_settings.cpp
+    )
+    target_link_libraries(
+        track_timer_settings_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_settings_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-versioned-settings
+        COMMAND track_timer_settings_test
+    )
+    set_tests_properties(
+        simulator-versioned-settings
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Versioned settings and degraded features passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_fixed_cell_label_test
         ../tests/cpp/test_fixed_cell_label.cpp

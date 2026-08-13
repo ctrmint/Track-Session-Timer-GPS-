@@ -13,6 +13,7 @@ anchors so ESP-IDF verifies the intended graph.
 | `track` | Track loading, validation, projection inputs | `domain` |
 | `timing` | Crossing geometry and lap state | `domain`, `track` |
 | `session` | Session countdown and lifecycle | `domain`, `timing` |
+| `settings` | Versioned preferences, migration, and deferred persistence | `domain` |
 | `logger` | Bounded logging queue and serialization | `domain`, `board` |
 | `ui` | LVGL presentation and user input | `domain`, `session`, `board` |
 | `diagnostics` | Health/counter aggregation | all service components |
