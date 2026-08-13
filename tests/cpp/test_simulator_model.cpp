@@ -217,10 +217,12 @@ int main()
     assert(std::strcmp(active.best_lap.data(), "1:42.985") == 0);
     assert(std::strcmp(active.session_remaining.data(), "15:26") == 0);
     assert(std::strcmp(active.gnss_status.data(), "GPS GOOD") == 0);
+    assert(active.gnss_health == track_timer::domain::GnssHealth::good);
     assert(std::strcmp(active.logging_status.data(), "LOGGING") == 0);
 
     const auto gnss_loss = track_timer::ui::present(ScenarioPlayer{ScenarioId::gnss_loss}.snapshot());
     assert(std::strcmp(gnss_loss.gnss_status.data(), "GPS STALE") == 0);
+    assert(gnss_loss.gnss_health == track_timer::domain::GnssHealth::stale);
 
     const auto storage_failure =
         track_timer::ui::present(ScenarioPlayer{ScenarioId::storage_failure}.snapshot());
@@ -256,6 +258,7 @@ int main()
     const auto ready = track_timer::ui::present(ScenarioPlayer{ScenarioId::ready}.snapshot());
     assert(std::strcmp(ready.current_lap.data(), "--:--.---") == 0);
     assert(std::strcmp(ready.gnss_status.data(), "GPS SEARCH") == 0);
+    assert(ready.gnss_health == track_timer::domain::GnssHealth::searching);
 
     auto extreme_snapshot = ScenarioPlayer{ScenarioId::active}.snapshot();
     extreme_snapshot.current_lap_ms = std::numeric_limits<std::int64_t>::min();

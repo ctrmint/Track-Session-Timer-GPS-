@@ -104,6 +104,39 @@ if(BUILD_TESTING)
             TIMEOUT 20
     )
 
+    add_executable(
+        track_timer_device_screen_test
+        ../tests/cpp/test_device_screen.cpp
+        src/device_screen.cpp
+        src/fixed_cell_label.cpp
+    )
+    target_include_directories(track_timer_device_screen_test PRIVATE src)
+    target_link_libraries(
+        track_timer_device_screen_test
+        PRIVATE
+            track_timer_simulator_model
+            lvgl::lvgl
+            SDL2::SDL2
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_device_screen_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-gnss-indicator
+        COMMAND track_timer_device_screen_test
+    )
+    set_tests_properties(
+        simulator-gnss-indicator
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "GPS indicator symbol, colours, and position passed"
+            TIMEOUT 20
+    )
+
     add_test(
         NAME simulator-active-smoke
         COMMAND track_timer_simulator

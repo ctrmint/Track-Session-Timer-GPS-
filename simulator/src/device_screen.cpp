@@ -8,6 +8,24 @@ constexpr std::size_t kSessionTimeCellCount = 7;
 constexpr auto kLargeLapTimeCellWidths = lap_time_cell_widths(34, 16, 12);
 constexpr auto kSmallLapTimeCellWidths = lap_time_cell_widths(20, 10, 8);
 constexpr auto kSessionTimeCellWidths = session_time_cell_widths(34, 16);
+constexpr std::uint32_t kGnssGoodRgb = 0x76FF9A;
+constexpr std::uint32_t kGnssWarningRgb = 0xFFD54F;
+constexpr std::uint32_t kGnssErrorRgb = 0xFF5252;
+
+constexpr std::uint32_t gnss_indicator_color(const domain::GnssHealth health) noexcept
+{
+    switch (health) {
+    case domain::GnssHealth::good:
+        return kGnssGoodRgb;
+    case domain::GnssHealth::poor:
+        return kGnssWarningRgb;
+    case domain::GnssHealth::unavailable:
+    case domain::GnssHealth::searching:
+    case domain::GnssHealth::stale:
+        return kGnssErrorRgb;
+    }
+    return kGnssErrorRgb;
+}
 
 constexpr std::int32_t centered_lap_field_x(const std::int32_t area_x,
                                             const std::int32_t area_width,
@@ -53,7 +71,8 @@ DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
     lv_obj_set_size(lap_label_, 170, 34);
     lv_obj_set_style_text_align(lap_label_, LV_TEXT_ALIGN_LEFT, 0);
 
-    gnss_label_ = make_label(root_, &lv_font_montserrat_20, lv_color_hex(0x76FF9A));
+    gnss_label_ = make_label(root_, &lv_font_montserrat_20, lv_color_hex(kGnssErrorRgb));
+    lv_label_set_text(gnss_label_, LV_SYMBOL_GPS);
     lv_obj_set_pos(gnss_label_, 370, 21);
     lv_obj_set_size(gnss_label_, 210, 30);
     lv_obj_set_style_text_align(gnss_label_, LV_TEXT_ALIGN_RIGHT, 0);
@@ -121,7 +140,8 @@ DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
 void DeviceScreen::update(const ui::DeviceViewModel& model) noexcept
 {
     lv_label_set_text(lap_label_, model.lap_label.data());
-    lv_label_set_text(gnss_label_, model.gnss_status.data());
+    lv_obj_set_style_text_color(gnss_label_, lv_color_hex(gnss_indicator_color(model.gnss_health)),
+                                0);
     current_lap_label_.set_text(model.current_lap.data());
     previous_lap_label_.set_text(model.previous_lap.data());
     best_lap_label_.set_text(model.best_lap.data());

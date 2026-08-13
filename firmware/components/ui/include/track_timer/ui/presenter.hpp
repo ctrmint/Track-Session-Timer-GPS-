@@ -16,6 +16,7 @@ struct DeviceViewModel {
     std::array<char, 32> session_remaining{};
     std::array<char, 16> gnss_status{};
     std::array<char, 16> logging_status{};
+    domain::GnssHealth gnss_health{domain::GnssHealth::unavailable};
     std::uint32_t accent_rgb{0x202020};
     std::uint32_t accent_text_rgb{0xFFFFFF};
 };
