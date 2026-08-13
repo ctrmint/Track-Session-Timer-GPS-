@@ -6,7 +6,7 @@ Logging is not only for post-session entertainment. It is how timing errors are 
 
 ## 2. Session directory
 
-Suggested structure:
+Version 1 uses this structure:
 
 ```text
 /sessions/2026-08-12T140501Z/
@@ -14,61 +14,94 @@ Suggested structure:
     gnss.csv
     events.csv
     summary.json
+    summary_laps.csv
 ```
 
-Binary logging may be introduced later if CSV write cost is unacceptable. Start with a format that is easy to inspect.
+Every file declares `schema_version=1`. JSON uses a numeric `schema_version` member;
+CSV repeats it as the first column of every row so a fragment remains identifiable.
+Binary logging may be introduced later if measured CSV write cost is unacceptable,
+but it must preserve the same semantic fields and version boundary.
 
 ## 3. `meta.json`
 
-Include:
+The version 1 metadata object contains:
 
-- firmware version / Git commit
-- hardware profile
-- GNSS model and configuration
-- configured update rate
-- track ID
-- track schema version, identifier, and 16-character exact-file fingerprint
-- session settings
-- start/end UTC if available
-- reset reason at boot
+| Key | Type and unit | Requirement |
+|---|---|---|
+| `schema_version` | unsigned integer | exactly `1` |
+| `session_id` | string, max 31 bytes | unique directory/session identifier |
+| `firmware_commit` | string, max 40 bytes | full Git commit |
+| `hardware_profile` | string, max 31 bytes | selected board/profile identifier |
+| `gnss_profile` | string, max 31 bytes | receiver and configuration profile |
+| `gnss_update_rate_hz` | unsigned integer, Hz | configured rate |
+| `reset_reason` | enum string | `unknown`, `power_on`, `software`, `watchdog`, `brownout`, or `panic` |
+| `track_schema_version` | unsigned integer | zero for timer-only, otherwise source track version |
+| `track_id` | string, max 47 bytes | empty for timer-only |
+| `track_fingerprint` | 16 lower-case hex characters | exact-file FNV-1a fingerprint; empty for timer-only |
+| `start_utc_ns`, `end_utc_ns` | signed integer, UTC nanoseconds | `-1` when unavailable |
+| `settings` | object | complete versioned `DeviceSettings` snapshot |
+
+The settings object records the settings schema version, session/rest minutes,
+launch sensitivity in milli-g, average lap seconds, day/night brightness percentages,
+operating mode, orientation, auto-dim flag, lower-display mode, and selected track ID.
+This is a copy captured at session start; replay never consults current device settings.
 
 ## 4. GNSS rows
 
-Suggested fields:
+The exact version 1 header is:
 
 ```text
-seq
-gnss_time_ns
-arrival_monotonic_us
-lat_deg
-lon_deg
-speed_mps
-heading_deg
-h_acc_m
-speed_acc_mps
-heading_acc_deg
-fix_type
-num_sv
-accepted_for_timing
-reject_reason
+schema_version,record_sequence,measurement_time_ns,arrival_monotonic_us,latitude_deg,longitude_deg,height_m,speed_mps,heading_deg,horizontal_accuracy_m,speed_accuracy_mps,heading_accuracy_deg,fix_sequence,valid_flags,num_satellites,fix_type,accepted_for_timing,reject_reason
 ```
+
+Angles are degrees, distances are metres, speeds are metres per second, GNSS time is
+nanoseconds, and monotonic arrival time is microseconds. `record_sequence` orders all
+source records across the session; `fix_sequence` is the receiver/parser sequence.
+Every fix is recorded. An accepted fix has `reject_reason=none`; every rejected fix
+must carry a non-`none` reason. This makes both accepted and rejected timing inputs
+replayable.
 
 ## 5. Event rows
 
-Suggested fields:
+The exact version 1 header is:
 
 ```text
-event_type
-lap_index
-gnss_time_ns
-lap_time_ms
-segment_seq0
-segment_seq1
-intersection_fraction
-quality_flags
+schema_version,record_sequence,ordering_monotonic_us,event_type,lap_index,measurement_time_ns,lap_duration_ns,segment_sequence_0,segment_sequence_1,intersection_fraction,quality_flags,session_elapsed_ms,session_overrun_ms
 ```
 
-## 6. Write strategy
+Event types are `session_started`, `lap_crossing`, `overtime_started`,
+`session_stopped`, `rest_started`, `rest_completed`, and `diagnostic`. A lap crossing
+must identify the two surrounding GNSS `fix_sequence` values and an interpolation
+fraction from 0 through 1. `quality_flags` is the exact timing-quality bitset captured
+at the decision. Durations are nanoseconds; session elapsed/overrun are milliseconds.
+
+## 6. Derived summary
+
+`summary.json` is a bounded aggregate, not the source of truth. Version 1 contains the
+session ID, total duration and overrun in milliseconds, completion reason, integrity
+(`complete` or `partial_log`), degraded-subsystem flags, lap count, best lap index and
+duration, first/last source record sequence, accepted/rejected/total GNSS counts, event
+count, logger drop count, and logger write-failure count.
+
+Lap rows are stored separately in pageable `summary_laps.csv`:
+
+```text
+schema_version,lap_index,lap_duration_ns,event_record_sequence,segment_sequence_0,segment_sequence_1,quality_flags
+```
+
+`event_record_sequence` links each derived lap to its source event. The segment IDs in
+that event link to the surrounding GNSS rows. A replay regenerates the summary by
+ordering source records by `record_sequence`, counting every GNSS acceptance decision,
+collecting valid lap events, selecting the minimum lap duration, and copying terminal
+session/degradation/logger counters. A generated summary is `partial_log` if the source
+sequence has gaps, the logger reports drops/write failures, or the final row was
+truncated. The source CSV files always win if a stored summary disagrees.
+
+The firmware-facing definitions and validators are in
+`track_timer/logger/formats.hpp`. They use fixed-capacity, trivially-copyable records;
+serializers must write named fields and must never dump native struct bytes.
+
+## 7. Write strategy
 
 - producers enqueue compact records
 - one logger task serializes/writes
@@ -77,12 +110,22 @@ quality_flags
 - do not `fsync` on every GNSS fix
 - count queue overflow and write errors
 
-## 7. Power-loss tolerance
+## 8. Power-loss tolerance
 
 A sudden power loss may truncate the final row/file. Design replay tools to tolerate an incomplete final record.
 
 Session summary should be derivable from events rather than being the only source of truth.
 
-## 8. Privacy
+## 9. Versioning and migration
+
+Version 1 field names, meanings, units, enum spellings, and CSV column order are
+immutable. Readers reject unknown major versions instead of guessing. A future version
+may add files or columns only under a new schema number, with an explicit converter and
+golden replay fixtures. Migration is performed on a host copy; original session files
+remain unchanged so timing evidence is never silently rewritten. Incomplete final CSV
+rows may be ignored, but an invalid row in the middle marks the session partial/corrupt
+and is not skipped silently.
+
+## 10. Privacy
 
 Track logs contain precise location history. Default behaviour should keep logs local. Any future wireless export must be user-initiated and documented.
