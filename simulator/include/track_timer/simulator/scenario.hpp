@@ -1,6 +1,7 @@
 #pragma once
 
 #include "track_timer/domain/contracts.hpp"
+#include "track_timer/logger/async_logger.hpp"
 #include "track_timer/simulator/device_backends.hpp"
 
 #include <array>
@@ -40,6 +41,7 @@ class ScenarioPlayer {
     [[nodiscard]] std::int64_t elapsed_ms() const noexcept;
     [[nodiscard]] const domain::UiSnapshot& snapshot() const noexcept;
     [[nodiscard]] DeviceDiagnostics diagnostics() const noexcept;
+    [[nodiscard]] logger::LoggerMetrics logger_metrics() const noexcept;
     [[nodiscard]] SimulatedDevice& device() noexcept;
 
     ScenarioPlayer(const ScenarioPlayer&) = delete;
@@ -56,6 +58,7 @@ class ScenarioPlayer {
     std::int64_t elapsed_ms_{0};
     domain::UiSnapshot snapshot_{};
     SimulatedDevice device_;
+    logger::AsyncLogger logger_;
 };
 
 }  // namespace track_timer::simulator

@@ -66,6 +66,12 @@ A presentation-only copy containing already-formatted or simple values. The UI m
 
 Tagged record passed to the logger queue. Log serialization happens in the logger task, not in the timing task.
 
+`AsyncLogger` provides the fixed 256-record multi-context boundary. Producers use a
+non-blocking enqueue; the dedicated ESP-IDF `session_logger` task drains batches of up
+to 16 through `StorageBackend`. Queue contention/capacity drops, storage failures, and
+enqueue-to-write latency percentiles are observable. A staged batch is retained across
+storage failure, and state transitions request an explicit buffered flush.
+
 ## 4. Concurrency
 
 GNSS parser and timing engine need predictable latency. Avoid direct SD writes, LVGL calls or settings persistence from those paths.
@@ -87,9 +93,11 @@ fix queue
 Timing task ----> lap event queue ----> session controller
     |                                      |
     +---------------> log queue <----------+
-                                           |
-                                           v
-                                       UI snapshot
+                           |
+                           v
+                   session_logger task ---> buffered storage backend
+
+session controller -------------------------------> UI snapshot
 ```
 
 ## 5. Memory

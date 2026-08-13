@@ -544,6 +544,38 @@ bool SimulatedStorage::append(const domain::LogRecord& record) noexcept
     return true;
 }
 
+bool SimulatedStorage::append_batch(const domain::LogRecord* records,
+                                    const std::size_t count) noexcept
+{
+    if (count == 0) {
+        return true;
+    }
+    if (records == nullptr || (mode_ != StorageMode::ready && mode_ != StorageMode::slow) ||
+        count > queue_.metrics().capacity - queue_.metrics().depth) {
+        ++write_failures_;
+        return false;
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        if (!queue_.push(records[index])) {
+            ++write_failures_;
+            return false;
+        }
+    }
+    accepted_records_ += count;
+    ++written_batches_;
+    return true;
+}
+
+bool SimulatedStorage::flush() noexcept
+{
+    if (mode_ != StorageMode::ready && mode_ != StorageMode::slow) {
+        ++write_failures_;
+        return false;
+    }
+    ++flushes_;
+    return true;
+}
+
 board::StorageStatus SimulatedStorage::status() const noexcept
 {
     board::StorageHealth health = board::StorageHealth::unavailable;
@@ -600,6 +632,8 @@ void SimulatedStorage::reset() noexcept
     written_bytes_ = 0;
     write_failures_ = 0;
     recoveries_ = 0;
+    written_batches_ = 0;
+    flushes_ = 0;
 }
 
 void SimulatedStorage::set_mode(const StorageMode mode) noexcept
@@ -617,8 +651,9 @@ StorageMode SimulatedStorage::mode() const noexcept
 
 StorageDiagnostics SimulatedStorage::diagnostics() const noexcept
 {
-    return StorageDiagnostics{accepted_records_, written_records_, written_bytes_, recoveries_,
-                              write_latency_us(), queue_.metrics()};
+    return StorageDiagnostics{accepted_records_, written_records_, written_bytes_,
+                              written_batches_, flushes_, recoveries_, write_latency_us(),
+                              queue_.metrics()};
 }
 
 std::int64_t SimulatedStorage::write_latency_us() const noexcept

@@ -101,7 +101,8 @@ build/simulator/track_timer_simulator \
 Omit `--gnss-fixture` to use the built-in synthetic loop. Both 20 Hz and 25 Hz
 advance from simulated monotonic time, never wall time. The final status line includes
 the fixture and rate, active fault modes, queue-drop count, storage failures, and
-storage recoveries.
+storage recoveries. It also reports logger depth/high-water, producer drops,
+unavailable-storage attempts, failed batch attempts, and p95 enqueue-to-write latency.
 
 Checked-in CSV fixtures use an explicit version marker and fixed schema. Validate
 them with:

@@ -36,6 +36,7 @@ add_library(
     ../firmware/components/ui/settings_editor.cpp
     ../firmware/components/ui/track_selection.cpp
     ../firmware/components/settings/component.cpp
+    ../firmware/components/logger/async_logger.cpp
     ../firmware/components/track/definition.cpp
     ../firmware/components/track/matching.cpp
     src/device_backends.cpp
@@ -50,6 +51,7 @@ target_include_directories(
         include
         ../firmware/components/board/include
         ../firmware/components/domain/include
+        ../firmware/components/logger/include
         ../firmware/components/settings/include
         ../firmware/components/track/include
         ../firmware/components/ui/include
@@ -108,6 +110,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_async_logger_test
+        ../tests/cpp/test_async_logger.cpp
+    )
+    target_link_libraries(
+        track_timer_async_logger_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_async_logger_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-async-logger
+        COMMAND track_timer_async_logger_test
+    )
+    set_tests_properties(
+        simulator-async-logger
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Bounded async logging, failure visibility, and 20/25 Hz stress passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_track_selection_test
         ../tests/cpp/test_track_selection.cpp

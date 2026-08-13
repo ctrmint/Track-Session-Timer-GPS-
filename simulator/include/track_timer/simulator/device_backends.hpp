@@ -203,6 +203,8 @@ struct StorageDiagnostics {
     std::uint64_t accepted_records{0};
     std::uint64_t written_records{0};
     std::uint64_t written_bytes{0};
+    std::uint64_t accepted_batches{0};
+    std::uint64_t flushes{0};
     std::uint32_t recoveries{0};
     std::int64_t simulated_write_latency_us{0};
     QueueMetrics queue{};
@@ -211,6 +213,8 @@ struct StorageDiagnostics {
 class SimulatedStorage final : public board::StorageBackend {
   public:
     bool append(const domain::LogRecord& record) noexcept override;
+    bool append_batch(const domain::LogRecord* records, std::size_t count) noexcept override;
+    bool flush() noexcept override;
     [[nodiscard]] board::StorageStatus status() const noexcept override;
 
     void advance(std::int64_t elapsed_us) noexcept;
@@ -230,6 +234,8 @@ class SimulatedStorage final : public board::StorageBackend {
     std::uint64_t written_bytes_{0};
     std::uint32_t write_failures_{0};
     std::uint32_t recoveries_{0};
+    std::uint64_t written_batches_{0};
+    std::uint64_t flushes_{0};
 };
 
 struct DeviceDiagnostics {

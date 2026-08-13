@@ -209,6 +209,10 @@ int main()
     }
     assert(first.elapsed_ms() == 1'000);
     assert(snapshots_equal(first.snapshot(), second.snapshot()));
+    assert(first.logger_metrics().queue.dropped() == 0);
+    assert(first.logger_metrics().accepted_records > 0);
+    assert(first.logger_metrics().written_records > 0);
+    assert(first.diagnostics().storage.accepted_batches > 0);
 
     const auto active = track_timer::ui::present(first.snapshot());
     assert(std::strcmp(active.lap_label.data(), "LAP 07") == 0);
@@ -244,6 +248,8 @@ int main()
     assert(storage_recovery.snapshot().session_remaining_ms == 8 * 60'000 + 8'000);
     assert(storage_recovery.snapshot().logging_available);
     assert(storage_recovery.diagnostics().storage.recoveries == 1);
+    assert(storage_recovery.logger_metrics().queue.dropped() == 0);
+    assert(storage_recovery.logger_metrics().storage_unavailable_attempts > 0);
 
     ScenarioPlayer coarse_gnss_recovery{ScenarioId::gnss_loss};
     coarse_gnss_recovery.advance(4'040);
