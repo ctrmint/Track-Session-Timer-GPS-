@@ -1,12 +1,14 @@
 #include "device_screen.hpp"
 
 #include "track_timer/simulator/scenario.hpp"
+#include "track_timer/ui/foundation.hpp"
 #include "track_timer/ui/presenter.hpp"
 
 #include <SDL2/SDL.h>
 #include <lvgl.h>
 
 #include <cstddef>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -138,12 +140,16 @@ bool write_snapshot(const std::string& path)
 struct ApplicationContext {
     track_timer::simulator::ScenarioPlayer player;
     track_timer::simulator::DeviceScreen* screen;
+    lv_display_t* display;
+    track_timer::ui::RenderProfiler profiler{};
 
     ApplicationContext(const track_timer::simulator::ScenarioId scenario,
                        track_timer::simulator::GnssFixture fixture,
                        const track_timer::simulator::GnssReplayRate rate,
-                       track_timer::simulator::DeviceScreen* device_screen)
-        : player(scenario, std::move(fixture), rate), screen(device_screen)
+                       track_timer::simulator::DeviceScreen* device_screen,
+                       lv_display_t* target_display)
+        : player(scenario, std::move(fixture), rate), screen(device_screen),
+          display(target_display)
     {
     }
 };
@@ -151,6 +157,29 @@ struct ApplicationContext {
 void update_screen(ApplicationContext& context)
 {
     context.screen->update(track_timer::ui::present(context.player.snapshot()));
+}
+
+void render_screen(ApplicationContext& context)
+{
+    const auto started = std::chrono::steady_clock::now();
+    update_screen(context);
+    lv_timer_handler();
+    lv_refr_now(context.display);
+    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                             std::chrono::steady_clock::now() - started)
+                             .count();
+
+    lv_mem_monitor_t memory{};
+    lv_mem_monitor(&memory);
+    const auto used_bytes = memory.total_size >= memory.free_size
+                                ? memory.total_size - memory.free_size
+                                : 0;
+    const auto bounded_elapsed = elapsed <= 0
+                                     ? 0U
+                                     : elapsed > static_cast<std::int64_t>(UINT32_MAX)
+                                           ? UINT32_MAX
+                                           : static_cast<std::uint32_t>(elapsed);
+    context.profiler.record(bounded_elapsed, used_bytes);
 }
 
 void cycle_scenario(lv_event_t* event)
@@ -194,17 +223,15 @@ int run(const Options& options)
     }
 
     track_timer::simulator::DeviceScreen screen{lv_screen_active()};
-    ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen};
-    update_screen(context);
+    ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
+                               display};
     lv_obj_add_event_cb(lv_screen_active(), cycle_scenario, LV_EVENT_CLICKED, &context);
-    lv_refr_now(display);
+    render_screen(context);
 
     if (options.headless) {
         for (std::size_t frame = 0; frame < options.frames; ++frame) {
             context.player.advance(options.frame_ms);
-            update_screen(context);
-            lv_timer_handler();
-            lv_refr_now(display);
+            render_screen(context);
         }
     }
     else {
@@ -213,10 +240,12 @@ int run(const Options& options)
             const auto current_tick = SDL_GetTicks64();
             if (current_tick - previous_tick >= static_cast<std::uint64_t>(options.frame_ms)) {
                 context.player.advance(options.frame_ms);
-                update_screen(context);
+                render_screen(context);
                 previous_tick = current_tick;
             }
-            lv_timer_handler();
+            else {
+                lv_timer_handler();
+            }
             SDL_Delay(5);
         }
     }
@@ -233,6 +262,7 @@ int run(const Options& options)
     const auto diagnostics = context.player.diagnostics();
     const auto& gnss = context.player.device().gnss();
     const auto& storage = context.player.device().storage();
+    const auto render_metrics = context.profiler.metrics();
     std::cout << "scenario=" << track_timer::simulator::scenario_name(context.player.id())
               << " frames=" << options.frames << " resolution=" << kDisplayWidth << 'x'
               << kDisplayHeight << " current=" << model.current_lap.data()
@@ -244,7 +274,13 @@ int run(const Options& options)
               << " gnss-dropped=" << diagnostics.gnss.queue.dropped
               << " storage-mode=" << track_timer::simulator::storage_mode_name(storage.mode())
               << " storage-failures=" << storage.status().write_failures
-              << " storage-recoveries=" << diagnostics.storage.recoveries << '\n';
+              << " storage-recoveries=" << diagnostics.storage.recoveries
+              << " render-frames=" << render_metrics.frame_count
+              << " render-average-us=" << render_metrics.average_render_us()
+              << " render-maximum-us=" << render_metrics.maximum_render_us
+              << " lvgl-maximum-bytes=" << render_metrics.maximum_lvgl_bytes
+              << " display-buffer-bytes="
+              << track_timer::ui::kDeviceDisplayBuffers.total_bytes() << '\n';
 
     if (lv_display_get_next(nullptr) != nullptr) {
         lv_display_delete(display);

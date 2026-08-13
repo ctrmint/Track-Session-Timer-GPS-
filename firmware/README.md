@@ -19,6 +19,10 @@ make firmware-container-build
 
 Do not use an unversioned IDF image for release or CI builds.
 
+The `ui` component resolves the pinned LVGL release through ESP-IDF Component
+Manager. `dependencies.lock` is committed after resolution so CI and local firmware
+builds use the same component archive.
+
 ## Component layout
 
 ```text

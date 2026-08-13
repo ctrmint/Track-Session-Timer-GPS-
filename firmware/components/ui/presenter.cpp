@@ -1,5 +1,7 @@
 #include "track_timer/ui/presenter.hpp"
 
+#include "track_timer/ui/foundation.hpp"
+
 #include <cstdio>
 
 namespace track_timer::ui {
@@ -63,29 +65,30 @@ const char* gnss_label(const domain::GnssHealth health) noexcept
 void set_session_accent(DeviceViewModel& model, const std::int64_t remaining_ms) noexcept
 {
     if (remaining_ms == domain::kUnavailableTime) {
-        model.accent_rgb = 0x202020;
-        model.accent_text_rgb = 0xFFFFFF;
+        model.accent_rgb = color::surface;
+        std::snprintf(model.session_status.data(), model.session_status.size(), "SESSION");
     }
     else if (remaining_ms <= 0) {
-        model.accent_rgb = 0x7E57C2;
-        model.accent_text_rgb = 0xFFFFFF;
+        model.accent_rgb = color::overtime;
+        std::snprintf(model.session_status.data(), model.session_status.size(), "OVERTIME");
     }
     else if (remaining_ms <= 5 * 60'000) {
-        model.accent_rgb = 0xD32F2F;
-        model.accent_text_rgb = 0xFFFFFF;
+        model.accent_rgb = color::critical;
+        std::snprintf(model.session_status.data(), model.session_status.size(), "FINAL 5 MIN");
     }
     else if (remaining_ms <= 10 * 60'000) {
-        model.accent_rgb = 0xF57C00;
-        model.accent_text_rgb = 0x000000;
+        model.accent_rgb = color::warning;
+        std::snprintf(model.session_status.data(), model.session_status.size(), "UNDER 10 MIN");
     }
     else if (remaining_ms <= 20 * 60'000) {
-        model.accent_rgb = 0xFBC02D;
-        model.accent_text_rgb = 0x000000;
+        model.accent_rgb = color::caution;
+        std::snprintf(model.session_status.data(), model.session_status.size(), "UNDER 20 MIN");
     }
     else {
-        model.accent_rgb = 0x2E7D32;
-        model.accent_text_rgb = 0xFFFFFF;
+        model.accent_rgb = color::positive;
+        std::snprintf(model.session_status.data(), model.session_status.size(), "SESSION");
     }
+    model.accent_text_rgb = contrast_text_rgb(model.accent_rgb);
 }
 
 }  // namespace

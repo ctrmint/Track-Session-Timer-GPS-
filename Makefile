@@ -5,13 +5,14 @@ HOST_TEST_BINARY := build/host/domain_contracts_test
 SIMULATOR_MODEL_TEST_BINARY := build/host/simulator_model_test
 SESSION_STATE_TEST_BINARY := build/host/session_state_test
 SETTINGS_TEST_BINARY := build/host/settings_test
+UI_FOUNDATION_TEST_BINARY := build/host/ui_foundation_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test ui-foundation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test ui-foundation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -37,7 +38,8 @@ simulator-model-test:
 		-Ifirmware/components/domain/include \
 		-Ifirmware/components/ui/include \
 		-Isimulator/include \
-		firmware/components/ui/presenter.cpp simulator/src/device_backends.cpp \
+		firmware/components/ui/foundation.cpp firmware/components/ui/presenter.cpp \
+		simulator/src/device_backends.cpp \
 		simulator/src/fixed_cell_text.cpp \
 		simulator/src/scenario.cpp \
 		tests/cpp/test_simulator_model.cpp -o $(SIMULATOR_MODEL_TEST_BINARY)
@@ -61,6 +63,16 @@ settings-test:
 		simulator/src/file_settings_store.cpp \
 		tests/cpp/test_settings.cpp -o $(SETTINGS_TEST_BINARY)
 	$(SETTINGS_TEST_BINARY)
+
+ui-foundation-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/ui/include \
+		firmware/components/ui/foundation.cpp \
+		firmware/components/ui/presenter.cpp \
+		tests/cpp/test_ui_foundation.cpp -o $(UI_FOUNDATION_TEST_BINARY)
+	$(UI_FOUNDATION_TEST_BINARY)
 
 simulator-configure:
 	$(CMAKE) -S simulator -B $(SIMULATOR_BUILD_DIR) -G Ninja
