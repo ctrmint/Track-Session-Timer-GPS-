@@ -37,6 +37,8 @@ Recorded/synthetic traces with expected lap events.
 
 ### Track tests
 
+- deterministic zero, one, overlapping, adjacent, invalid, and persisted-selection
+  geofence decisions
 - compare against a commercial reference timer/logger
 - validate no missed/duplicate laps
 - inspect GNSS quality through high-G corners and under structures/trees if present

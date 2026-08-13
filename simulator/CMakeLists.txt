@@ -36,6 +36,7 @@ add_library(
     ../firmware/components/ui/settings_editor.cpp
     ../firmware/components/settings/component.cpp
     ../firmware/components/track/definition.cpp
+    ../firmware/components/track/matching.cpp
     src/device_backends.cpp
     src/file_settings_store.cpp
     src/fixed_cell_text.cpp
@@ -102,6 +103,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_track_matching_test
+        ../tests/cpp/test_track_matching.cpp
+    )
+    target_link_libraries(
+        track_timer_track_matching_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_track_matching_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-track-geofence-matching
+        COMMAND track_timer_track_matching_test
+    )
+    set_tests_properties(
+        simulator-track-geofence-matching
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Offline track geofence suggestion and ambiguity decisions passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_track_definition_test
         ../tests/cpp/test_track_definition.cpp

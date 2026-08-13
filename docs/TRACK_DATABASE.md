@@ -49,9 +49,21 @@ Flow:
 
 1. valid GNSS fix acquired
 2. find tracks whose broad geofence contains the position
-3. if exactly one plausible match, suggest/select it according to user preference
+3. if exactly one plausible match, expose it as a suggestion requiring confirmation
 4. if ambiguous, require selection
 5. start/finish crossing still uses exact line geometry
+
+`match_track_geofences` is a fixed-capacity decision service over a caller-owned catalog
+of at most 16 validated definitions. It uses great-circle distance and reports these
+states explicitly: location unavailable, no match, one suggestion, ambiguity, persisted
+manual selection, selected definition missing, or invalid catalog. A selected track is
+usable offline and is never replaced automatically merely because another geofence is
+nearby. Duplicate identifiers invalidate the catalog instead of silently choosing one.
+
+The result includes the nearest catalog entry for explanation, but only definitions
+whose radius contains the position become suggestion candidates. The matching API has
+no lap-event operation; timing remains exclusively owned by exact start/finish crossing
+logic.
 
 ## 4. Unknown track capture
 
