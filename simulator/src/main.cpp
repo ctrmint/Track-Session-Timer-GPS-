@@ -3,6 +3,8 @@
 #include "track_timer/settings/settings.hpp"
 #include "track_timer/simulator/file_settings_store.hpp"
 #include "track_timer/simulator/scenario.hpp"
+#include "track_timer/simulator/track_fixtures.hpp"
+#include "track_timer/track/matching.hpp"
 #include "track_timer/ui/foundation.hpp"
 #include "track_timer/ui/presenter.hpp"
 
@@ -37,6 +39,9 @@ struct Options {
     std::string snapshot_path{};
     std::string gnss_fixture_path{};
     std::string initial_screen{"ready"};
+    track_timer::simulator::TrackFixtureId track_fixture{
+        track_timer::simulator::TrackFixtureId::suggested};
+    bool track_fixture_explicit{false};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -97,14 +102,24 @@ Options parse_options(const int argc, char** argv)
         }
         else if (argument == "--screen") {
             options.initial_screen = require_value(argc, argv, index);
-            if (options.initial_screen != "ready" && options.initial_screen != "setup") {
-                throw std::invalid_argument("--screen must be ready or setup");
+            if (options.initial_screen != "ready" && options.initial_screen != "setup" &&
+                options.initial_screen != "settings" && options.initial_screen != "tracks") {
+                throw std::invalid_argument("--screen must be ready, setup, settings, or tracks");
             }
+        }
+        else if (argument == "--track-state") {
+            const auto value = require_value(argc, argv, index);
+            if (!track_timer::simulator::parse_track_fixture(value, options.track_fixture)) {
+                throw std::invalid_argument(
+                    "--track-state must be selected, missing, invalid, ambiguous, suggested, none, or unavailable");
+            }
+            options.track_fixture_explicit = true;
         }
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--screen ready|setup] [--snapshot FILE]\n"
+                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks] "
+                         "[--track-state STATE] [--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure\n"
                          "Use pointer/touch controls or keyboard focus and Enter to navigate.\n";
             std::exit(0);
@@ -152,6 +167,7 @@ struct ApplicationContext {
     track_timer::simulator::ScenarioPlayer player;
     track_timer::simulator::ApplicationScreen* screen;
     track_timer::settings::SettingsManager* settings;
+    const track_timer::simulator::TrackFixture* track_fixture;
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
@@ -160,9 +176,10 @@ struct ApplicationContext {
                        const track_timer::simulator::GnssReplayRate rate,
                        track_timer::simulator::ApplicationScreen* application_screen,
                        track_timer::settings::SettingsManager* settings_manager,
+                       const track_timer::simulator::TrackFixture* fixture_tracks,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
-          settings(settings_manager), display(target_display)
+          settings(settings_manager), track_fixture(fixture_tracks), display(target_display)
     {
     }
 };
@@ -176,9 +193,40 @@ void update_screen(ApplicationContext& context)
     const auto& active_snapshot = context.player.snapshot();
     context.screen->synchronize_session(active_snapshot.session_active);
 
+    auto match_request = context.track_fixture->request;
+    match_request.selected_track_id = context.settings->current().selected_track_id.data();
+    const auto track_match = track_timer::track::match_track_geofences(
+        context.track_fixture->catalog(), match_request);
+    context.screen->update_track_match(track_match);
+
     track_timer::ui::ReadySnapshot ready{};
-    std::snprintf(ready.selected_track.data(), ready.selected_track.size(), "%s",
-                  "Synthetic Test Loop");
+    if (track_match.state == track_timer::track::TrackMatchState::selected &&
+        track_match.selected_index < context.track_fixture->count) {
+        std::snprintf(ready.selected_track.data(), ready.selected_track.size(), "%s",
+                      context.track_fixture->definitions[track_match.selected_index].name.data());
+        ready.track_state = track_timer::ui::ReadyTrackState::selected;
+    }
+    else {
+        switch (track_match.state) {
+        case track_timer::track::TrackMatchState::suggested:
+            ready.track_state = track_timer::ui::ReadyTrackState::suggested;
+            break;
+        case track_timer::track::TrackMatchState::ambiguous:
+            ready.track_state = track_timer::ui::ReadyTrackState::ambiguous;
+            break;
+        case track_timer::track::TrackMatchState::selected_track_missing:
+            ready.track_state = track_timer::ui::ReadyTrackState::missing;
+            break;
+        case track_timer::track::TrackMatchState::invalid_catalog:
+            ready.track_state = track_timer::ui::ReadyTrackState::invalid;
+            break;
+        case track_timer::track::TrackMatchState::location_unavailable:
+        case track_timer::track::TrackMatchState::no_match:
+        case track_timer::track::TrackMatchState::selected:
+            ready.track_state = track_timer::ui::ReadyTrackState::none;
+            break;
+        }
+    }
     ready.session_duration_minutes = context.settings->current().session_duration_minutes;
     ready.rest_duration_minutes = context.settings->current().rest_duration_minutes;
     ready.gnss_health = active_snapshot.gnss_health;
@@ -256,13 +304,37 @@ int run(const Options& options)
     track_timer::settings::SettingsManager settings_manager{settings_store};
     (void)settings_manager.load();
 
-    track_timer::simulator::ApplicationScreen screen{lv_screen_active(), settings_manager};
+    auto track_fixture = track_timer::simulator::make_track_fixture(options.track_fixture);
+    if (options.track_fixture_explicit) {
+        auto fixture_settings = settings_manager.current();
+        fixture_settings.selected_track_id.fill('\0');
+        if (!track_fixture.request.selected_track_id.empty()) {
+            std::snprintf(fixture_settings.selected_track_id.data(),
+                          fixture_settings.selected_track_id.size(), "%.*s",
+                          static_cast<int>(track_fixture.request.selected_track_id.size()),
+                          track_fixture.request.selected_track_id.data());
+        }
+        (void)settings_manager.apply(fixture_settings, false);
+    }
+    auto initial_request = track_fixture.request;
+    initial_request.selected_track_id = settings_manager.current().selected_track_id.data();
+    const auto initial_match = track_timer::track::match_track_geofences(
+        track_fixture.catalog(), initial_request);
+
+    track_timer::simulator::ApplicationScreen screen{lv_screen_active(), settings_manager,
+                                                      track_fixture.catalog(), initial_match};
     screen.add_controls_to_group(input_group);
-    if (options.initial_screen == "setup") {
+    if (options.initial_screen != "ready") {
         (void)screen.navigate(track_timer::ui::NavigationAction::open_setup);
+        if (options.initial_screen == "settings") {
+            screen.open_setup_page(track_timer::simulator::SetupPage::device_settings);
+        }
+        else if (options.initial_screen == "tracks") {
+            screen.open_setup_page(track_timer::simulator::SetupPage::track_selection);
+        }
     }
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
-                               &settings_manager, display};
+                               &settings_manager, &track_fixture, display};
     render_screen(context);
 
     if (options.headless) {
@@ -300,6 +372,10 @@ int run(const Options& options)
     const auto& gnss = context.player.device().gnss();
     const auto& storage = context.player.device().storage();
     const auto render_metrics = context.profiler.metrics();
+    auto final_track_request = track_fixture.request;
+    final_track_request.selected_track_id = settings_manager.current().selected_track_id.data();
+    const auto final_track_match = track_timer::track::match_track_geofences(
+        track_fixture.catalog(), final_track_request);
     std::cout << "scenario=" << track_timer::simulator::scenario_name(context.player.id())
               << " frames=" << options.frames << " resolution=" << kDisplayWidth << 'x'
               << kDisplayHeight << " current=" << model.current_lap.data()
@@ -313,6 +389,9 @@ int run(const Options& options)
               << " storage-failures=" << storage.status().write_failures
               << " storage-recoveries=" << diagnostics.storage.recoveries
               << " screen=" << track_timer::ui::destination_name(screen.destination())
+              << " setup-page=" << track_timer::simulator::setup_page_name(screen.setup_page())
+              << " track-state="
+              << track_timer::track::track_match_state_name(final_track_match.state)
               << " render-frames=" << render_metrics.frame_count
               << " render-average-us=" << render_metrics.average_render_us()
               << " render-maximum-us=" << render_metrics.maximum_render_us

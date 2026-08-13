@@ -144,7 +144,32 @@ ReadyViewModel present_ready(const ReadySnapshot& snapshot) noexcept
     switch (snapshot.gnss_health) {
     case domain::GnssHealth::good:
         model.gnss.color_rgb = color::positive_bright;
-        std::snprintf(model.timing_mode.data(), model.timing_mode.size(), "LAP TIMING READY");
+        switch (snapshot.track_state) {
+        case ReadyTrackState::selected:
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "LAP TIMING READY");
+            break;
+        case ReadyTrackState::suggested:
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "TIMER ONLY - CONFIRM TRACK");
+            break;
+        case ReadyTrackState::ambiguous:
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "TIMER ONLY - SELECT TRACK");
+            break;
+        case ReadyTrackState::missing:
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "TIMER ONLY - TRACK MISSING");
+            break;
+        case ReadyTrackState::invalid:
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "TIMER ONLY - TRACK DATA");
+            break;
+        case ReadyTrackState::none:
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "TIMER ONLY - NO TRACK");
+            break;
+        }
         break;
     case domain::GnssHealth::poor:
         model.gnss.color_rgb = color::caution_bright;

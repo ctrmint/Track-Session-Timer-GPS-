@@ -34,6 +34,7 @@ add_library(
     ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/ui/settings_editor.cpp
+    ../firmware/components/ui/track_selection.cpp
     ../firmware/components/settings/component.cpp
     ../firmware/components/track/definition.cpp
     ../firmware/components/track/matching.cpp
@@ -41,6 +42,7 @@ add_library(
     src/file_settings_store.cpp
     src/fixed_cell_text.cpp
     src/scenario.cpp
+    src/track_fixtures.cpp
 )
 target_include_directories(
     track_timer_simulator_model
@@ -58,13 +60,16 @@ add_library(
     track_timer_lvgl_ui
     ../firmware/components/ui/lvgl_visual_system.cpp
     ../firmware/components/ui/ready_screen.cpp
+    ../firmware/components/ui/setup_menu_screen.cpp
     ../firmware/components/ui/settings_screen.cpp
+    ../firmware/components/ui/track_selection_screen.cpp
 )
 target_include_directories(
     track_timer_lvgl_ui
     PUBLIC
         ../firmware/components/domain/include
         ../firmware/components/settings/include
+        ../firmware/components/track/include
         ../firmware/components/ui/include
 )
 target_compile_features(track_timer_lvgl_ui PUBLIC cxx_std_17)
@@ -103,6 +108,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_track_selection_test
+        ../tests/cpp/test_track_selection.cpp
+    )
+    target_link_libraries(
+        track_timer_track_selection_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_track_selection_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-track-selection
+        COMMAND track_timer_track_selection_test
+    )
+    set_tests_properties(
+        simulator-track-selection
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Track selection states, persistence, and active-session lock passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_track_matching_test
         ../tests/cpp/test_track_matching.cpp
@@ -381,7 +411,7 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario ready
-            --screen setup
+            --screen settings
             --frames 4
             --snapshot "${CMAKE_CURRENT_BINARY_DIR}/settings.ppm"
     )
@@ -389,9 +419,50 @@ if(BUILD_TESTING)
         simulator-settings-smoke
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-            PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*display-buffer-bytes=96000"
+            PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*setup-page=settings.*display-buffer-bytes=96000"
             TIMEOUT 20
     )
+
+    add_test(
+        NAME simulator-setup-menu-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen setup
+            --frames 4
+    )
+    set_tests_properties(
+        simulator-setup-menu-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*setup-page=menu"
+            TIMEOUT 20
+    )
+
+    function(add_track_state_smoke fixture expected)
+        add_test(
+            NAME "simulator-track-${fixture}-screen"
+            COMMAND track_timer_simulator
+                --headless
+                --scenario ready
+                --screen tracks
+                --track-state "${fixture}"
+                --frames 4
+        )
+        set_tests_properties(
+            "simulator-track-${fixture}-screen"
+            PROPERTIES
+                ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+                PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*setup-page=tracks.*track-state=${expected}"
+                TIMEOUT 20
+        )
+    endfunction()
+
+    add_track_state_smoke(selected selected)
+    add_track_state_smoke(missing selected-track-missing)
+    add_track_state_smoke(invalid invalid-catalog)
+    add_track_state_smoke(ambiguous ambiguous)
+    add_track_state_smoke(suggested suggested)
     set_tests_properties(
         simulator-ready-smoke
         PROPERTIES

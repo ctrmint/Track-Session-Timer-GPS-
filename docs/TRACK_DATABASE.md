@@ -65,6 +65,15 @@ whose radius contains the position become suggestion candidates. The matching AP
 no lap-event operation; timing remains exclusively owned by exact start/finish crossing
 logic.
 
+The Setup > Track Selection screen consumes this result through an allocation-free
+view model. It lists validated local definitions, shows whether exact start/finish
+geometry is ready, and requires the driver to confirm a suggested track. A confirmed
+track identifier is persisted through `SettingsManager`; the UI has no direct storage
+path. Selecting Timer Only clears the identifier. Both actions are rejected after a
+session becomes active, including a race between opening the screen and pressing the
+action. Deterministic simulator fixtures cover selected, missing, invalid, ambiguous,
+suggested, no-nearby-track, and unavailable-location states.
+
 ## 4. Unknown track capture
 
 Safe future workflow:
@@ -75,6 +84,10 @@ Safe future workflow:
 - after the session, allow refinement from logged traces on a host tool
 
 Do not require a driver to interact with configuration screens at speed.
+
+The current selection screen links to this future workflow as information only; it
+does not capture or synthesize timing geometry. Implementation remains tracked by
+issue #37.
 
 ## 5. Loading, projection, and versioning
 

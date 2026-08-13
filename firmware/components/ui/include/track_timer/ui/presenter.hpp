@@ -14,6 +14,15 @@ enum class Readiness : std::uint8_t {
     ready,
 };
 
+enum class ReadyTrackState : std::uint8_t {
+    selected,
+    suggested,
+    ambiguous,
+    missing,
+    invalid,
+    none,
+};
+
 struct ReadySnapshot {
     std::array<char, 48> selected_track{};
     std::uint16_t session_duration_minutes{20};
@@ -21,6 +30,7 @@ struct ReadySnapshot {
     domain::GnssHealth gnss_health{domain::GnssHealth::unavailable};
     Readiness storage{Readiness::unavailable};
     Readiness imu{Readiness::unavailable};
+    ReadyTrackState track_state{ReadyTrackState::none};
     bool logging_available{false};
     bool session_active{false};
 };
