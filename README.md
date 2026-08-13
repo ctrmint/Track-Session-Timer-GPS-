@@ -188,7 +188,10 @@ make simulator-run
 
 The interactive window starts on the ready dashboard. Its large Start, Setup, Review,
 and Diagnostics controls accept pointer/touch or keyboard activation and use the same
-tested navigation model. Deterministic active, GNSS-loss/recovery, and
+tested navigation model. Setup provides transactional editors for every release-one
+device option, including explicit Save, Cancel, and confirmed Defaults actions.
+Simulator settings are stored below the operating system temporary directory rather
+than in the repository. Deterministic active, GNSS-loss/recovery, and
 storage-failure/recovery states remain available through command-line scenarios.
 Deterministic backends provide 20/25 Hz synthetic or fixture-driven GNSS, 100 Hz IMU,
 RTC, touch, bounded queues, and missing/full/slow/write-failed storage. A containerized
