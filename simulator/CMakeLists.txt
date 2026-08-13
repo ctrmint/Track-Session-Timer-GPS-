@@ -32,6 +32,7 @@ add_library(
     track_timer_simulator_model
     ../firmware/components/ui/presenter.cpp
     src/device_backends.cpp
+    src/fixed_cell_text.cpp
     src/scenario.cpp
 )
 target_include_directories(
@@ -47,6 +48,7 @@ target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 add_executable(
     track_timer_simulator
     src/device_screen.cpp
+    src/fixed_cell_label.cpp
     src/main.cpp
 )
 target_include_directories(track_timer_simulator PRIVATE src)
@@ -70,6 +72,38 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_fixed_cell_label_test
+        ../tests/cpp/test_fixed_cell_label.cpp
+        src/fixed_cell_label.cpp
+    )
+    target_include_directories(track_timer_fixed_cell_label_test PRIVATE src)
+    target_link_libraries(
+        track_timer_fixed_cell_label_test
+        PRIVATE
+            track_timer_simulator_model
+            lvgl::lvgl
+            SDL2::SDL2
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_fixed_cell_label_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-fixed-cell-timer-layout
+        COMMAND track_timer_fixed_cell_label_test
+    )
+    set_tests_properties(
+        simulator-fixed-cell-timer-layout
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "Fixed-cell LVGL timer positions passed"
+            TIMEOUT 20
+    )
+
     add_test(
         NAME simulator-active-smoke
         COMMAND track_timer_simulator
