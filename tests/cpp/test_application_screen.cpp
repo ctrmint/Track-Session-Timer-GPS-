@@ -119,6 +119,7 @@ int main()
     assert(screen.setup_page() == simulator::SetupPage::menu);
     for (const auto action : {ui::SetupMenuAction::track_selection,
                               ui::SetupMenuAction::device_settings,
+                              ui::SetupMenuAction::g_meter,
                               ui::SetupMenuAction::back}) {
         auto* button = screen.setup_menu_screen().button_for(action);
         assert(button != nullptr);
@@ -206,6 +207,55 @@ int main()
     assert(screen.track_selection().status() ==
            ui::TrackSelectionStatus::capture_information);
     click(screen.track_selection_screen().button_for(ui::TrackSelectionAction::back));
+    assert(screen.setup_page() == simulator::SetupPage::menu);
+
+    ui::ImuMeterInput imu{};
+    imu.sample.acceleration_x_mps2 = ui::kStandardGravityMps2 * 0.5F;
+    imu.sample.acceleration_y_mps2 = ui::kStandardGravityMps2 * 0.8F;
+    imu.sample.valid = true;
+    imu.sample_available = true;
+    imu.x_axis_valid = true;
+    imu.y_axis_valid = true;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 4, {},
+                  nullptr, imu);
+    click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::g_meter));
+    assert(screen.setup_page() == simulator::SetupPage::g_meter);
+    assert(std::strcmp(lv_label_get_text(screen.g_meter_screen().status_object()),
+                       "IMU RECOVERED") == 0);
+    assert(std::strcmp(lv_label_get_text(screen.g_meter_screen().direction_object(0)),
+                       "ACCEL (+Y)") == 0);
+    assert(!lv_obj_has_flag(screen.g_meter_screen().trail_object(0), LV_OBJ_FLAG_HIDDEN));
+    assert(!lv_obj_has_flag(screen.g_meter_screen().peak_marker_object(), LV_OBJ_FLAG_HIDDEN));
+    for (const auto action : {ui::GmeterAction::reset, ui::GmeterAction::back}) {
+        auto* button = screen.g_meter_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+    click(screen.g_meter_screen().button_for(ui::GmeterAction::reset));
+    assert(screen.g_meter().snapshot().trail_count == 0);
+
+    auto rotated_settings = settings_manager.current();
+    rotated_settings.orientation = settings::OrientationMode::fixed_90;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 5, {},
+                  &rotated_settings, imu);
+    assert(std::strcmp(lv_label_get_text(screen.g_meter_screen().direction_object(0)),
+                       "ACCEL (+X)") == 0);
+    rotated_settings.orientation = settings::OrientationMode::fixed_180;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 6, {},
+                  &rotated_settings, imu);
+    assert(std::strcmp(lv_label_get_text(screen.g_meter_screen().direction_object(0)),
+                       "ACCEL (-Y)") == 0);
+    rotated_settings.orientation = settings::OrientationMode::fixed_270;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 7, {},
+                  &rotated_settings, imu);
+    assert(std::strcmp(lv_label_get_text(screen.g_meter_screen().direction_object(0)),
+                       "ACCEL (-X)") == 0);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 8, {},
+                  nullptr, imu);
+    assert(std::strcmp(lv_label_get_text(screen.g_meter_screen().direction_object(0)),
+                       "ACCEL (+Y)") == 0);
+    click(screen.g_meter_screen().button_for(ui::GmeterAction::back));
     assert(screen.setup_page() == simulator::SetupPage::menu);
     click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::back));
     assert(screen.destination() == ui::Destination::ready);

@@ -4,6 +4,7 @@
 #include "track_timer/simulator/file_settings_store.hpp"
 #include "track_timer/simulator/diagnostics_fixtures.hpp"
 #include "track_timer/simulator/display_fixtures.hpp"
+#include "track_timer/simulator/imu_fixtures.hpp"
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/simulator/summary_fixtures.hpp"
 #include "track_timer/simulator/track_fixtures.hpp"
@@ -51,6 +52,8 @@ struct Options {
         track_timer::simulator::DiagnosticsFixtureId::normal};
     track_timer::simulator::DisplayFixtureId display_fixture{
         track_timer::simulator::DisplayFixtureId::live};
+    track_timer::simulator::ImuFixtureId imu_fixture{
+        track_timer::simulator::ImuFixtureId::normal};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -113,10 +116,17 @@ Options parse_options(const int argc, char** argv)
             options.initial_screen = require_value(argc, argv, index);
             if (options.initial_screen != "ready" && options.initial_screen != "setup" &&
                 options.initial_screen != "settings" && options.initial_screen != "tracks" &&
-                options.initial_screen != "review" &&
+                options.initial_screen != "g-meter" && options.initial_screen != "review" &&
                 options.initial_screen != "diagnostics") {
                 throw std::invalid_argument(
-                    "--screen must be ready, setup, settings, tracks, review, or diagnostics");
+                    "--screen must be ready, setup, settings, tracks, g-meter, review, or diagnostics");
+            }
+        }
+        else if (argument == "--imu-state") {
+            const auto value = require_value(argc, argv, index);
+            if (!track_timer::simulator::parse_imu_fixture(value, options.imu_fixture)) {
+                throw std::invalid_argument(
+                    "--imu-state must be normal, calibration, failure, partial, or recovery");
             }
         }
         else if (argument == "--review-state") {
@@ -154,9 +164,9 @@ Options parse_options(const int argc, char** argv)
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|review|diagnostics] "
+                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|g-meter|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
-                         "[--diagnostics-state STATE] [--display-state STATE] "
+                         "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] "
                          "[--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure, "
                          "lap-faster, lap-slower, lap-unavailable-best\n"
@@ -209,6 +219,7 @@ struct ApplicationContext {
     const track_timer::simulator::TrackFixture* track_fixture;
     track_timer::simulator::DiagnosticsFixtureId diagnostics_fixture;
     track_timer::simulator::DisplayFixture display_fixture;
+    track_timer::simulator::ImuFixtureId imu_fixture;
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
@@ -220,10 +231,12 @@ struct ApplicationContext {
                        const track_timer::simulator::TrackFixture* fixture_tracks,
                        const track_timer::simulator::DiagnosticsFixtureId fixture_diagnostics,
                        const track_timer::simulator::DisplayFixture& fixture_display,
+                       const track_timer::simulator::ImuFixtureId fixture_imu,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
           settings(settings_manager), track_fixture(fixture_tracks),
           diagnostics_fixture(fixture_diagnostics), display_fixture(fixture_display),
+          imu_fixture(fixture_imu),
           display(target_display)
     {
     }
@@ -284,19 +297,50 @@ void update_screen(ApplicationContext& context)
                     : storage_health == track_timer::board::StorageHealth::degraded
                         ? track_timer::ui::Readiness::degraded
                         : track_timer::ui::Readiness::unavailable;
-    ready.imu = track_timer::ui::Readiness::ready;
+    switch (context.imu_fixture) {
+    case track_timer::simulator::ImuFixtureId::normal:
+        ready.imu = track_timer::ui::Readiness::ready;
+        break;
+    case track_timer::simulator::ImuFixtureId::calibration:
+    case track_timer::simulator::ImuFixtureId::partial:
+        ready.imu = track_timer::ui::Readiness::degraded;
+        break;
+    case track_timer::simulator::ImuFixtureId::failure:
+        ready.imu = track_timer::ui::Readiness::unavailable;
+        break;
+    case track_timer::simulator::ImuFixtureId::recovery:
+        ready.imu = context.player.elapsed_ms() < 600
+                        ? track_timer::ui::Readiness::unavailable
+                        : track_timer::ui::Readiness::ready;
+        break;
+    }
     ready.logging_available = active_snapshot.logging_available;
     ready.session_active = active_snapshot.session_active;
 
-    const auto diagnostics = track_timer::simulator::make_diagnostics_snapshot(
+    auto diagnostics = track_timer::simulator::make_diagnostics_snapshot(
         context.diagnostics_fixture,
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.player.diagnostics(),
         context.player.device().storage().status(), context.player.logger_metrics(),
         context.profiler.metrics());
+    const auto imu = track_timer::simulator::make_imu_fixture_input(
+        context.imu_fixture, static_cast<std::uint64_t>(context.player.elapsed_ms()));
+    if (context.imu_fixture == track_timer::simulator::ImuFixtureId::failure ||
+        (context.imu_fixture == track_timer::simulator::ImuFixtureId::recovery &&
+         context.player.elapsed_ms() < 600)) {
+        diagnostics.imu = track_timer::diagnostics::SubsystemState::unavailable;
+    }
+    else if (context.imu_fixture == track_timer::simulator::ImuFixtureId::calibration ||
+             context.imu_fixture == track_timer::simulator::ImuFixtureId::partial) {
+        diagnostics.imu = track_timer::diagnostics::SubsystemState::degraded;
+    }
+    else {
+        diagnostics.imu = track_timer::diagnostics::SubsystemState::ready;
+    }
     context.screen->update(
         track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.display_fixture.input,
-        context.display_fixture.override_settings ? &context.display_fixture.settings : nullptr);
+        context.display_fixture.override_settings ? &context.display_fixture.settings : nullptr,
+        imu);
 }
 
 void render_screen(ApplicationContext& context)
@@ -398,11 +442,15 @@ int run(const Options& options)
             else if (options.initial_screen == "tracks") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::track_selection);
             }
+            else if (options.initial_screen == "g-meter") {
+                screen.open_setup_page(track_timer::simulator::SetupPage::g_meter);
+            }
         }
     }
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
                                &settings_manager, &track_fixture,
-                               options.diagnostics_fixture, display_fixture, display};
+                               options.diagnostics_fixture, display_fixture,
+                               options.imu_fixture, display};
     render_screen(context);
 
     if (options.headless) {
@@ -503,6 +551,12 @@ int run(const Options& options)
                      screen.display_policy().snapshot().command.layout_shift_y)
               << " display-preview="
               << (screen.display_policy().snapshot().settings_preview ? "yes" : "no")
+              << " imu-fixture="
+              << track_timer::simulator::imu_fixture_name(options.imu_fixture)
+              << " imu-state="
+              << track_timer::ui::imu_meter_state_name(screen.g_meter().snapshot().state)
+              << " imu-samples=" << screen.g_meter().snapshot().accepted_samples
+              << " imu-trail=" << screen.g_meter().snapshot().trail_count
               << " lap-feedback="
               << track_timer::ui::lap_feedback_kind_name(
                      screen.active_session().view_model().feedback.kind)

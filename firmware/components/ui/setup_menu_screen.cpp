@@ -18,12 +18,15 @@ SetupMenuScreen::SetupMenuScreen(lv_obj_t* root, const SetupMenuCallback callbac
 
     buttons_[0] = make_button(0, SetupMenuAction::track_selection,
                               LV_SYMBOL_GPS " TRACK SELECTION",
-                              "CHOOSE TRACK AND CHECK TIMING READINESS", 76, color::positive);
+                              "CHOOSE TRACK AND CHECK TIMING READINESS", 64, color::positive);
     buttons_[1] = make_button(1, SetupMenuAction::device_settings,
                               LV_SYMBOL_SETTINGS " DEVICE SETTINGS",
-                              "SESSION, DISPLAY, LAUNCH AND MODE", 198, color::surface);
-    buttons_[2] = make_button(2, SetupMenuAction::back, LV_SYMBOL_LEFT " BACK TO READY",
-                              "DISCARD NO SAVED CHANGES", 320, color::surface);
+                              "SESSION, DISPLAY, LAUNCH AND MODE", 157, color::surface);
+    buttons_[2] = make_button(2, SetupMenuAction::g_meter, "G-METER / IMU",
+                              "LIVE ACCELERATION, PEAKS AND SENSOR HEALTH", 250,
+                              color::surface);
+    buttons_[3] = make_button(3, SetupMenuAction::back, LV_SYMBOL_LEFT " BACK TO READY",
+                              "DISCARD NO SAVED CHANGES", 343, color::surface);
 }
 
 void SetupMenuScreen::add_buttons_to_group(lv_group_t* group) noexcept
@@ -60,16 +63,16 @@ lv_obj_t* SetupMenuScreen::make_button(const std::size_t index,
     auto* button = lv_button_create(root_);
     style_flat_panel(button, background_rgb, 12);
     lv_obj_set_pos(button, 20, y);
-    lv_obj_set_size(button, 560, 102);
+    lv_obj_set_size(button, 560, 81);
     auto* title_label = create_label(button, Typography::body,
                                      contrast_text_rgb(background_rgb), LV_TEXT_ALIGN_LEFT);
     lv_label_set_text(title_label, title);
-    lv_obj_set_pos(title_label, 20, 16);
+    lv_obj_set_pos(title_label, 20, 10);
     lv_obj_set_size(title_label, 520, 30);
     auto* detail_label = create_label(button, Typography::caption,
                                       contrast_text_rgb(background_rgb), LV_TEXT_ALIGN_LEFT);
     lv_label_set_text(detail_label, detail);
-    lv_obj_set_pos(detail_label, 20, 58);
+    lv_obj_set_pos(detail_label, 20, 47);
     lv_obj_set_size(detail_label, 520, 24);
     bindings_[index] = Binding{this, action};
     lv_obj_add_event_cb(button, button_event, LV_EVENT_CLICKED, &bindings_[index]);

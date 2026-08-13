@@ -31,13 +31,15 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       settings_root_(make_screen_root(root)), track_selection_root_(make_screen_root(root)),
       session_review_root_(make_screen_root(root)),
       diagnostics_root_(make_screen_root(root)),
+      g_meter_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this),
       active_screen_(active_root_, device_action, this),
       setup_menu_screen_(setup_menu_root_, setup_action, this),
       settings_screen_(settings_root_, settings_action, this),
       track_selection_screen_(track_selection_root_, track_action, this),
       session_review_screen_(session_review_root_, review_action, this),
-      diagnostics_screen_(diagnostics_root_, diagnostics_action, this)
+      diagnostics_screen_(diagnostics_root_, diagnostics_action, this),
+      g_meter_screen_(g_meter_root_, g_meter_action, this)
 {
     ui::style_screen(root);
     brightness_overlay_ = lv_obj_create(root);
@@ -56,7 +58,8 @@ void ApplicationScreen::update(const ui::ReadyViewModel& ready,
                                const diagnostics::DiagnosticsSnapshot& diagnostics,
                                const std::uint64_t now_ms,
                                const ui::DisplayPolicyInput& display,
-                               const settings::DeviceSettings* display_settings_override) noexcept
+                               const settings::DeviceSettings* display_settings_override,
+                               const ui::ImuMeterInput& imu) noexcept
 {
     active_now_ms_ = now_ms;
     ready_screen_.update(ready);
@@ -94,6 +97,12 @@ void ApplicationScreen::update(const ui::ReadyViewModel& ready,
     if (display_output_ != nullptr) {
         display_output_->apply(policy.command);
     }
+
+    auto effective_imu = imu;
+    effective_imu.now_ms = now_ms;
+    effective_imu.orientation = policy.command.orientation;
+    g_meter_.update(effective_imu, session_active_);
+    g_meter_screen_.update(g_meter_.snapshot());
 
     diagnostics_snapshot_ = diagnostics;
     diagnostics_snapshot_.display_brightness_percent = policy.command.brightness_percent;
@@ -204,6 +213,7 @@ void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
     track_selection_screen_.add_buttons_to_group(group);
     session_review_screen_.add_buttons_to_group(group);
     diagnostics_screen_.add_buttons_to_group(group);
+    g_meter_screen_.add_buttons_to_group(group);
 }
 
 ui::Destination ApplicationScreen::destination() const noexcept
@@ -261,6 +271,16 @@ const ui::DiagnosticsController& ApplicationScreen::diagnostics() const noexcept
     return diagnostics_;
 }
 
+ui::GmeterScreen& ApplicationScreen::g_meter_screen() noexcept
+{
+    return g_meter_screen_;
+}
+
+const ui::ImuMeterController& ApplicationScreen::g_meter() const noexcept
+{
+    return g_meter_;
+}
+
 DeviceScreen& ApplicationScreen::device_screen() noexcept
 {
     return active_screen_;
@@ -310,8 +330,31 @@ void ApplicationScreen::setup_action(const ui::SetupMenuAction action, void* con
     case ui::SetupMenuAction::track_selection:
         screen->open_setup_page(SetupPage::track_selection);
         break;
+    case ui::SetupMenuAction::g_meter:
+        screen->open_setup_page(SetupPage::g_meter);
+        break;
     case ui::SetupMenuAction::back:
         (void)screen->navigate(ui::NavigationAction::back);
+        break;
+    }
+}
+
+void ApplicationScreen::g_meter_action(const ui::GmeterAction action,
+                                       void* context) noexcept
+{
+    auto* screen = static_cast<ApplicationScreen*>(context);
+    if (screen == nullptr) {
+        return;
+    }
+    screen->activity_pending_ = true;
+    switch (action) {
+    case ui::GmeterAction::reset:
+        (void)screen->g_meter_.reset(screen->session_active_);
+        screen->g_meter_screen_.update(screen->g_meter_.snapshot());
+        break;
+    case ui::GmeterAction::back:
+        screen->setup_page_ = SetupPage::menu;
+        screen->show_destination();
         break;
     }
 }
@@ -492,6 +535,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(track_selection_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(diagnostics_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_meter_root_, LV_OBJ_FLAG_HIDDEN);
 
     switch (navigation_.destination()) {
     case ui::Destination::ready:
@@ -506,6 +550,9 @@ void ApplicationScreen::show_destination() noexcept
         }
         else if (setup_page_ == SetupPage::track_selection) {
             lv_obj_remove_flag(track_selection_root_, LV_OBJ_FLAG_HIDDEN);
+        }
+        else if (setup_page_ == SetupPage::g_meter) {
+            lv_obj_remove_flag(g_meter_root_, LV_OBJ_FLAG_HIDDEN);
         }
         else {
             lv_obj_remove_flag(setup_menu_root_, LV_OBJ_FLAG_HIDDEN);
@@ -547,7 +594,8 @@ void ApplicationScreen::apply_display_policy(const board::DisplayCommand& comman
                           command.orientation == board::DisplayOrientation::degrees_270;
     const auto scale = portrait ? 192 : 256;
     for (auto* root : {ready_root_, active_root_, setup_menu_root_, settings_root_,
-                       track_selection_root_, session_review_root_, diagnostics_root_}) {
+                       track_selection_root_, session_review_root_, diagnostics_root_,
+                       g_meter_root_}) {
         lv_obj_set_pos(root, command.layout_shift_x, command.layout_shift_y);
         lv_obj_set_style_transform_pivot_x(root, 300, 0);
         lv_obj_set_style_transform_pivot_y(root, 225, 0);
@@ -576,6 +624,8 @@ const char* setup_page_name(const SetupPage page) noexcept
         return "settings";
     case SetupPage::track_selection:
         return "tracks";
+    case SetupPage::g_meter:
+        return "g-meter";
     }
     return "menu";
 }
