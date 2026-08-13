@@ -14,6 +14,11 @@ class DeviceScreen {
 
     void update(const ui::DeviceViewModel& model) noexcept;
 
+    [[nodiscard]] lv_obj_t* gnss_indicator_object() const noexcept
+    {
+        return gnss_label_;
+    }
+
   private:
     lv_obj_t* root_;
     lv_obj_t* accent_line_;

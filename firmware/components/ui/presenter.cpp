@@ -103,6 +103,7 @@ DeviceViewModel present(const domain::UiSnapshot& snapshot) noexcept
                   gnss_label(snapshot.gnss_health));
     std::snprintf(model.logging_status.data(), model.logging_status.size(), "%s",
                   snapshot.logging_available ? "LOGGING" : "NO LOG");
+    model.gnss_health = snapshot.gnss_health;
     set_session_accent(model, snapshot.session_remaining_ms);
     return model;
 }
