@@ -34,6 +34,7 @@ add_library(
     ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
+    ../firmware/components/ui/imu_meter.cpp
     ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/ui/session_review.cpp
@@ -49,6 +50,7 @@ add_library(
     src/display_fixtures.cpp
     src/file_settings_store.cpp
     src/fixed_cell_text.cpp
+    src/imu_fixtures.cpp
     src/scenario.cpp
     src/summary_fixtures.cpp
     src/track_fixtures.cpp
@@ -70,6 +72,7 @@ target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 add_library(
     track_timer_lvgl_ui
     ../firmware/components/ui/diagnostics_screen.cpp
+    ../firmware/components/ui/g_meter_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     ../firmware/components/ui/ready_screen.cpp
     ../firmware/components/ui/session_review_screen.cpp
@@ -80,6 +83,7 @@ add_library(
 target_include_directories(
     track_timer_lvgl_ui
     PUBLIC
+        ../firmware/components/board/include
         ../firmware/components/diagnostics/include
         ../firmware/components/domain/include
         ../firmware/components/logger/include
@@ -123,6 +127,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_imu_meter_test
+        ../tests/cpp/test_imu_meter.cpp
+    )
+    target_link_libraries(
+        track_timer_imu_meter_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_imu_meter_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-imu-meter-model
+        COMMAND track_timer_imu_meter_test
+    )
+    set_tests_properties(
+        simulator-imu-meter-model
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Bounded G-meter peaks, orientation, reset guard, and IMU states passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_display_policy_test
         ../tests/cpp/test_display_policy.cpp
@@ -653,6 +682,48 @@ if(BUILD_TESTING)
     add_diagnostics_state_smoke(degraded degraded)
     add_diagnostics_state_smoke(missing missing)
     add_diagnostics_state_smoke(recovery recovered)
+
+    function(add_imu_state_smoke fixture expected frames)
+        add_test(
+            NAME "simulator-imu-${fixture}-screen"
+            COMMAND track_timer_simulator
+                --headless
+                --scenario ready
+                --screen g-meter
+                --imu-state "${fixture}"
+                --frames "${frames}"
+                --snapshot "${CMAKE_CURRENT_BINARY_DIR}/imu-${fixture}.ppm"
+        )
+        set_tests_properties(
+            "simulator-imu-${fixture}-screen"
+            PROPERTIES
+                ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+                PASS_REGULAR_EXPRESSION "screen=setup.*setup-page=g-meter.*imu-fixture=${fixture}.*imu-state=${expected}"
+                TIMEOUT 20
+        )
+    endfunction()
+
+    add_imu_state_smoke(normal ready 25)
+    add_imu_state_smoke(calibration calibrating 4)
+    add_imu_state_smoke(failure unavailable 4)
+    add_imu_state_smoke(partial partial 4)
+    add_imu_state_smoke(recovery recovered 25)
+
+    add_test(
+        NAME simulator-imu-loss-does-not-stop-timing
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --imu-state failure
+            --frames 25
+    )
+    set_tests_properties(
+        simulator-imu-loss-does-not-stop-timing
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=active.*current=1:43.638.*session=15:26.*imu-fixture=failure.*imu-state=unavailable"
+            TIMEOUT 20
+    )
 
     function(add_display_state_smoke fixture expected)
         add_test(

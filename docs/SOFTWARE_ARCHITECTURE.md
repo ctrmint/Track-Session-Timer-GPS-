@@ -161,6 +161,14 @@ hardware integration implements the `DisplayOutput` interface. The simulator ren
 the same brightness, orientation, dim, and AMOLED-shift commands and exposes them in
 diagnostics.
 
+IMU presentation uses the same boundary. `ImuMeterInput` carries one timestamped board
+sample plus per-axis validity, calibration state, and the effective display
+orientation. `ImuMeterController` rotates samples into driver-relative longitudinal
+and lateral axes, retains a fixed 24-point ring, and calculates bounded session peaks.
+The LVGL G-meter consumes only its snapshot. A missing or partial sensor therefore
+changes presentation health but cannot call, block, or stop the session timer. The
+future QMI8658 adapter remains behind `board::ImuInput`.
+
 ## 8. Watchdog
 
 Use watchdogs to detect dead tasks, but do not disguise recurrent software faults with endless silent resets. Store a bounded reset reason/diagnostic record where possible.

@@ -6,6 +6,7 @@ destinations:
 ```text
                          +--> Setup --> Track Selection --+
                          |          +-> Device Settings --+--> Setup --> Back --> Ready
+                         |          +-> G-meter / IMU -----+
 Ready -- Start --> Active+--> Review -- Rest/Ready -------+--> Ready
                          +--> Diagnostics ----------------+
 ```
@@ -54,6 +55,14 @@ manager, and provides a timer-only choice. Suggested tracks require confirmation
 ambiguous, missing, invalid, and unavailable states are explained without inventing a
 lap-timing state. Track changes are rejected while a session is active. Unknown-track
 capture is identified separately and remains bounded to issue #37.
+
+G-meter / IMU shows current planar acceleration, a fixed 24-sample trail, the session
+peak marker, and acceleration/braking/left/right/total peaks. Its labels identify the
+physical axes for the effective configured orientation. Calibration, partial data,
+unavailable data, and the bounded recovered notice remain distinct. Reset Peaks is
+accepted only outside active timing; measurements also reset automatically as timing
+starts and remain available when it ends. Losing IMU data never changes session
+navigation or timing state.
 
 ## Session review
 

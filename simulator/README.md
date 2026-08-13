@@ -31,8 +31,8 @@ make simulator-run
 
 Use the large on-screen Start, Setup, Review, and Diagnostics controls with a pointer
 or touchscreen. Keyboard focus and Enter activate the same actions. Setup opens a
-menu for Track Selection and Device Settings; every nested screen has an explicit
-return path. Start enters the active timer and configuration is then locked. Device
+menu for Track Selection, Device Settings, and G-meter / IMU; every nested screen has
+an explicit return path. Start enters the active timer and configuration is then locked. Device
 Settings includes every versioned option and explicit Save, Cancel, and confirmed
 Defaults controls. Track Selection explains selected, suggested, ambiguous, missing,
 invalid, and unavailable states and always offers a timer-only path. Saved simulator
@@ -85,7 +85,7 @@ build/simulator/track_timer_simulator \
 
 Every headless frame advances scenario time by the requested fixed interval; it does
 not use wall-clock timing.
-`--screen ready|setup|settings|tracks|review|diagnostics` selects the initial
+`--screen ready|setup|settings|tracks|g-meter|review|diagnostics` selects the initial
 screen. `--track-state selected|missing|invalid|ambiguous|suggested|none|unavailable`
 selects a deterministic track fixture and deliberately replaces the persisted track
 selection for that run. Omit `--track-state` during normal interactive use so a track
@@ -105,6 +105,22 @@ paging, partial-log warnings, and each safe failure presentation.
 Use `--diagnostics-state normal|degraded|missing|recovery` with
 `--screen diagnostics` to render stationary subsystem health and retained fault
 counters without physical hardware.
+
+Open the hardware-independent G-meter and select an IMU condition with:
+
+```bash
+build/simulator/track_timer_simulator --screen g-meter --imu-state normal
+build/simulator/track_timer_simulator --screen g-meter --imu-state calibration
+build/simulator/track_timer_simulator --screen g-meter --imu-state failure
+build/simulator/track_timer_simulator --screen g-meter --imu-state partial
+build/simulator/track_timer_simulator --screen g-meter --imu-state recovery
+```
+
+`--imu-state normal|calibration|failure|partial|recovery` drives the current marker,
+fixed 24-sample trail, session peak marker, directional peak summaries, and explicit
+health presentation. The effective display orientation rotates sensor axes and updates
+the physical-axis labels. Peak reset is stationary-only. The failure fixture also
+verifies that active lap and session time continue without IMU data.
 
 Use `--display-state day|night|dimmed|rotated` for deterministic display policy. These
 fixtures override only the in-memory policy input for that run and do not change saved

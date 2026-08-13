@@ -28,6 +28,12 @@ Recorded/synthetic traces with expected lap events.
 - rapid power cycling
 - IMU unavailable
 
+The host simulator additionally exercises G-meter normal, calibration, unavailable,
+partial-axis, and recovery fixtures. It verifies the 24-sample capacity, peak/reset
+rules, all four orientation transforms, and continued active timing while IMU data is
+absent. These checks do not replace physical QMI8658 calibration and axis-direction
+validation after the board arrives.
+
 ### Outdoor tests
 
 - open-sky GNSS rate and accuracy

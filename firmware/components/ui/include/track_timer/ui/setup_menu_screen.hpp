@@ -11,6 +11,7 @@ namespace track_timer::ui {
 enum class SetupMenuAction : std::uint8_t {
     device_settings,
     track_selection,
+    g_meter,
     back,
 };
 
@@ -35,8 +36,8 @@ class SetupMenuScreen {
     SetupMenuCallback callback_{nullptr};
     void* context_{nullptr};
     lv_obj_t* root_{nullptr};
-    std::array<lv_obj_t*, 3> buttons_{};
-    std::array<Binding, 3> bindings_{};
+    std::array<lv_obj_t*, 4> buttons_{};
+    std::array<Binding, 4> bindings_{};
 };
 
 }  // namespace track_timer::ui
