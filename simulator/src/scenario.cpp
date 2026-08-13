@@ -54,6 +54,39 @@ domain::UiSnapshot initial_snapshot(const ScenarioId id) noexcept
             true,
             false,
         };
+    case ScenarioId::lap_faster:
+        return domain::UiSnapshot{
+            15 * 60'000,
+            54'000,
+            1 * 60'000 + 41'000,
+            1 * 60'000 + 40'500,
+            7,
+            domain::GnssHealth::good,
+            true,
+            true,
+        };
+    case ScenarioId::lap_slower:
+        return domain::UiSnapshot{
+            15 * 60'000,
+            54'000,
+            1 * 60'000 + 41'000,
+            1 * 60'000 + 40'500,
+            7,
+            domain::GnssHealth::good,
+            true,
+            true,
+        };
+    case ScenarioId::lap_unavailable_best:
+        return domain::UiSnapshot{
+            15 * 60'000,
+            54'000,
+            domain::kUnavailableTime,
+            domain::kUnavailableTime,
+            1,
+            domain::GnssHealth::good,
+            true,
+            true,
+        };
     }
     return {};
 }
@@ -71,6 +104,12 @@ const char* scenario_name(const ScenarioId id) noexcept
         return "gnss-loss";
     case ScenarioId::storage_failure:
         return "storage-failure";
+    case ScenarioId::lap_faster:
+        return "lap-faster";
+    case ScenarioId::lap_slower:
+        return "lap-slower";
+    case ScenarioId::lap_unavailable_best:
+        return "lap-unavailable-best";
     }
     return "ready";
 }
@@ -106,10 +145,12 @@ void ScenarioPlayer::reset(const ScenarioId id) noexcept
 {
     id_ = id;
     elapsed_ms_ = 0;
+    lap_emitted_ = false;
     snapshot_ = initial_snapshot(id);
     device_.reset();
     logger_.reset();
     apply_fault_schedule();
+    apply_lap_schedule();
 }
 
 void ScenarioPlayer::advance(const std::int64_t elapsed_ms) noexcept
@@ -121,6 +162,7 @@ void ScenarioPlayer::advance(const std::int64_t elapsed_ms) noexcept
     auto remaining_ms = elapsed_ms;
     while (remaining_ms > 0) {
         apply_fault_schedule();
+        apply_lap_schedule();
         const auto boundary_ms = next_fault_boundary_ms();
         const auto until_boundary_ms = boundary_ms > elapsed_ms_ ? boundary_ms - elapsed_ms_
                                                                   : remaining_ms;
@@ -138,7 +180,13 @@ void ScenarioPlayer::advance(const std::int64_t elapsed_ms) noexcept
         remaining_ms -= step_ms;
     }
     apply_fault_schedule();
+    apply_lap_schedule();
     consume_inputs();
+}
+
+void ScenarioPlayer::stop_session() noexcept
+{
+    snapshot_.session_active = false;
 }
 
 ScenarioId ScenarioPlayer::id() const noexcept
@@ -207,6 +255,34 @@ void ScenarioPlayer::apply_fault_schedule() noexcept
     device_.storage().set_mode(storage_mode);
 }
 
+void ScenarioPlayer::apply_lap_schedule() noexcept
+{
+    if (lap_emitted_ || elapsed_ms_ < 250) {
+        return;
+    }
+    switch (id_) {
+    case ScenarioId::lap_faster:
+        snapshot_.previous_lap_ms = 1 * 60'000 + 39'750;
+        snapshot_.best_lap_ms = snapshot_.previous_lap_ms;
+        break;
+    case ScenarioId::lap_slower:
+        snapshot_.previous_lap_ms = 1 * 60'000 + 42'250;
+        break;
+    case ScenarioId::lap_unavailable_best:
+        snapshot_.previous_lap_ms = 1 * 60'000 + 41'500;
+        snapshot_.best_lap_ms = snapshot_.previous_lap_ms;
+        break;
+    case ScenarioId::ready:
+    case ScenarioId::active:
+    case ScenarioId::gnss_loss:
+    case ScenarioId::storage_failure:
+        return;
+    }
+    ++snapshot_.lap_index;
+    snapshot_.current_lap_ms = 0;
+    lap_emitted_ = true;
+}
+
 void ScenarioPlayer::consume_inputs() noexcept
 {
     if (device_.gnss().mode() == GnssMode::loss) {
@@ -249,6 +325,10 @@ void ScenarioPlayer::consume_inputs() noexcept
 std::int64_t ScenarioPlayer::next_fault_boundary_ms() const noexcept
 {
     constexpr auto kNoBoundary = std::numeric_limits<std::int64_t>::max();
+    if (!lap_emitted_ && (id_ == ScenarioId::lap_faster || id_ == ScenarioId::lap_slower ||
+                          id_ == ScenarioId::lap_unavailable_best)) {
+        return 250;
+    }
     if (id_ == ScenarioId::gnss_loss) {
         for (const auto boundary : {2'000, 3'000, 4'000}) {
             if (elapsed_ms_ < boundary) {

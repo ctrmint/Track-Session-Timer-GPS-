@@ -15,13 +15,19 @@ enum class ScenarioId : std::uint8_t {
     active,
     gnss_loss,
     storage_failure,
+    lap_faster,
+    lap_slower,
+    lap_unavailable_best,
 };
 
-inline constexpr std::array<ScenarioId, 4> kAllScenarios{
+inline constexpr std::array<ScenarioId, 7> kAllScenarios{
     ScenarioId::ready,
     ScenarioId::active,
     ScenarioId::gnss_loss,
     ScenarioId::storage_failure,
+    ScenarioId::lap_faster,
+    ScenarioId::lap_slower,
+    ScenarioId::lap_unavailable_best,
 };
 
 [[nodiscard]] const char* scenario_name(ScenarioId id) noexcept;
@@ -36,6 +42,7 @@ class ScenarioPlayer {
 
     void reset(ScenarioId id) noexcept;
     void advance(std::int64_t elapsed_ms) noexcept;
+    void stop_session() noexcept;
 
     [[nodiscard]] ScenarioId id() const noexcept;
     [[nodiscard]] std::int64_t elapsed_ms() const noexcept;
@@ -51,11 +58,13 @@ class ScenarioPlayer {
 
   private:
     void apply_fault_schedule() noexcept;
+    void apply_lap_schedule() noexcept;
     void consume_inputs() noexcept;
     [[nodiscard]] std::int64_t next_fault_boundary_ms() const noexcept;
 
     ScenarioId id_;
     std::int64_t elapsed_ms_{0};
+    bool lap_emitted_{false};
     domain::UiSnapshot snapshot_{};
     SimulatedDevice device_;
     logger::AsyncLogger logger_;

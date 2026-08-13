@@ -29,7 +29,8 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       settings_root_(make_screen_root(root)), track_selection_root_(make_screen_root(root)),
       session_review_root_(make_screen_root(root)),
       diagnostics_root_(make_screen_root(root)),
-      ready_screen_(ready_root_, ready_navigation, this), active_screen_(active_root_),
+      ready_screen_(ready_root_, ready_navigation, this),
+      active_screen_(active_root_, device_action, this),
       setup_menu_screen_(setup_menu_root_, setup_action, this),
       settings_screen_(settings_root_, settings_action, this),
       track_selection_screen_(track_selection_root_, track_action, this),
@@ -40,11 +41,14 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
 }
 
 void ApplicationScreen::update(const ui::ReadyViewModel& ready,
-                               const ui::DeviceViewModel& active,
-                               const diagnostics::DiagnosticsSnapshot& diagnostics) noexcept
+                               const domain::UiSnapshot& active,
+                               const diagnostics::DiagnosticsSnapshot& diagnostics,
+                               const std::uint64_t now_ms) noexcept
 {
+    active_now_ms_ = now_ms;
     ready_screen_.update(ready);
-    active_screen_.update(active);
+    active_session_.update(active, active_now_ms_);
+    active_screen_.update(active_session_.view_model());
     diagnostics_snapshot_ = diagnostics;
     diagnostics_.update(diagnostics_snapshot_);
     if (navigation_.destination() == ui::Destination::diagnostics) {
@@ -120,6 +124,11 @@ bool ApplicationScreen::consume_start_request() noexcept
     return requested;
 }
 
+bool ApplicationScreen::consume_stop_request() noexcept
+{
+    return active_session_.consume_stop_request();
+}
+
 bool ApplicationScreen::consume_rest_request() noexcept
 {
     const auto requested = rest_requested_;
@@ -137,6 +146,7 @@ bool ApplicationScreen::consume_ready_request() noexcept
 void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
 {
     ready_screen_.add_buttons_to_group(group);
+    active_screen_.add_buttons_to_group(group);
     setup_menu_screen_.add_buttons_to_group(group);
     settings_screen_.add_buttons_to_group(group);
     track_selection_screen_.add_buttons_to_group(group);
@@ -197,6 +207,16 @@ ui::DiagnosticsScreen& ApplicationScreen::diagnostics_screen() noexcept
 const ui::DiagnosticsController& ApplicationScreen::diagnostics() const noexcept
 {
     return diagnostics_;
+}
+
+DeviceScreen& ApplicationScreen::device_screen() noexcept
+{
+    return active_screen_;
+}
+
+const ui::ActiveSessionController& ApplicationScreen::active_session() const noexcept
+{
+    return active_session_;
 }
 
 SetupPage ApplicationScreen::setup_page() const noexcept
@@ -358,6 +378,32 @@ void ApplicationScreen::diagnostics_action(const ui::DiagnosticsAction action,
         return;
     }
     screen->refresh_diagnostics();
+}
+
+void ApplicationScreen::device_action(const DeviceScreenAction action, void* context) noexcept
+{
+    auto* screen = static_cast<ApplicationScreen*>(context);
+    if (screen == nullptr || !screen->session_active_) {
+        return;
+    }
+    switch (action) {
+    case DeviceScreenAction::press_stop:
+        screen->active_session_.press_stop(screen->active_now_ms_);
+        break;
+    case DeviceScreenAction::release_stop:
+        screen->active_session_.release_stop(screen->active_now_ms_);
+        break;
+    case DeviceScreenAction::cancel_stop_hold:
+        screen->active_session_.cancel_stop_hold(screen->active_now_ms_);
+        break;
+    case DeviceScreenAction::cancel_stop:
+        screen->active_session_.cancel_stop(screen->active_now_ms_);
+        break;
+    case DeviceScreenAction::confirm_stop:
+        screen->active_session_.confirm_stop(screen->active_now_ms_);
+        break;
+    }
+    screen->active_screen_.update(screen->active_session_.view_model());
 }
 
 void ApplicationScreen::show_destination() noexcept
