@@ -50,6 +50,8 @@ int main()
     assert(view.current_page == ui::DiagnosticsPage::peripherals);
     assert(view.previous_enabled);
     assert(!view.next_enabled);
+    assert(std::strcmp(view.rows[7].label.data(), "DISPLAY POLICY") == 0);
+    assert(std::strcmp(view.rows[7].value.data(), "100% / 0 DEG / 0,0") == 0);
     diagnostics.next_page();
     assert(diagnostics.view_model().current_page == ui::DiagnosticsPage::peripherals);
 

@@ -9,7 +9,7 @@
 
 namespace track_timer::diagnostics {
 
-inline constexpr std::uint16_t kDiagnosticsSnapshotVersion = 1;
+inline constexpr std::uint16_t kDiagnosticsSnapshotVersion = 2;
 
 enum class OverallState : std::uint8_t {
     normal,
@@ -89,6 +89,11 @@ struct DiagnosticsSnapshot {
     std::uint32_t display_average_update_us{0};
     std::uint32_t display_maximum_update_us{0};
     std::size_t display_maximum_lvgl_bytes{0};
+    std::uint16_t display_orientation_degrees{0};
+    std::uint8_t display_brightness_percent{100};
+    std::int8_t display_shift_x{0};
+    std::int8_t display_shift_y{0};
+    bool display_dimmed{false};
 };
 
 static_assert(std::is_trivially_copyable_v<QueueSnapshot>);

@@ -328,10 +328,14 @@ void DiagnosticsController::build_peripherals_page() noexcept
     format_queue(value, sizeof(value), snapshot_.touch_queue);
     set_row(view_.rows[5], "TOUCH QUEUE", value);
     set_state_row(view_.rows[6], "DISPLAY STATE", snapshot_.display);
-    set_row(view_.rows[7], "BACKEND", backend_name(snapshot_.backend),
-            snapshot_.backend == diagnostics::BackendKind::unavailable
-                ? color::critical_bright
-                : color::positive_bright);
+    std::snprintf(value, sizeof(value), "%u%% / %u DEG%s / %d,%d",
+                  static_cast<unsigned>(snapshot_.display_brightness_percent),
+                  static_cast<unsigned>(snapshot_.display_orientation_degrees),
+                  snapshot_.display_dimmed ? " DIM" : "",
+                  static_cast<int>(snapshot_.display_shift_x),
+                  static_cast<int>(snapshot_.display_shift_y));
+    set_row(view_.rows[7], "DISPLAY POLICY", value,
+            snapshot_.display_dimmed ? color::caution_bright : color::text_primary);
 }
 
 const char* diagnostics_page_name(const DiagnosticsPage page) noexcept

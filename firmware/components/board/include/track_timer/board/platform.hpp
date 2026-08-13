@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace track_timer::board {
 
@@ -47,6 +48,27 @@ struct StorageStatus {
     std::uint64_t available_bytes{0};
     std::uint32_t write_failures{0};
     StorageHealth health{StorageHealth::unavailable};
+};
+
+enum class DisplayOrientation : std::uint8_t {
+    degrees_0,
+    degrees_90,
+    degrees_180,
+    degrees_270,
+};
+
+struct DisplayCommand {
+    std::uint8_t brightness_percent{100};
+    DisplayOrientation orientation{DisplayOrientation::degrees_0};
+    std::int8_t layout_shift_x{0};
+    std::int8_t layout_shift_y{0};
+    bool dimmed{false};
+};
+
+class DisplayOutput {
+  public:
+    virtual ~DisplayOutput() = default;
+    virtual void apply(const DisplayCommand& command) noexcept = 0;
 };
 
 class MonotonicClock {
@@ -102,5 +124,6 @@ class StorageBackend {
 
 static_assert(sizeof(TouchSample) <= 16);
 static_assert(sizeof(ImuSample) <= 40);
+static_assert(std::is_trivially_copyable_v<DisplayCommand>);
 
 }  // namespace track_timer::board

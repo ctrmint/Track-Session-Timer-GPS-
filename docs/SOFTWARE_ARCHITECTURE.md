@@ -154,6 +154,13 @@ directly. Unavailable hardware and values that a backend does not simulate are
 different states. Recovery changes current subsystem health but retains drop, write
 failure, and recovery counters so an intermittent fault is not silently erased.
 
+Display policy is similarly hardware-independent. Settings, stationary/activity state,
+day/night selection, and an optional sensed orientation produce a bounded
+`board::DisplayCommand`. Firmware policy never calls a panel driver directly; later
+hardware integration implements the `DisplayOutput` interface. The simulator renders
+the same brightness, orientation, dim, and AMOLED-shift commands and exposes them in
+diagnostics.
+
 ## 8. Watchdog
 
 Use watchdogs to detect dead tasks, but do not disguise recurrent software faults with endless silent resets. Store a bounded reset reason/diagnostic record where possible.

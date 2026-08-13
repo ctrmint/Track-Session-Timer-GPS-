@@ -106,6 +106,25 @@ Use `--diagnostics-state normal|degraded|missing|recovery` with
 `--screen diagnostics` to render stationary subsystem health and retained fault
 counters without physical hardware.
 
+Use `--display-state day|night|dimmed|rotated` for deterministic display policy. These
+fixtures override only the in-memory policy input for that run and do not change saved
+settings:
+
+```bash
+build/simulator/track_timer_simulator --headless --display-state day --frames 4 \
+  --snapshot build/simulator/display-day.ppm
+build/simulator/track_timer_simulator --headless --display-state night --frames 4 \
+  --snapshot build/simulator/display-night.ppm
+build/simulator/track_timer_simulator --headless --display-state dimmed \
+  --frames 7 --frame-ms 10000 --snapshot build/simulator/display-dimmed.ppm
+build/simulator/track_timer_simulator --headless --display-state rotated --frames 4 \
+  --snapshot build/simulator/display-rotated.ppm
+```
+
+The final status line reports effective brightness, orientation, dim state, layout
+shift, and whether a settings draft is being previewed. The Diagnostics peripheral page
+shows the same effective policy.
+
 Capture each lap-feedback state without hardware:
 
 ```bash
@@ -169,7 +188,7 @@ the same fixed capacities declared by the firmware domain contracts.
 The simulator can validate layout, presenter formatting, state progression, touch
 flows, deterministic peripheral replay, fault indication, and recovery. It does
 not validate the RM690B0 bus, FT6336 controller, physical GPIOs, PSRAM bandwidth,
-microSD latency, GNSS RF/PPS timing, brightness, power, or thermal behaviour.
+microSD latency, GNSS RF/PPS timing, physical luminance, power, or thermal behaviour.
 
 Logical storage latency is modeled without sleeping, so it validates queue pressure
 and failure handling rather than a particular microSD card's performance. ESP32-S3

@@ -33,6 +33,7 @@ add_library(
     ../firmware/components/ui/active_session.cpp
     ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/diagnostics.cpp
+    ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/ui/session_review.cpp
@@ -45,6 +46,7 @@ add_library(
     ../firmware/components/track/matching.cpp
     src/device_backends.cpp
     src/diagnostics_fixtures.cpp
+    src/display_fixtures.cpp
     src/file_settings_store.cpp
     src/fixed_cell_text.cpp
     src/scenario.cpp
@@ -121,6 +123,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_display_policy_test
+        ../tests/cpp/test_display_policy.cpp
+    )
+    target_link_libraries(
+        track_timer_display_policy_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_display_policy_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-display-policy-model
+        COMMAND track_timer_display_policy_test
+    )
+    set_tests_properties(
+        simulator-display-policy-model
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Deterministic brightness, orientation, idle dim, wake, and AMOLED shift policy passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_active_session_test
         ../tests/cpp/test_active_session.cpp
@@ -626,6 +653,64 @@ if(BUILD_TESTING)
     add_diagnostics_state_smoke(degraded degraded)
     add_diagnostics_state_smoke(missing missing)
     add_diagnostics_state_smoke(recovery recovered)
+
+    function(add_display_state_smoke fixture expected)
+        add_test(
+            NAME "simulator-display-${fixture}-policy"
+            COMMAND track_timer_simulator
+                --headless
+                --scenario ready
+                --display-state "${fixture}"
+                --frames 4
+                --snapshot "${CMAKE_CURRENT_BINARY_DIR}/display-${fixture}.ppm"
+        )
+        set_tests_properties(
+            "simulator-display-${fixture}-policy"
+            PROPERTIES
+                ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+                PASS_REGULAR_EXPRESSION "display-state=${fixture}.*${expected}"
+                TIMEOUT 20
+        )
+    endfunction()
+
+    add_display_state_smoke(day "display-profile=day.*display-brightness=100.*display-orientation=0-deg.*display-dimmed=no")
+    add_display_state_smoke(night "display-profile=night.*display-brightness=50.*display-orientation=0-deg.*display-dimmed=no")
+    add_display_state_smoke(rotated "display-profile=day.*display-brightness=100.*display-orientation=90-deg.*display-dimmed=no")
+
+    add_test(
+        NAME simulator-display-dimmed-policy
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --display-state dimmed
+            --frames 7
+            --frame-ms 10000
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/display-dimmed.ppm"
+    )
+    set_tests_properties(
+        simulator-display-dimmed-policy
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "display-state=dimmed.*display-brightness=25.*display-orientation=0-deg.*display-dimmed=yes.*display-shift="
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-display-active-policy-lock
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --display-state dimmed
+            --frames 7
+            --frame-ms 10000
+    )
+    set_tests_properties(
+        simulator-display-active-policy-lock
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=active.*display-state=dimmed.*display-brightness=100.*display-orientation=0-deg.*display-dimmed=no.*display-shift=0,0"
+            TIMEOUT 20
+    )
     set_tests_properties(
         simulator-ready-smoke
         PROPERTIES
