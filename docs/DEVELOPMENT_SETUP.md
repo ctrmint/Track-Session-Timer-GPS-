@@ -1,12 +1,82 @@
 # Development Setup
 
-## 1. Toolchain
+## Supported baseline
 
-The project targets ESP-IDF on ESP32-S3. During planning, current Espressif documentation exposes stable/release branches for ESP32-S3. Pin an exact ESP-IDF version once the Waveshare board support and display driver are proven.
+The project is pinned to:
 
-For the first toolchain test, use a current supported ESP-IDF installation and record the exact version in your first hardware issue.
+- ESP-IDF **v6.0.2**
+- ESP32-S3 target
+- C++17 application code
+- Python **3.13** for repository tools and CI
+- `espressif/idf:v6.0.2` for reproducible container builds
 
-## 2. Build the bootstrap firmware
+ESP-IDF v6.0 supports Python 3.10 through 3.14, but use Python 3.13 for
+project host tools unless a change is reviewed in a pull request. Do not build release
+artefacts with an unversioned `latest` IDF image or an arbitrary IDF branch.
+
+## Host prerequisites
+
+Required for all development:
+
+- Git
+- Python 3.13
+- a C++17 compiler
+- GNU Make
+- Docker, or a native ESP-IDF v6.0.2 installation
+
+The normal host checks do not require the target board.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+make check
+```
+
+On Windows, activate the virtual environment with the appropriate PowerShell or
+Command Prompt script before running the same Python and Make targets.
+
+## Reproducible container build
+
+The least ambiguous firmware build uses Espressif's versioned IDF image:
+
+```bash
+make firmware-container-build
+```
+
+Equivalent command:
+
+```bash
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -e HOME=/tmp \
+  -e IDF_GIT_SAFE_DIR=/work \
+  -v "$(pwd):/work" \
+  -w /work/firmware \
+  espressif/idf:v6.0.2 \
+  bash -lc "idf.py set-target esp32s3 && idf.py build"
+```
+
+The build output is generated under `firmware/build/` and is ignored by Git.
+
+## Native ESP-IDF installation
+
+Use Espressif's Installation Manager or the release tag. A direct Linux/macOS
+installation from the exact tag is:
+
+```bash
+git clone --branch v6.0.2 --recursive \
+  https://github.com/espressif/esp-idf.git esp-idf-v6.0.2
+cd esp-idf-v6.0.2
+./install.sh esp32s3
+. ./export.sh
+idf.py --version
+```
+
+The reported version must be `v6.0.2`. Re-run the release's `export.sh` in every new
+shell before using `idf.py`.
+
+Then build this repository:
 
 ```bash
 cd firmware
@@ -14,68 +84,59 @@ idf.py set-target esp32s3
 idf.py build
 ```
 
-Flash:
+## Flash and monitor after the board arrives
+
+Connect the board with a data-capable USB cable and identify its serial device.
 
 ```bash
+cd firmware
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
-Replace the serial path as required.
+Replace `/dev/ttyACM0` with the actual port. On Linux, confirm the current user has
+access through the distribution's serial-device group and udev rules. Do not use
+permanent root execution as the normal fix for a permissions problem.
 
-## 3. Expected bootstrap output
-
-The starter application should print a banner similar to:
+Expected bootstrap messages include:
 
 ```text
 TrackSessionTimer GPS bootstrap
+GNSS fix queue capacity: 64
 Hardware bring-up not yet implemented
 ```
 
-## 4. Host tests
+If flashing waits for download, use the board's documented BOOT/RESET sequence. Do
+not freeze board GPIO assignments until the exact 2.41-B schematic and physical board
+revision have been checked.
 
-No third-party Python packages are required for the initial geometry tests.
+## Clean-clone verification
 
-```bash
-python -m unittest discover -s tests -p 'test_*.py'
-```
-
-## 5. Waveshare board support
-
-Use the official Waveshare examples/schematic to identify:
-
-- RM690B0 display initialization
-- QSPI pin mapping
-- FT6336 touch mapping
-- QMI8658 I2C mapping
-- SD/TF interface
-- RTC
-- free UART-capable GPIOs
-
-Create the board support layer from known working vendor examples, then isolate it from application logic.
-
-## 6. LVGL
-
-LVGL supports ESP-IDF integration and Espressif provides an `esp_lvgl_port` component path. Do not add LVGL until a minimal direct display test works on the target board. This separates display-driver problems from UI-framework problems.
-
-## 7. GNSS development
-
-Before connecting GNSS to firmware timing code:
-
-1. verify receiver output with a USB/UART adapter or known-good host if useful
-2. configure the target update rate
-3. save a representative UBX trace
-4. commit only small anonymised/synthetic fixtures to the repository, not private full-day location logs
-
-## 8. GitHub workflow
-
-Suggested sequence:
+A second environment should be able to run:
 
 ```bash
-git checkout -b hardware/001-display-bringup
-# work
-git add ...
-git commit -m "Bring up AMOLED display"
-git push -u origin hardware/001-display-bringup
+git clone git@github.com:ctrmint/Track-Session-Timer-GPS-.git
+cd Track-Session-Timer-GPS-
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+make check
+make firmware-container-build
+git status --short
 ```
 
-Open a pull request and attach measurements/screenshots where relevant.
+The final command should report no generated or modified tracked files.
+
+## Troubleshooting
+
+- `idf.py: command not found`: activate the v6.0.2 IDF environment or use the container target.
+- Docker permission denied: configure the current user for the local Docker service; do not run repository builds as root unless the resulting ownership is understood.
+- Serial port unavailable: verify the cable, device path, group membership, and that no monitor process already owns the port.
+- Target mismatch: run `idf.py set-target esp32s3` and rebuild.
+- A vendor example fails: record its exact IDF/LVGL versions; do not silently change the project-wide IDF pin.
+
+## References
+
+- ESP-IDF v6.0.2 ESP32-S3 guide: https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32s3/
+- ESP-IDF release: https://github.com/espressif/esp-idf/releases/tag/v6.0.2
+- IDF Docker image guide: https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32s3/api-guides/tools/idf-docker-image.html
+- Waveshare board guide: https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-2.41

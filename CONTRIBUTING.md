@@ -49,15 +49,21 @@ Prefer small commits that leave the project buildable. Separate refactors from b
 
 ## Testing
 
-Run host tests before every PR:
+Install the pinned host dependencies once, then run all required checks before every PR:
 
 ```bash
-python -m unittest discover -s tests -p 'test_*.py'
+python -m pip install -r requirements-dev.txt
+make check
 ```
 
-When firmware dependencies are installed:
+This runs Python tests, track-schema validation, Markdown/repository hygiene checks,
+and the host C++ domain-contract test.
+
+Build the firmware with native ESP-IDF v6.0.2 or the pinned container:
 
 ```bash
-cd firmware
-idf.py build
+make firmware-container-build
 ```
+
+Pull requests must pass the host and firmware CI jobs. If a hardware/manual check
+cannot run, state why and identify the issue that will provide the missing evidence.

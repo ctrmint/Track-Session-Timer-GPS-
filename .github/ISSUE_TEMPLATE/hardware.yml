@@ -1,0 +1,29 @@
+name: Hardware task or fault
+description: Track procurement, bring-up, electrical, RF, enclosure, or vehicle integration work
+title: "[Hardware]: "
+labels: ["area:hardware-integration"]
+body:
+  - type: input
+    id: hardware
+    attributes:
+      label: Exact hardware
+      description: Manufacturer, part number, board revision, and supplier where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: Work or fault
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Measurements and evidence
+      description: Include schematic references, photos, voltage/current data, logs, and test conditions.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
