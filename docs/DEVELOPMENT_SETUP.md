@@ -8,6 +8,7 @@ The project is pinned to:
 - ESP32-S3 target
 - C++17 application code
 - Python **3.13** for repository tools and CI
+- LVGL **v9.5.0** for the desktop device simulator
 - `espressif/idf:v6.0.2` for reproducible container builds
 
 ESP-IDF v6.0 supports Python 3.10 through 3.14, but use Python 3.13 for
@@ -35,6 +36,32 @@ make check
 
 On Windows, activate the virtual environment with the appropriate PowerShell or
 Command Prompt script before running the same Python and Make targets.
+
+## Desktop device simulator
+
+The hardware-independent simulator requires CMake, Ninja, and SDL2 development
+headers in addition to the normal host prerequisites. On Ubuntu 24.04:
+
+```bash
+sudo apt-get update
+sudo apt-get install --yes cmake g++ libsdl2-dev ninja-build
+make simulator-test
+make simulator-run
+```
+
+The simulator opens a fixed 600 x 450 window. Click it to cycle deterministic ready,
+active, GNSS-loss, and storage-failure scenarios. The same presenter remains free of
+SDL and ESP-IDF dependencies so it can be compiled into both host and firmware builds.
+
+For a headless container validation without installing native build dependencies:
+
+```bash
+make simulator-container-test
+```
+
+See [the simulator guide](../simulator/README.md) for direct scenario and snapshot
+commands. Physical display, touch-controller, GPIO, RF, power, and performance
+acceptance still require the board.
 
 ## Reproducible container build
 
@@ -130,6 +157,7 @@ The final command should report no generated or modified tracked files.
 
 - `idf.py: command not found`: activate the v6.0.2 IDF environment or use the container target.
 - Docker permission denied: configure the current user for the local Docker service; do not run repository builds as root unless the resulting ownership is understood.
+- SDL2 or CMake missing: install the simulator prerequisites above or run `make simulator-container-test`.
 - Serial port unavailable: verify the cable, device path, group membership, and that no monitor process already owns the port.
 - Target mismatch: run `idf.py set-target esp32s3` and rebuild.
 - A vendor example fails: record its exact IDF/LVGL versions; do not silently change the project-wide IDF pin.
@@ -138,5 +166,6 @@ The final command should report no generated or modified tracked files.
 
 - ESP-IDF v6.0.2 ESP32-S3 guide: https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32s3/
 - ESP-IDF release: https://github.com/espressif/esp-idf/releases/tag/v6.0.2
+- LVGL v9.5.0 release: https://github.com/lvgl/lvgl/releases/tag/v9.5.0
 - IDF Docker image guide: https://docs.espressif.com/projects/esp-idf/en/v6.0.2/esp32s3/api-guides/tools/idf-docker-image.html
 - Waveshare board guide: https://www.waveshare.com/wiki/ESP32-S3-Touch-AMOLED-2.41

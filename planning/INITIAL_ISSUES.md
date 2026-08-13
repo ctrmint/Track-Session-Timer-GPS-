@@ -1,14 +1,15 @@
 # Initial Development Backlog
 
-The live GitHub issue tracker is the source of truth. This snapshot was restored from
-the repository's 61 published issues after the original `planning/` directory was
-omitted during repository upload.
+The live GitHub issue tracker is the source of truth. This snapshot contains the 61
+issues restored after the original `planning/` directory was omitted during upload,
+plus subsequently approved epics and sub-issues.
 
 ## Delivery epics
 
 | Epic | Outcome | Milestone | Sub-issues |
 |---|---|---|---:|
 | [#1](https://github.com/ctrmint/Track-Session-Timer-GPS-/issues/1) | Repository and toolchain bootstrap | M0 — Repository and toolchain bootstrap | 5 |
+| [#63](https://github.com/ctrmint/Track-Session-Timer-GPS-/issues/63) | Hardware-independent device simulation | M0 — Repository and toolchain bootstrap | 6 |
 | [#7](https://github.com/ctrmint/Track-Session-Timer-GPS-/issues/7) | Waveshare board support and peripheral bring-up | M1 — Display board bring-up | 5 |
 | [#13](https://github.com/ctrmint/Track-Session-Timer-GPS-/issues/13) | High-rate GNSS acquisition and diagnostics | M2 — GNSS bring-up | 5 |
 | [#19](https://github.com/ctrmint/Track-Session-Timer-GPS-/issues/19) | Host and embedded lap timing engine | M3–M4 — Lap timing engine | 6 |

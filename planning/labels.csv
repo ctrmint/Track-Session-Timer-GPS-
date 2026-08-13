@@ -6,6 +6,7 @@ Name,Color,Description
 "area:hardware-integration","e99695","Power, enclosure, antenna, and vehicle installation"
 "area:logging","0052cc","Session logging, export, and replay"
 "area:session-ui","f9d0c4","Session workflow and driver-facing UI"
+"area:simulation","0f6f8f","Host simulation, emulation, mocks, and deterministic scenarios"
 "area:timing","d4c5f9","Lap geometry, timing, and event state"
 "area:tracks","006b75","Track definitions, loading, selection, and tooling"
 "area:verification","7057ff","Test, validation, and release engineering"
