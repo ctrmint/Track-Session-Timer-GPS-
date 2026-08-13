@@ -186,11 +186,13 @@ make simulator-test
 make simulator-run
 ```
 
-The interactive window includes ready, active, GNSS-loss, and storage-failure states;
-click the screen to cycle them. A containerized headless check is also available with
-`make simulator-container-test`. See [simulator/README.md](simulator/README.md) for the
-dependency pin, command-line scenarios, and the boundary between simulated and
-physical acceptance.
+The interactive window includes ready, active, GNSS-loss/recovery, and
+storage-failure/recovery states; click the screen to inject touch and cycle them.
+Deterministic backends provide 20/25 Hz synthetic or fixture-driven GNSS, 100 Hz IMU,
+RTC, touch, bounded queues, and missing/full/slow/write-failed storage. A containerized
+headless check is available with `make simulator-container-test`. See
+[simulator/README.md](simulator/README.md) for replay commands, fixture validation,
+diagnostics, and the boundary between simulated and physical acceptance.
 
 ## Development backlog
 

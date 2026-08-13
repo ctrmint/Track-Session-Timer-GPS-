@@ -31,6 +31,7 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 add_library(
     track_timer_simulator_model
     ../firmware/components/ui/presenter.cpp
+    src/device_backends.cpp
     src/scenario.cpp
 )
 target_include_directories(
@@ -97,7 +98,69 @@ if(BUILD_TESTING)
         simulator-gnss-loss-smoke
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-            PASS_REGULAR_EXPRESSION "scenario=gnss-loss.*gnss=GPS STALE"
+            PASS_REGULAR_EXPRESSION "scenario=gnss-loss.*gnss=GPS STALE.*gnss-mode=loss"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-gnss-recovery-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario gnss-loss
+            --frames 125
+    )
+    set_tests_properties(
+        simulator-gnss-recovery-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=gnss-loss.*gnss=GPS GOOD.*gnss-mode=normal"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-storage-failure-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario storage-failure
+            --frames 4
+    )
+    set_tests_properties(
+        simulator-storage-failure-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=storage-failure.*logging=NO LOG.*storage-mode=missing"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-storage-recovery-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario storage-failure
+            --frames 125
+    )
+    set_tests_properties(
+        simulator-storage-recovery-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=storage-failure.*logging=LOGGING.*storage-mode=ready.*storage-recoveries=1"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-recorded-20hz-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --gnss-rate 20
+            --gnss-fixture "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/recorded_reference_v1.csv"
+            --frames 10
+    )
+    set_tests_properties(
+        simulator-recorded-20hz-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "fixture=recorded-reference-v1.*gnss-rate=20"
             TIMEOUT 20
     )
 endif()
