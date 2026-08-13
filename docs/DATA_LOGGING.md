@@ -101,6 +101,12 @@ The firmware-facing definitions and validators are in
 `track_timer/logger/formats.hpp`. They use fixed-capacity, trivially-copyable records;
 serializers must write named fields and must never dump native struct bytes.
 
+The device review UI consumes `SessionSummaryProvider`, which exposes newest-first
+summary lookup and fixed four-row lap pages. The provider owns filesystem parsing and
+framing validation; the review controller independently validates every versioned
+summary and lap record. This keeps corrupt, missing, and future-version data isolated
+from LVGL and prevents a long session from being loaded into UI memory.
+
 ## 7. Write strategy
 
 `AsyncLogger` is the only owner of `StorageBackend` during normal operation. GNSS,
