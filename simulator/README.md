@@ -16,15 +16,22 @@ sudo apt-get update
 sudo apt-get install --yes cmake g++ libsdl2-dev ninja-build
 ```
 
-Build and launch the active-session scenario:
+Build and launch the ready dashboard:
 
 ```bash
 make simulator-build
 make simulator-run
 ```
 
-Click anywhere on the window to inject a simulated touch and cycle through `ready`,
-`active`, `gnss-loss`, and `storage-failure` scenarios.
+Use the large on-screen Start, Setup, Review, and Diagnostics controls with a pointer
+or touchscreen. Keyboard focus and Enter activate the same actions. Setup, Review,
+and Diagnostics return through their Back control; Start enters the active timer and
+configuration is then locked. All inputs dispatch the same deterministic navigation
+actions.
+
+The ready scenario deliberately keeps GNSS in acquisition. It demonstrates that the
+session timer remains available while lap timing is unavailable. Use `--scenario`
+for deterministic active, GNSS-loss, and storage-failure test states.
 
 Run deterministic headless smoke tests:
 

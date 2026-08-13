@@ -49,10 +49,12 @@ make simulator-test
 make simulator-run
 ```
 
-The simulator opens a fixed 600 x 450 window. Click it to inject touch and cycle
-deterministic ready, active, GNSS-loss/recovery, and storage-failure/recovery
-scenarios. The same presenter remains free of SDL and ESP-IDF dependencies so it can
-be compiled into both host and firmware builds.
+The simulator opens a fixed 600 x 450 ready dashboard. Use its large controls with a
+pointer/touchscreen, or keyboard focus and Enter. Every input path dispatches the same
+deterministic navigation actions. Active, GNSS-loss/recovery, and
+storage-failure/recovery scenarios are selectable from the command line. The same
+presenter remains free of SDL and ESP-IDF dependencies so it can be compiled into both
+host and firmware builds.
 
 Use the built-in synthetic GNSS loop at 25 Hz, or replay the checked-in versioned
 fixture at 20 Hz:

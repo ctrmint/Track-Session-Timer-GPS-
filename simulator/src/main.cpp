@@ -1,4 +1,4 @@
-#include "device_screen.hpp"
+#include "application_screen.hpp"
 
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/ui/foundation.hpp"
@@ -7,9 +7,10 @@
 #include <SDL2/SDL.h>
 #include <lvgl.h>
 
-#include <cstddef>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <exception>
 #include <fstream>
@@ -24,7 +25,7 @@ constexpr std::int32_t kDisplayWidth = 600;
 constexpr std::int32_t kDisplayHeight = 450;
 
 struct Options {
-    track_timer::simulator::ScenarioId scenario{track_timer::simulator::ScenarioId::active};
+    track_timer::simulator::ScenarioId scenario{track_timer::simulator::ScenarioId::ready};
     track_timer::simulator::GnssReplayRate gnss_rate{
         track_timer::simulator::GnssReplayRate::hz25};
     bool headless{false};
@@ -95,7 +96,7 @@ Options parse_options(const int argc, char** argv)
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
                          "[--gnss-fixture FILE] [--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure\n"
-                         "Click the interactive screen to cycle scenarios.\n";
+                         "Use pointer/touch controls or keyboard focus and Enter to navigate.\n";
             std::exit(0);
         }
         else {
@@ -139,16 +140,16 @@ bool write_snapshot(const std::string& path)
 
 struct ApplicationContext {
     track_timer::simulator::ScenarioPlayer player;
-    track_timer::simulator::DeviceScreen* screen;
+    track_timer::simulator::ApplicationScreen* screen;
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
     ApplicationContext(const track_timer::simulator::ScenarioId scenario,
                        track_timer::simulator::GnssFixture fixture,
                        const track_timer::simulator::GnssReplayRate rate,
-                       track_timer::simulator::DeviceScreen* device_screen,
+                       track_timer::simulator::ApplicationScreen* application_screen,
                        lv_display_t* target_display)
-        : player(scenario, std::move(fixture), rate), screen(device_screen),
+        : player(scenario, std::move(fixture), rate), screen(application_screen),
           display(target_display)
     {
     }
@@ -156,7 +157,31 @@ struct ApplicationContext {
 
 void update_screen(ApplicationContext& context)
 {
-    context.screen->update(track_timer::ui::present(context.player.snapshot()));
+    if (context.screen->consume_start_request()) {
+        context.player.reset(track_timer::simulator::ScenarioId::active);
+    }
+
+    const auto& active_snapshot = context.player.snapshot();
+    context.screen->synchronize_session(active_snapshot.session_active);
+
+    track_timer::ui::ReadySnapshot ready{};
+    std::snprintf(ready.selected_track.data(), ready.selected_track.size(), "%s",
+                  "Synthetic Test Loop");
+    ready.session_duration_minutes = 20;
+    ready.rest_duration_minutes = 20;
+    ready.gnss_health = active_snapshot.gnss_health;
+    const auto storage_health = context.player.device().storage().status().health;
+    ready.storage = storage_health == track_timer::board::StorageHealth::ready
+                        ? track_timer::ui::Readiness::ready
+                    : storage_health == track_timer::board::StorageHealth::degraded
+                        ? track_timer::ui::Readiness::degraded
+                        : track_timer::ui::Readiness::unavailable;
+    ready.imu = track_timer::ui::Readiness::ready;
+    ready.logging_available = active_snapshot.logging_available;
+    ready.session_active = active_snapshot.session_active;
+
+    context.screen->update(track_timer::ui::present_ready(ready),
+                           track_timer::ui::present(active_snapshot));
 }
 
 void render_screen(ApplicationContext& context)
@@ -182,19 +207,6 @@ void render_screen(ApplicationContext& context)
     context.profiler.record(bounded_elapsed, used_bytes);
 }
 
-void cycle_scenario(lv_event_t* event)
-{
-    auto* context = static_cast<ApplicationContext*>(lv_event_get_user_data(event));
-    context->player.reset(track_timer::simulator::next_scenario(context->player.id()));
-    lv_point_t point{};
-    if (auto* input = lv_indev_active(); input != nullptr) {
-        lv_indev_get_point(input, &point);
-    }
-    context->player.device().touch().inject(static_cast<std::int16_t>(point.x),
-                                             static_cast<std::int16_t>(point.y), true);
-    update_screen(*context);
-}
-
 int run(const Options& options)
 {
     if (options.headless && std::getenv("SDL_VIDEODRIVER") == nullptr) {
@@ -213,6 +225,10 @@ int run(const Options& options)
 
     auto* mouse = lv_sdl_mouse_create();
     lv_indev_set_display(mouse, display);
+    auto* keyboard = lv_sdl_keyboard_create();
+    lv_indev_set_display(keyboard, display);
+    auto* input_group = lv_group_create();
+    lv_indev_set_group(keyboard, input_group);
 
     auto fixture = track_timer::simulator::make_synthetic_gnss_fixture();
     if (!options.gnss_fixture_path.empty()) {
@@ -222,10 +238,10 @@ int run(const Options& options)
         }
     }
 
-    track_timer::simulator::DeviceScreen screen{lv_screen_active()};
+    track_timer::simulator::ApplicationScreen screen{lv_screen_active()};
+    screen.add_controls_to_group(input_group);
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
                                display};
-    lv_obj_add_event_cb(lv_screen_active(), cycle_scenario, LV_EVENT_CLICKED, &context);
     render_screen(context);
 
     if (options.headless) {
@@ -275,6 +291,7 @@ int run(const Options& options)
               << " storage-mode=" << track_timer::simulator::storage_mode_name(storage.mode())
               << " storage-failures=" << storage.status().write_failures
               << " storage-recoveries=" << diagnostics.storage.recoveries
+              << " screen=" << track_timer::ui::destination_name(screen.destination())
               << " render-frames=" << render_metrics.frame_count
               << " render-average-us=" << render_metrics.average_render_us()
               << " render-maximum-us=" << render_metrics.maximum_render_us
@@ -283,6 +300,7 @@ int run(const Options& options)
               << track_timer::ui::kDeviceDisplayBuffers.total_bytes() << '\n';
 
     if (lv_display_get_next(nullptr) != nullptr) {
+        lv_group_delete(input_group);
         lv_display_delete(display);
     }
     lv_sdl_quit();
