@@ -6,7 +6,9 @@
 - track schema/fixture validation
 - Markdown and generated-file hygiene
 - host C++17 domain-contract compilation
+- deterministic simulator model tests
+- a headless 600 x 450 LVGL/SDL simulator build and smoke test
 - ESP32-S3 firmware compilation with ESP-IDF v6.0.2
 
 The workflow pins release families rather than using moving `latest` tags. Update the
-Python, ESP-IDF, dependency, and local documentation pins together in one reviewed PR.
+Python, LVGL, ESP-IDF, dependency, and local documentation pins together in one reviewed PR.

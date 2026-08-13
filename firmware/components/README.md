@@ -1,8 +1,9 @@
 # Firmware component boundaries
 
 These directories establish dependency direction before hardware drivers are added.
-Only `domain` contains product value contracts today; the remaining components have
-link anchors so ESP-IDF verifies the intended graph.
+`domain` contains product value contracts, `board` defines platform-facing interfaces,
+and `ui` contains the shared snapshot presenter. Remaining components retain link
+anchors so ESP-IDF verifies the intended graph.
 
 | Component | Owns | Direct dependencies |
 |---|---|---|
@@ -15,6 +16,11 @@ link anchors so ESP-IDF verifies the intended graph.
 | `logger` | Bounded logging queue and serialization | `domain`, `board` |
 | `ui` | LVGL presentation and user input | `domain`, `session`, `board` |
 | `diagnostics` | Health/counter aggregation | all service components |
+
+The Waveshare, QEMU, and SDL implementations sit behind the `board` boundary. Domain
+and presenter code must not include ESP-IDF, LVGL, or SDL headers. The SDL screen
+renderer lives under `simulator/`; the eventual ESP-IDF renderer consumes the same
+`DeviceViewModel`.
 
 ## Queue ownership
 

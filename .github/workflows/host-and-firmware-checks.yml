@@ -16,8 +16,8 @@ jobs:
   host-checks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
           cache: pip
@@ -27,10 +27,22 @@ jobs:
       - name: Run host checks
         run: make check
 
+  simulator-checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install simulator build dependencies
+        run: >-
+          sudo apt-get update &&
+          sudo apt-get install --yes --no-install-recommends
+          cmake libsdl2-dev ninja-build
+      - name: Build and test the 600 x 450 device simulator
+        run: make simulator-test
+
   firmware-build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build with pinned ESP-IDF image
         run: >-
           docker run --rm

@@ -134,6 +134,7 @@ See [docs/GNSS_AND_LAP_TIMING.md](docs/GNSS_AND_LAP_TIMING.md).
 ```text
 .github/                  GitHub issue and PR templates
 firmware/                 ESP-IDF firmware project
+simulator/                600 x 450 LVGL/SDL desktop device simulator
 hardware/                 BOM, wiring and enclosure notes
 data/tracks/              Track file schema and synthetic example
 planning/                 Export of the live milestone/issue backlog
@@ -174,6 +175,22 @@ repository root. See [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) for 
 pinned Python environment, clean-clone checks, and flashing notes.
 
 The bootstrap application only proves that the ESP32-S3 toolchain and board connection work. Display, touch and GNSS support are later milestones.
+
+## Hardware-independent screen simulator
+
+The 600 x 450 LVGL/SDL simulator runs the device presentation model without the
+Waveshare board. On a Linux host with CMake, Ninja, and SDL2 development headers:
+
+```bash
+make simulator-test
+make simulator-run
+```
+
+The interactive window includes ready, active, GNSS-loss, and storage-failure states;
+click the screen to cycle them. A containerized headless check is also available with
+`make simulator-container-test`. See [simulator/README.md](simulator/README.md) for the
+dependency pin, command-line scenarios, and the boundary between simulated and
+physical acceptance.
 
 ## Development backlog
 
