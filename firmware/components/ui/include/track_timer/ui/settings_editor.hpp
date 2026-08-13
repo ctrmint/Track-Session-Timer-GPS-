@@ -15,13 +15,14 @@ enum class SettingsField : std::uint8_t {
     day_brightness,
     night_brightness,
     operating_mode,
+    trackday_mode,
     orientation,
     auto_dim,
     average_lap,
     lower_display,
 };
 
-inline constexpr std::size_t kSettingsFieldCount = 10;
+inline constexpr std::size_t kSettingsFieldCount = 11;
 
 enum class SettingsEditorStatus : std::uint8_t {
     closed,

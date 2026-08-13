@@ -124,6 +124,12 @@ int main()
     assert(editor.increment());
     assert(editor.draft().operating_mode == settings::OperatingMode::timer);
 
+    select_field(editor, ui::SettingsField::trackday_mode);
+    assert(editor.increment());
+    assert(editor.draft().trackday_mode_enabled);
+    assert(editor.decrement());
+    assert(!editor.draft().trackday_mode_enabled);
+
     select_field(editor, ui::SettingsField::orientation);
     for (std::uint8_t expected = 1; expected <= 4; ++expected) {
         assert(editor.increment());
@@ -162,14 +168,17 @@ int main()
     auto with_track = manager.current();
     std::strcpy(with_track.selected_track_id.data(), "silverstone-gp");
     assert(editor.begin(with_track, false));
+    select_field(editor, ui::SettingsField::trackday_mode);
     assert(editor.increment());
+    assert(editor.draft().trackday_mode_enabled);
     editor.request_restore_defaults();
     assert(editor.status() == ui::SettingsEditorStatus::confirm_defaults);
     editor.resolve_restore_defaults(false);
-    assert(editor.draft().session_duration_minutes == 25);
+    assert(editor.draft().trackday_mode_enabled);
     editor.request_restore_defaults();
     editor.resolve_restore_defaults(true);
     assert(editor.draft().session_duration_minutes == 20);
+    assert(!editor.draft().trackday_mode_enabled);
     assert(std::strcmp(editor.draft().selected_track_id.data(), "silverstone-gp") == 0);
 
     assert(editor.save(manager, false) == settings::SettingsApplyResult::applied);

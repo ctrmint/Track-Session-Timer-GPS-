@@ -30,6 +30,12 @@ class DeviceScreen {
     [[nodiscard]] lv_obj_t* feedback_panel_object() const noexcept;
     [[nodiscard]] lv_obj_t* feedback_comparison_object() const noexcept;
     [[nodiscard]] lv_obj_t* session_panel_object() const noexcept;
+    [[nodiscard]] lv_obj_t* trackday_panel_object() const noexcept;
+    [[nodiscard]] lv_obj_t* trackday_countdown_object() const noexcept;
+    [[nodiscard]] lv_obj_t* trackday_estimate_object() const noexcept;
+    [[nodiscard]] lv_obj_t* current_lap_object() const noexcept;
+    [[nodiscard]] lv_obj_t* previous_lap_object() const noexcept;
+    [[nodiscard]] lv_obj_t* best_lap_object() const noexcept;
 
     [[nodiscard]] lv_obj_t* gnss_indicator_object() const noexcept
     {
@@ -57,10 +63,14 @@ class DeviceScreen {
     lv_obj_t* logging_label_;
     lv_obj_t* session_caption_;
     lv_obj_t* current_caption_;
+    lv_obj_t* previous_caption_;
+    lv_obj_t* best_caption_;
     lv_obj_t* feedback_panel_;
     lv_obj_t* feedback_heading_;
     lv_obj_t* feedback_time_;
     lv_obj_t* feedback_comparison_;
+    lv_obj_t* trackday_panel_;
+    lv_obj_t* trackday_estimate_;
     lv_obj_t* stop_button_;
     lv_obj_t* stop_label_;
     lv_obj_t* cancel_button_;
@@ -69,6 +79,7 @@ class DeviceScreen {
     FixedCellLabel previous_lap_label_{};
     FixedCellLabel best_lap_label_{};
     FixedCellLabel session_label_{};
+    FixedCellLabel trackday_countdown_{};
 };
 
 }  // namespace track_timer::simulator

@@ -7,7 +7,7 @@
 
 namespace track_timer::settings {
 
-inline constexpr std::uint16_t kCurrentSettingsVersion = 2;
+inline constexpr std::uint16_t kCurrentSettingsVersion = 3;
 inline constexpr std::size_t kSettingsBlobCapacity = 128;
 inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 
@@ -41,6 +41,7 @@ struct DeviceSettings {
     bool auto_dim_enabled{false};
     LowerDisplayMode lower_display{LowerDisplayMode::elapsed};
     std::array<char, kTrackIdentifierCapacity> selected_track_id{};
+    bool trackday_mode_enabled{false};
 };
 
 struct LegacySettingsV1 {
@@ -72,6 +73,7 @@ class SettingsStore {
 enum class DecodeResult : std::uint8_t {
     current,
     migrated_v1,
+    migrated_v2,
     corrupt,
     unsupported_version,
 };
@@ -79,6 +81,7 @@ enum class DecodeResult : std::uint8_t {
 enum class SettingsSource : std::uint8_t {
     current,
     migrated_v1,
+    migrated_v2,
     defaults_missing,
     defaults_corrupt,
     defaults_unsupported,
@@ -127,6 +130,8 @@ struct FeatureAvailability {
 [[nodiscard]] SettingsBlob encode_settings(const DeviceSettings& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v1(
     const LegacySettingsV1& settings) noexcept;
+[[nodiscard]] SettingsBlob encode_legacy_settings_v2(
+    const DeviceSettings& settings) noexcept;
 [[nodiscard]] DecodeResult decode_settings(const SettingsBlob& blob,
                                            DeviceSettings& settings) noexcept;
 [[nodiscard]] FeatureAvailability evaluate_features(

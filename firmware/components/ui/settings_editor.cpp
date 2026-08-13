@@ -116,6 +116,10 @@ void format_value(const SettingsField field, const settings::DeviceSettings& set
                       settings.operating_mode == settings::OperatingMode::timer ? "TIMER"
                                                                                : "G METER");
         break;
+    case SettingsField::trackday_mode:
+        std::snprintf(output.data(), output.size(), "%s",
+                      settings.trackday_mode_enabled ? "ENABLED" : "DISABLED");
+        break;
     case SettingsField::orientation: {
         constexpr std::array<const char*, 5> names{"0 DEG", "90 DEG", "180 DEG", "270 DEG",
                                                    "AUTO"};
@@ -311,6 +315,10 @@ bool SettingsEditor::adjust(const bool forward) noexcept
     case SettingsField::operating_mode:
         adjusted = step_enum(draft_.operating_mode, 1, forward);
         break;
+    case SettingsField::trackday_mode:
+        draft_.trackday_mode_enabled = !draft_.trackday_mode_enabled;
+        adjusted = true;
+        break;
     case SettingsField::orientation:
         adjusted = step_enum(draft_.orientation, 4, forward);
         break;
@@ -353,8 +361,8 @@ const char* settings_field_name(const SettingsField field) noexcept
 {
     constexpr std::array<const char*, kSettingsFieldCount> names{
         "TRACK SESSION", "PIT REST",    "LAUNCH SENSITIVITY", "DAY BRIGHTNESS",
-        "NIGHT BRIGHTNESS", "MODE",    "ORIENTATION",        "AUTO-DIM",
-        "AVERAGE LAP",      "LOWER DISPLAY",
+        "NIGHT BRIGHTNESS", "MODE",    "TRACKDAY MODE",      "ORIENTATION",
+        "AUTO-DIM",         "AVERAGE LAP", "LOWER DISPLAY",
     };
     return names[static_cast<std::size_t>(field)];
 }

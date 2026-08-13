@@ -17,6 +17,8 @@ Fast, deterministic tests for:
 - ready/running/overtime/review/rest lifecycle transitions
 - guarded active-stop and rest-skip confirmation timeouts
 - fixed-cell countdown and overrun presentation
+- Trackday Mode settings migration, estimate boundaries, and live lap-data suppression
+- unchanged lap-event capture and post-session Review while Trackday Mode is enabled
 
 ### Host replay tests
 
@@ -41,6 +43,8 @@ Workflow fixtures render overtime, driver-stop completion review, and rest witho
 hardware. Interaction tests verify that timing remains visible during stop
 confirmation, non-stop gestures are inert, rest expires automatically, and early
 rest exit requires hold plus confirmation against the session controller.
+The Trackday Mode fixture verifies that active output contains only the countdown and
+estimated laps rather than current, previous, best, lap-count, or comparison data.
 
 ### Outdoor tests
 

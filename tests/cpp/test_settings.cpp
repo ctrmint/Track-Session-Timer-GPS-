@@ -55,6 +55,7 @@ DeviceSettings customized_settings()
     settings.orientation = OrientationMode::automatic;
     settings.auto_dim_enabled = true;
     settings.lower_display = LowerDisplayMode::laps_remaining;
+    settings.trackday_mode_enabled = true;
     std::strcpy(settings.selected_track_id.data(), "synthetic-test-loop");
     return settings;
 }
@@ -122,6 +123,20 @@ void test_migration_corruption_and_storage_errors()
     assert(migrated.current().day_brightness_percent == 75);
     assert(migrated.current().night_brightness_percent == 50);
     assert(migrated.current().orientation == OrientationMode::fixed_90);
+    assert(!migrated.current().trackday_mode_enabled);
+
+    MemorySettingsStore version_two_store;
+    version_two_store.found = true;
+    version_two_store.blob = encode_legacy_settings_v2(customized_settings());
+    SettingsManager version_two{version_two_store};
+    const auto version_two_migration = version_two.load();
+    assert(version_two_migration.source == SettingsSource::migrated_v2);
+    assert(version_two_migration.current_format_persisted);
+    assert(!version_two.current().trackday_mode_enabled);
+    assert(version_two.current().average_lap_seconds == 103);
+    DeviceSettings migrated_v2{};
+    assert(decode_settings(version_two_store.blob, migrated_v2) == DecodeResult::current);
+    assert(!migrated_v2.trackday_mode_enabled);
 
     MemorySettingsStore corrupt_store;
     corrupt_store.found = true;

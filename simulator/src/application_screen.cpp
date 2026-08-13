@@ -61,11 +61,18 @@ void ApplicationScreen::update(const ui::ReadyViewModel& ready,
                                const std::uint64_t now_ms,
                                const ui::DisplayPolicyInput& display,
                                const settings::DeviceSettings* display_settings_override,
-                               const ui::ImuMeterInput& imu) noexcept
+                               const ui::ImuMeterInput& imu,
+                               const settings::DeviceSettings* active_settings_override) noexcept
 {
     active_now_ms_ = now_ms;
     ready_screen_.update(ready);
-    active_session_.update(active, active_now_ms_);
+    const auto& active_settings = active_settings_override == nullptr
+                                      ? settings_manager_.current()
+                                      : *active_settings_override;
+    active_session_.update(
+        active, active_now_ms_,
+        {active_settings.average_lap_seconds,
+         active_settings.trackday_mode_enabled});
     active_screen_.update(active_session_.view_model());
     auto policy_input = display;
     policy_input.now_ms = now_ms;

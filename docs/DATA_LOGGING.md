@@ -43,8 +43,13 @@ The version 1 metadata object contains:
 
 The settings object records the settings schema version, session/rest minutes,
 launch sensitivity in milli-g, average lap seconds, day/night brightness percentages,
-operating mode, orientation, auto-dim flag, lower-display mode, and selected track ID.
+operating mode, Trackday Mode state, orientation, auto-dim flag, lower-display mode,
+and selected track ID.
 This is a copy captured at session start; replay never consults current device settings.
+
+Trackday Mode changes active presentation only. Every GNSS row, lap-crossing event,
+and derived lap summary continues to be recorded using the same schemas so the results
+can be reviewed after the session and replayed off-device.
 
 ## 4. GNSS rows
 

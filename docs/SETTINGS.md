@@ -6,13 +6,14 @@ file or NVS operations.
 
 ## Current schema
 
-Version 2 stores:
+Version 3 stores:
 
 - session and rest durations
 - launch sensitivity
 - average lap time and lower-display choice
 - day and night brightness presets
 - timer/G-meter operating mode
+- Trackday Mode enable/disable state
 - fixed or automatic orientation
 - stationary auto-dim preference
 - selected local track identifier
@@ -23,9 +24,9 @@ persisted.
 
 ## Loading and migration
 
-- A valid version 2 record loads directly.
-- Version 1 is migrated explicitly, with new fields receiving documented version 2
-  defaults, then rewritten atomically.
+- A valid version 3 record loads directly.
+- Versions 1 and 2 are migrated explicitly, with new fields receiving documented safe
+  defaults, then rewritten atomically. Trackday Mode defaults to disabled during migration.
 - Missing, corrupt, invalid, or unsupported records are never reinterpreted. Safe
   defaults are used and a current record is written when storage permits.
 - Storage read failure keeps safe defaults in memory without claiming they were saved.
@@ -34,17 +35,23 @@ The simulator file adapter writes a temporary file, preserves the previous file 
 backup during replacement, and recovers that backup if a replacement was interrupted.
 The interactive simulator places that record at
 `/tmp/track-session-timer-simulator/settings-v2.bin` on Linux so normal use cannot
-dirty the repository.
+dirty the repository. The filename remains stable for backward-compatible discovery;
+the record itself carries the authoritative schema version.
 The hardware adapter can provide the same contract through NVS once the board arrives.
 
 ## On-device editor contract
 
-Setup presents all version 2 options through one consistent field/value editor. Track
+Setup presents all version 3 options through one consistent field/value editor. Track
 and rest duration retain the established 1, 5, 10, 15, 20, 25, 30, 40, 50, and 60
 minute choices; launch sensitivity and brightness use their supported discrete values.
 Average lap time is second-precise from `00:00` through `59:59`. Selecting `LAPS LEFT`
 without an average lap is rejected visibly, and clearing the average automatically
 restores `COUNT UP`.
+
+Trackday Mode is an explicit `ENABLED`/`DISABLED` setting and defaults to disabled.
+The effective value is frozen when a session starts. When enabled, active presentation
+is limited to session countdown and estimated laps remaining; lap detection and logging
+continue, with lap results available through Review only after the session stops.
 
 Edits remain a draft until Save. Cancel discards the complete draft, and Restore
 Defaults requires a separate confirmation before staging defaults for Save. Restoring

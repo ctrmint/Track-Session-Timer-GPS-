@@ -45,15 +45,29 @@ struct StopControlViewModel {
     bool confirmation_visible{false};
 };
 
+struct ActiveSessionDisplayConfig {
+    std::uint16_t average_lap_seconds{0};
+    bool trackday_mode_enabled{false};
+};
+
+struct TrackdayModeViewModel {
+    std::array<char, 32> countdown{};
+    std::array<char, 24> estimated_laps{};
+    bool estimate_available{false};
+    bool visible{false};
+};
+
 struct ActiveSessionViewModel {
     DeviceViewModel timing{};
     LapFeedbackViewModel feedback{};
     StopControlViewModel stop{};
+    TrackdayModeViewModel trackday{};
 };
 
 class ActiveSessionController {
   public:
-    void update(const domain::UiSnapshot& snapshot, std::uint64_t now_ms) noexcept;
+    void update(const domain::UiSnapshot& snapshot, std::uint64_t now_ms,
+                const ActiveSessionDisplayConfig& display = {}) noexcept;
     void press_stop(std::uint64_t now_ms) noexcept;
     void release_stop(std::uint64_t now_ms) noexcept;
     void cancel_stop_hold(std::uint64_t now_ms) noexcept;
@@ -86,6 +100,8 @@ class ActiveSessionController {
 
 static_assert(std::is_trivially_copyable_v<LapFeedbackViewModel>);
 static_assert(std::is_trivially_copyable_v<StopControlViewModel>);
+static_assert(std::is_trivially_copyable_v<ActiveSessionDisplayConfig>);
+static_assert(std::is_trivially_copyable_v<TrackdayModeViewModel>);
 static_assert(std::is_trivially_copyable_v<ActiveSessionViewModel>);
 
 }  // namespace track_timer::ui

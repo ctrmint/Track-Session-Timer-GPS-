@@ -593,8 +593,26 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario active
+            --trackday-mode disabled
             --frames 4
             --snapshot "${CMAKE_CURRENT_BINARY_DIR}/active.ppm"
+    )
+
+    add_test(
+        NAME simulator-trackday-mode-screen
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --trackday-mode enabled
+            --frames 12
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/trackday-mode.ppm"
+    )
+    set_tests_properties(
+        simulator-trackday-mode-screen
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=active.*current= session=15:26.*trackday-mode=enabled.*trackday-estimate=9.3 LAPS.*lap-feedback=none"
+            TIMEOUT 20
     )
 
     add_test(
@@ -745,6 +763,7 @@ if(BUILD_TESTING)
             --headless
             --scenario active
             --imu-state failure
+            --trackday-mode disabled
             --frames 25
     )
     set_tests_properties(
@@ -762,6 +781,7 @@ if(BUILD_TESTING)
                 --headless
                 --scenario ready
                 --workflow-state "${fixture}"
+                --trackday-mode disabled
                 --frames 4
                 --snapshot "${CMAKE_CURRENT_BINARY_DIR}/workflow-${fixture}.ppm"
         )
@@ -825,6 +845,7 @@ if(BUILD_TESTING)
             --headless
             --scenario active
             --display-state dimmed
+            --trackday-mode disabled
             --frames 7
             --frame-ms 10000
     )
@@ -856,6 +877,7 @@ if(BUILD_TESTING)
             COMMAND track_timer_simulator
                 --headless
                 --scenario "${scenario}"
+                --trackday-mode disabled
                 --frames 8
                 --snapshot "${CMAKE_CURRENT_BINARY_DIR}/${scenario}.ppm"
         )
@@ -877,6 +899,7 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario gnss-loss
+            --trackday-mode disabled
             --frames 4
             --snapshot "${CMAKE_CURRENT_BINARY_DIR}/gnss-loss.ppm"
     )
@@ -893,6 +916,7 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario gnss-loss
+            --trackday-mode disabled
             --frames 125
     )
     set_tests_properties(
@@ -908,6 +932,7 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario storage-failure
+            --trackday-mode disabled
             --frames 4
     )
     set_tests_properties(
@@ -923,6 +948,7 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario storage-failure
+            --trackday-mode disabled
             --frames 125
     )
     set_tests_properties(
@@ -938,6 +964,7 @@ if(BUILD_TESTING)
         COMMAND track_timer_simulator
             --headless
             --scenario active
+            --trackday-mode disabled
             --gnss-rate 20
             --gnss-fixture "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/recorded_reference_v1.csv"
             --frames 10

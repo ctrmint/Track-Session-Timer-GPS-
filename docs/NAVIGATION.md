@@ -30,6 +30,13 @@ faster/slower comparison for a deterministic 1.8 seconds. A first valid lap stat
 in its own persistent panel throughout the feedback interval, and another completed
 lap replaces the prior feedback with a fresh bounded interval.
 
+When the persisted Trackday Mode setting is enabled, the active screen instead shows
+the countdown and estimated laps remaining from the configured average lap time. It
+does not expose current, previous, or best lap times, lap count, or completed-lap
+feedback while the session is active. GNSS lap detection and session logging continue
+unchanged, and recorded laps become visible in Review only after the session stops.
+Disabling Trackday Mode retains the normal live timing presentation above.
+
 Stopping is deliberately separate from ordinary navigation: the driver must hold the
 Stop control for 1.5 seconds, release it, and then choose Stop on the confirmation
 panel within five seconds. Short holds, press-loss events, Cancel, and confirmation

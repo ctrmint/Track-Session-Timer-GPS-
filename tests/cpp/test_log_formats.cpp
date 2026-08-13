@@ -25,6 +25,7 @@ int main()
     settings::DeviceSettings settings{};
     settings.session_duration_minutes = 30;
     settings.rest_duration_minutes = 10;
+    settings.trackday_mode_enabled = true;
     copy_text(settings.selected_track_id, "synthetic_test_loop");
 
     logger::SessionMetaV1 meta{};
@@ -42,6 +43,7 @@ int main()
     meta.end_utc_ns = meta.start_utc_ns + 1'900'000'000'000LL;
     meta.settings = logger::make_session_settings(settings);
     assert(logger::valid_meta(meta));
+    assert(meta.settings.trackday_mode_enabled);
 
     auto invalid_meta = meta;
     invalid_meta.schema_version = 2;
@@ -96,6 +98,7 @@ int main()
     const auto summary_lap = logger::make_summary_lap_record(event);
     assert(logger::valid_summary_lap(summary_lap));
     assert(summary_lap.event_record_sequence == event.record_sequence);
+    assert(summary_lap.lap_duration_ns == lap.lap_duration_ns);
 
     auto untraceable_event = event;
     untraceable_event.segment_sequence_1 = untraceable_event.segment_sequence_0;

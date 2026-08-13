@@ -88,6 +88,7 @@ struct SessionSettingsV1 {
     settings::OrientationMode orientation{settings::OrientationMode::fixed_0};
     bool auto_dim_enabled{false};
     settings::LowerDisplayMode lower_display{settings::LowerDisplayMode::elapsed};
+    bool trackday_mode_enabled{false};
     std::array<char, settings::kTrackIdentifierCapacity> selected_track_id{};
 };
 

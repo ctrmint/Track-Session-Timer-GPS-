@@ -395,6 +395,51 @@ int main()
     assert(screen.navigate(ui::NavigationAction::session_ended).current ==
            ui::Destination::ready);
 
+    screen.synchronize_session(false);
+    device_snapshot.session_active = false;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 5'751);
+    auto trackday_settings = settings_manager.current();
+    trackday_settings.trackday_mode_enabled = true;
+    trackday_settings.average_lap_seconds = 100;
+    assert(settings_manager.apply(trackday_settings, false) ==
+           settings::SettingsApplyResult::applied);
+    device_snapshot.session_active = true;
+    device_snapshot.session_remaining_ms = 15 * 60'000;
+    device_snapshot.current_lap_ms = 54'000;
+    device_snapshot.previous_lap_ms = 1 * 60'000 + 41'000;
+    device_snapshot.best_lap_ms = 1 * 60'000 + 39'750;
+    device_snapshot.lap_index = 8;
+    screen.synchronize_session(true);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 6'000);
+    assert(screen.active_session().view_model().trackday.visible);
+    assert(std::strcmp(screen.active_session().view_model().trackday.estimated_laps.data(),
+                       "9.0 LAPS") == 0);
+    assert(screen.active_session().view_model().timing.current_lap[0] == '\0');
+    assert(lv_obj_has_flag(screen.device_screen().current_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(screen.device_screen().previous_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(screen.device_screen().best_lap_object(), LV_OBJ_FLAG_HIDDEN));
+
+    device_snapshot.lap_index = 9;
+    device_snapshot.previous_lap_ms = 1 * 60'000 + 38'500;
+    device_snapshot.best_lap_ms = device_snapshot.previous_lap_ms;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 6'250);
+    assert(!screen.active_session().view_model().feedback.visible);
+    assert(device_snapshot.previous_lap_ms == 1 * 60'000 + 38'500);
+    assert(device_snapshot.best_lap_ms == device_snapshot.previous_lap_ms);
+
+    screen.synchronize_session(false);
+    device_snapshot.session_active = false;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 6'251);
+    assert(screen.navigate(ui::NavigationAction::open_review).accepted);
+    assert(std::strcmp(lv_label_get_text(screen.session_review_screen().lap_object(0)),
+                       "1:04.210") == 0);
+    click(screen.session_review_screen().button_for(
+        ui::SessionReviewAction::return_to_ready));
+    assert(screen.consume_ready_request());
+    trackday_settings.trackday_mode_enabled = false;
+    assert(settings_manager.apply(trackday_settings, false) ==
+           settings::SettingsApplyResult::applied);
+
     session::SessionController lifecycle{{60'000, 30'000}};
     assert(lifecycle.start(0) == session::TransitionResult::accepted);
     assert(lifecycle.advance(65'000) == session::TransitionResult::accepted);
