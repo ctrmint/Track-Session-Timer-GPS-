@@ -1,5 +1,8 @@
-TrackSessionTimer-GPS bootstrap package
+TrackSessionTimer-GPS historical bootstrap package manifest
 Generated: 2026-08-12
+
+This records the originally prepared archive for provenance. The Git repository is
+now the source of truth; hashes below are not a manifest of later development changes.
 
 SHA256  Bytes  Path
 4207290698ca6c2cf722e88dc2ede3de46ed78c7921aa1f9f13bc640d6d881ff       631  .github/ISSUE_TEMPLATE/bug.yml

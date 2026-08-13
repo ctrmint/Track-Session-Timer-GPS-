@@ -136,7 +136,7 @@ See [docs/GNSS_AND_LAP_TIMING.md](docs/GNSS_AND_LAP_TIMING.md).
 firmware/                 ESP-IDF firmware project
 hardware/                 BOM, wiring and enclosure notes
 data/tracks/              Track file schema and synthetic example
-planning/                 Seed issue backlog for GitHub
+planning/                 Export of the live milestone/issue backlog
 tests/                    Host-side algorithm tests
 tools/                    Development and replay utilities
 docs/                     Architecture and project documentation
@@ -160,7 +160,7 @@ Detailed sequencing is in [PROJECT_PLAN.md](PROJECT_PLAN.md).
 
 ## Quick firmware bootstrap
 
-From an ESP-IDF shell:
+The supported firmware baseline is ESP-IDF v6.0.2. From an activated v6.0.2 shell:
 
 ```bash
 cd firmware
@@ -169,20 +169,30 @@ idf.py build
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
+Without a native IDF installation, run `make firmware-container-build` from the
+repository root. See [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) for the
+pinned Python environment, clean-clone checks, and flashing notes.
+
 The bootstrap application only proves that the ESP32-S3 toolchain and board connection work. Display, touch and GNSS support are later milestones.
 
-## Initial GitHub issues
+## Development backlog
 
-The proposed issue sequence is in [planning/INITIAL_ISSUES.md](planning/INITIAL_ISSUES.md) and a machine-readable version is in [planning/issues.csv](planning/issues.csv).
+The [live GitHub issues](https://github.com/ctrmint/Track-Session-Timer-GPS-/issues)
+and milestones are the source of truth. A reviewable epic summary is in
+[planning/INITIAL_ISSUES.md](planning/INITIAL_ISSUES.md), with machine-readable
+snapshots in [planning/issues.csv](planning/issues.csv) and
+[planning/labels.csv](planning/labels.csv).
 
-`tools/create_issues.py` can preview `gh issue create` commands and can create them after the repository has been uploaded and GitHub CLI authentication is working.
+`tools/create_issues.py` and `tools/create_labels.py` preview the corresponding
+GitHub CLI commands. Execute mode skips existing issue titles and forces label updates.
 
 ```bash
-python tools/create_issues.py
-python tools/create_issues.py --execute
+make issue-preview
+make label-preview
 ```
 
-The script defaults to preview mode so it cannot accidentally populate the wrong repository.
+Use `--repo OWNER/REPO` when seeding another repository. Native sub-issue and
+blocked-by relationships are not reconstructed by the CSV preview scripts.
 
 ## Design rules
 

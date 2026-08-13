@@ -4,6 +4,7 @@
 from __future__ import annotations
 import argparse
 import csv
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from pathlib import Path
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--repo", help="target repository in OWNER/REPO form")
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[1]
     with (repo_root / "planning" / "labels.csv").open(newline="", encoding="utf-8") as f:
@@ -23,7 +25,9 @@ def main() -> int:
             "--description", row["Description"],
             "--force",
         ]
-        print(" ".join(repr(x) if " " in x else x for x in cmd))
+        if args.repo:
+            cmd += ["--repo", args.repo]
+        print(shlex.join(cmd))
         if args.execute:
             subprocess.run(cmd, check=True)
     return 0

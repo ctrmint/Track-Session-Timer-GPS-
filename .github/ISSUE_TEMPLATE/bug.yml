@@ -1,0 +1,30 @@
+name: Bug report
+description: Report reproducible incorrect behaviour
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behaviour
+      description: Include the exact failure and when it occurs.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction and evidence
+      description: Include firmware commit, hardware revision, track revision, logs, and steps where applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Safety or timing impact
+      description: State whether this can distract the driver, lose data, or change a lap result.
