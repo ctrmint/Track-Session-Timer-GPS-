@@ -9,6 +9,7 @@
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/diagnostics.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
+#include "track_timer/ui/display_policy.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
@@ -34,11 +35,14 @@ class ApplicationScreen {
     ApplicationScreen(lv_obj_t* root, settings::SettingsManager& settings_manager,
                       track::TrackCatalogView track_catalog,
                       const track::TrackMatchResult& track_match,
-                      logger::SessionSummaryProvider* summary_provider) noexcept;
+                      logger::SessionSummaryProvider* summary_provider,
+                      board::DisplayOutput* display_output = nullptr) noexcept;
 
     void update(const ui::ReadyViewModel& ready, const domain::UiSnapshot& active,
                 const diagnostics::DiagnosticsSnapshot& diagnostics,
-                std::uint64_t now_ms) noexcept;
+                std::uint64_t now_ms,
+                const ui::DisplayPolicyInput& display = {},
+                const settings::DeviceSettings* display_settings_override = nullptr) noexcept;
     [[nodiscard]] ui::NavigationResult navigate(ui::NavigationAction action) noexcept;
     void synchronize_session(bool active) noexcept;
     void update_track_match(const track::TrackMatchResult& match) noexcept;
@@ -62,6 +66,8 @@ class ApplicationScreen {
     [[nodiscard]] const ui::DiagnosticsController& diagnostics() const noexcept;
     [[nodiscard]] DeviceScreen& device_screen() noexcept;
     [[nodiscard]] const ui::ActiveSessionController& active_session() const noexcept;
+    [[nodiscard]] const ui::DisplayPolicyController& display_policy() const noexcept;
+    [[nodiscard]] lv_obj_t* brightness_overlay_object() const noexcept;
     [[nodiscard]] SetupPage setup_page() const noexcept;
 
     ApplicationScreen(const ApplicationScreen&) = delete;
@@ -75,23 +81,27 @@ class ApplicationScreen {
     static void review_action(ui::SessionReviewAction action, void* context) noexcept;
     static void diagnostics_action(ui::DiagnosticsAction action, void* context) noexcept;
     static void device_action(DeviceScreenAction action, void* context) noexcept;
+    static void activity_event(lv_event_t* event) noexcept;
     void show_destination() noexcept;
     void refresh_settings() noexcept;
     void refresh_track_selection() noexcept;
     void refresh_session_review() noexcept;
     void refresh_diagnostics() noexcept;
+    void apply_display_policy(const board::DisplayCommand& command) noexcept;
 
     settings::SettingsManager& settings_manager_;
     track::TrackCatalogView track_catalog_{};
     track::TrackMatchResult track_match_{};
     diagnostics::DiagnosticsSnapshot diagnostics_snapshot_{};
     logger::SessionSummaryProvider* summary_provider_{nullptr};
+    board::DisplayOutput* display_output_{nullptr};
     ui::NavigationController navigation_{};
     SetupPage setup_page_{SetupPage::menu};
     bool start_requested_{false};
     bool rest_requested_{false};
     bool ready_requested_{false};
     bool session_active_{false};
+    bool activity_pending_{false};
     std::uint64_t active_now_ms_{0};
     lv_obj_t* ready_root_{nullptr};
     lv_obj_t* active_root_{nullptr};
@@ -100,8 +110,10 @@ class ApplicationScreen {
     lv_obj_t* track_selection_root_{nullptr};
     lv_obj_t* session_review_root_{nullptr};
     lv_obj_t* diagnostics_root_{nullptr};
+    lv_obj_t* brightness_overlay_{nullptr};
     ui::ReadyScreen ready_screen_;
     ui::ActiveSessionController active_session_{};
+    ui::DisplayPolicyController display_policy_{};
     DeviceScreen active_screen_;
     ui::SetupMenuScreen setup_menu_screen_;
     ui::SettingsEditor settings_editor_{};

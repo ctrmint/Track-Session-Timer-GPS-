@@ -1,5 +1,6 @@
 idf_component_register(
-    SRCS "component.cpp" "active_session.cpp" "diagnostics.cpp" "diagnostics_screen.cpp" "foundation.cpp"
+    SRCS "component.cpp" "active_session.cpp" "diagnostics.cpp" "diagnostics_screen.cpp"
+         "display_policy.cpp" "foundation.cpp"
          "lvgl_visual_system.cpp" "navigation.cpp"
          "presenter.cpp" "ready_screen.cpp" "session_review.cpp" "session_review_screen.cpp"
          "settings_editor.cpp" "settings_screen.cpp"

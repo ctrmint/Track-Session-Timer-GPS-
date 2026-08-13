@@ -21,9 +21,11 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
                                      settings::SettingsManager& settings_manager,
                                      const track::TrackCatalogView track_catalog,
                                      const track::TrackMatchResult& track_match,
-                                     logger::SessionSummaryProvider* summary_provider) noexcept
+                                     logger::SessionSummaryProvider* summary_provider,
+                                     board::DisplayOutput* display_output) noexcept
     : settings_manager_(settings_manager), track_catalog_(track_catalog),
       track_match_(track_match), summary_provider_(summary_provider),
+      display_output_(display_output),
       ready_root_(make_screen_root(root)),
       active_root_(make_screen_root(root)), setup_menu_root_(make_screen_root(root)),
       settings_root_(make_screen_root(root)), track_selection_root_(make_screen_root(root)),
@@ -37,19 +39,69 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       session_review_screen_(session_review_root_, review_action, this),
       diagnostics_screen_(diagnostics_root_, diagnostics_action, this)
 {
+    ui::style_screen(root);
+    brightness_overlay_ = lv_obj_create(root);
+    ui::style_flat_panel(brightness_overlay_, ui::color::background);
+    lv_obj_set_pos(brightness_overlay_, 0, 0);
+    lv_obj_set_size(brightness_overlay_, 600, 450);
+    lv_obj_clear_flag(brightness_overlay_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(brightness_overlay_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(ready_root_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(ready_root_, activity_event, LV_EVENT_PRESSED, this);
     show_destination();
 }
 
 void ApplicationScreen::update(const ui::ReadyViewModel& ready,
                                const domain::UiSnapshot& active,
                                const diagnostics::DiagnosticsSnapshot& diagnostics,
-                               const std::uint64_t now_ms) noexcept
+                               const std::uint64_t now_ms,
+                               const ui::DisplayPolicyInput& display,
+                               const settings::DeviceSettings* display_settings_override) noexcept
 {
     active_now_ms_ = now_ms;
     ready_screen_.update(ready);
     active_session_.update(active, active_now_ms_);
     active_screen_.update(active_session_.view_model());
+    auto policy_input = display;
+    policy_input.now_ms = now_ms;
+    policy_input.context = session_active_ ? ui::DisplayContext::active
+                                           : navigation_.destination() == ui::Destination::ready
+                                                 ? ui::DisplayContext::ready
+                                                 : ui::DisplayContext::other;
+    if (display_settings_override != nullptr) {
+        policy_input.settings = *display_settings_override;
+        policy_input.settings_preview = false;
+    }
+    else {
+        policy_input.settings = settings_manager_.current();
+        const auto editor_status = settings_editor_.status();
+        const auto preview = navigation_.destination() == ui::Destination::setup &&
+                             setup_page_ == SetupPage::device_settings &&
+                             (editor_status == ui::SettingsEditorStatus::editing ||
+                              editor_status == ui::SettingsEditorStatus::confirm_defaults ||
+                              editor_status == ui::SettingsEditorStatus::defaults_staged ||
+                              editor_status == ui::SettingsEditorStatus::invalid) &&
+                             settings_editor_.changed();
+        if (preview) {
+            policy_input.settings = settings_editor_.draft();
+            policy_input.settings_preview = true;
+        }
+    }
+    policy_input.user_activity = policy_input.user_activity || activity_pending_;
+    activity_pending_ = false;
+    const auto& policy = display_policy_.update(policy_input);
+    apply_display_policy(policy.command);
+    if (display_output_ != nullptr) {
+        display_output_->apply(policy.command);
+    }
+
     diagnostics_snapshot_ = diagnostics;
+    diagnostics_snapshot_.display_brightness_percent = policy.command.brightness_percent;
+    diagnostics_snapshot_.display_orientation_degrees =
+        ui::display_orientation_degrees(policy.command.orientation);
+    diagnostics_snapshot_.display_shift_x = policy.command.layout_shift_x;
+    diagnostics_snapshot_.display_shift_y = policy.command.layout_shift_y;
+    diagnostics_snapshot_.display_dimmed = policy.command.dimmed;
     diagnostics_.update(diagnostics_snapshot_);
     if (navigation_.destination() == ui::Destination::diagnostics) {
         refresh_diagnostics();
@@ -219,6 +271,16 @@ const ui::ActiveSessionController& ApplicationScreen::active_session() const noe
     return active_session_;
 }
 
+const ui::DisplayPolicyController& ApplicationScreen::display_policy() const noexcept
+{
+    return display_policy_;
+}
+
+lv_obj_t* ApplicationScreen::brightness_overlay_object() const noexcept
+{
+    return brightness_overlay_;
+}
+
 SetupPage ApplicationScreen::setup_page() const noexcept
 {
     return setup_page_;
@@ -229,6 +291,7 @@ void ApplicationScreen::ready_navigation(const ui::NavigationAction action,
 {
     auto* screen = static_cast<ApplicationScreen*>(context);
     if (screen != nullptr) {
+        screen->activity_pending_ = true;
         (void)screen->navigate(action);
     }
 }
@@ -239,6 +302,7 @@ void ApplicationScreen::setup_action(const ui::SetupMenuAction action, void* con
     if (screen == nullptr) {
         return;
     }
+    screen->activity_pending_ = true;
     switch (action) {
     case ui::SetupMenuAction::device_settings:
         screen->open_setup_page(SetupPage::device_settings);
@@ -259,6 +323,7 @@ void ApplicationScreen::settings_action(const ui::SettingsScreenAction action,
     if (screen == nullptr) {
         return;
     }
+    screen->activity_pending_ = true;
     switch (action) {
     case ui::SettingsScreenAction::previous_field:
         screen->settings_editor_.previous_field();
@@ -300,6 +365,7 @@ void ApplicationScreen::track_action(const ui::TrackSelectionAction action,
     if (screen == nullptr) {
         return;
     }
+    screen->activity_pending_ = true;
     switch (action) {
     case ui::TrackSelectionAction::previous:
         screen->track_selection_.previous();
@@ -334,6 +400,7 @@ void ApplicationScreen::review_action(const ui::SessionReviewAction action,
     if (screen == nullptr) {
         return;
     }
+    screen->activity_pending_ = true;
     switch (action) {
     case ui::SessionReviewAction::newer_session:
         screen->session_review_.newer_session();
@@ -366,6 +433,7 @@ void ApplicationScreen::diagnostics_action(const ui::DiagnosticsAction action,
     if (screen == nullptr) {
         return;
     }
+    screen->activity_pending_ = true;
     switch (action) {
     case ui::DiagnosticsAction::previous_page:
         screen->diagnostics_.previous_page();
@@ -386,6 +454,7 @@ void ApplicationScreen::device_action(const DeviceScreenAction action, void* con
     if (screen == nullptr || !screen->session_active_) {
         return;
     }
+    screen->activity_pending_ = true;
     switch (action) {
     case DeviceScreenAction::press_stop:
         screen->active_session_.press_stop(screen->active_now_ms_);
@@ -404,6 +473,14 @@ void ApplicationScreen::device_action(const DeviceScreenAction action, void* con
         break;
     }
     screen->active_screen_.update(screen->active_session_.view_model());
+}
+
+void ApplicationScreen::activity_event(lv_event_t* event) noexcept
+{
+    auto* screen = static_cast<ApplicationScreen*>(lv_event_get_user_data(event));
+    if (screen != nullptr) {
+        screen->activity_pending_ = true;
+    }
 }
 
 void ApplicationScreen::show_destination() noexcept
@@ -461,6 +538,33 @@ void ApplicationScreen::refresh_session_review() noexcept
 void ApplicationScreen::refresh_diagnostics() noexcept
 {
     diagnostics_screen_.update(diagnostics_.view_model());
+}
+
+void ApplicationScreen::apply_display_policy(const board::DisplayCommand& command) noexcept
+{
+    const auto degrees = ui::display_orientation_degrees(command.orientation);
+    const auto portrait = command.orientation == board::DisplayOrientation::degrees_90 ||
+                          command.orientation == board::DisplayOrientation::degrees_270;
+    const auto scale = portrait ? 192 : 256;
+    for (auto* root : {ready_root_, active_root_, setup_menu_root_, settings_root_,
+                       track_selection_root_, session_review_root_, diagnostics_root_}) {
+        lv_obj_set_pos(root, command.layout_shift_x, command.layout_shift_y);
+        lv_obj_set_style_transform_pivot_x(root, 300, 0);
+        lv_obj_set_style_transform_pivot_y(root, 225, 0);
+        lv_obj_set_style_transform_rotation(root, static_cast<std::int32_t>(degrees) * 10, 0);
+        lv_obj_set_style_transform_scale(root, scale, 0);
+    }
+
+    if (command.brightness_percent >= 100) {
+        lv_obj_add_flag(brightness_overlay_, LV_OBJ_FLAG_HIDDEN);
+    }
+    else {
+        const auto opacity = static_cast<lv_opa_t>(
+            (100U - command.brightness_percent) * static_cast<unsigned>(LV_OPA_COVER) / 100U);
+        lv_obj_set_style_bg_opa(brightness_overlay_, opacity, 0);
+        lv_obj_remove_flag(brightness_overlay_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(brightness_overlay_);
+    }
 }
 
 const char* setup_page_name(const SetupPage page) noexcept

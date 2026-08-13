@@ -25,6 +25,18 @@ class MemoryStore final : public track_timer::settings::SettingsStore {
     }
 };
 
+class CapturingDisplay final : public track_timer::board::DisplayOutput {
+  public:
+    void apply(const track_timer::board::DisplayCommand& value) noexcept override
+    {
+        command = value;
+        ++apply_count;
+    }
+
+    track_timer::board::DisplayCommand command{};
+    std::uint32_t apply_count{0};
+};
+
 void click(lv_obj_t* object)
 {
     assert(object != nullptr);
@@ -48,8 +60,9 @@ int main()
     const auto tracks = simulator::make_track_fixture(simulator::TrackFixtureId::suggested);
     const auto track_match = track::match_track_geofences(tracks.catalog(), tracks.request);
     simulator::SummaryFixtureProvider summaries{simulator::SummaryFixtureId::complete};
+    CapturingDisplay display_output{};
     simulator::ApplicationScreen screen{lv_screen_active(), settings_manager, tracks.catalog(),
-                                        track_match, &summaries};
+                                        track_match, &summaries, &display_output};
     ui::ReadySnapshot snapshot{};
     std::strcpy(snapshot.selected_track.data(), "Synthetic Test Loop");
     snapshot.gnss_health = domain::GnssHealth::searching;
@@ -75,6 +88,21 @@ int main()
     assert(screen.destination() == ui::Destination::ready);
     assert(std::strcmp(lv_label_get_text(screen.ready_screen().track_label_object()),
                        "Synthetic Test Loop") == 0);
+    auto dim_settings = settings_manager.current();
+    dim_settings.auto_dim_enabled = true;
+    dim_settings.day_brightness_percent = 100;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 0, {},
+                  &dim_settings);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot,
+                  ui::kReadyAutoDimDelayMs, {}, &dim_settings);
+    assert(display_output.command.dimmed);
+    assert(display_output.command.brightness_percent == ui::kDimmedBrightnessPercent);
+    auto* wake_target = screen.ready_screen().button_for(ui::NavigationAction::start_session);
+    assert(lv_obj_send_event(wake_target, LV_EVENT_PRESSED, nullptr) == LV_RESULT_OK);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot,
+                  ui::kReadyAutoDimDelayMs + 1, {}, &dim_settings);
+    assert(!display_output.command.dimmed);
+    assert(display_output.command.brightness_percent == 100);
 
     for (const auto action : {ui::NavigationAction::start_session,
                               ui::NavigationAction::open_setup,
@@ -126,6 +154,34 @@ int main()
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel));
     assert(screen.destination() == ui::Destination::setup);
     assert(screen.setup_page() == simulator::SetupPage::menu);
+
+    click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::device_settings));
+    for (int count = 0; count < 3; ++count) {
+        click(screen.settings_screen().button_for(ui::SettingsScreenAction::next_field));
+    }
+    assert(screen.settings_editor().field() == ui::SettingsField::day_brightness);
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::decrement));
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 1);
+    assert(screen.display_policy().snapshot().settings_preview);
+    assert(display_output.command.brightness_percent == 75);
+    assert(!lv_obj_has_flag(screen.brightness_overlay_object(), LV_OBJ_FLAG_HIDDEN));
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel));
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 2);
+    assert(!screen.display_policy().snapshot().settings_preview);
+    assert(display_output.command.brightness_percent == 100);
+    assert(lv_obj_has_flag(screen.brightness_overlay_object(), LV_OBJ_FLAG_HIDDEN));
+
+    click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::device_settings));
+    for (int count = 0; count < 3; ++count) {
+        click(screen.settings_screen().button_for(ui::SettingsScreenAction::next_field));
+    }
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::decrement));
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::save));
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 3);
+    assert(settings_manager.current().day_brightness_percent == 75);
+    assert(!screen.display_policy().snapshot().settings_preview);
+    assert(display_output.command.brightness_percent == 75);
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel));
 
     click(screen.setup_menu_screen().button_for(ui::SetupMenuAction::track_selection));
     assert(screen.setup_page() == simulator::SetupPage::track_selection);
@@ -199,6 +255,12 @@ int main()
     }
     click(screen.diagnostics_screen().button_for(ui::DiagnosticsAction::next_page));
     assert(screen.diagnostics().view_model().current_page == ui::DiagnosticsPage::gnss);
+    click(screen.diagnostics_screen().button_for(ui::DiagnosticsAction::next_page));
+    click(screen.diagnostics_screen().button_for(ui::DiagnosticsAction::next_page));
+    assert(screen.diagnostics().view_model().current_page == ui::DiagnosticsPage::peripherals);
+    assert(std::strstr(lv_label_get_text(
+                           screen.diagnostics_screen().row_value_object(7)),
+                       "75% / 0 DEG") != nullptr);
     click(screen.diagnostics_screen().button_for(ui::DiagnosticsAction::back));
     assert(screen.destination() == ui::Destination::ready);
 

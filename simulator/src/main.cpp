@@ -3,6 +3,7 @@
 #include "track_timer/settings/settings.hpp"
 #include "track_timer/simulator/file_settings_store.hpp"
 #include "track_timer/simulator/diagnostics_fixtures.hpp"
+#include "track_timer/simulator/display_fixtures.hpp"
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/simulator/summary_fixtures.hpp"
 #include "track_timer/simulator/track_fixtures.hpp"
@@ -48,6 +49,8 @@ struct Options {
         track_timer::simulator::SummaryFixtureId::complete};
     track_timer::simulator::DiagnosticsFixtureId diagnostics_fixture{
         track_timer::simulator::DiagnosticsFixtureId::normal};
+    track_timer::simulator::DisplayFixtureId display_fixture{
+        track_timer::simulator::DisplayFixtureId::live};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -140,12 +143,21 @@ Options parse_options(const int argc, char** argv)
                     "--diagnostics-state must be normal, degraded, missing, or recovery");
             }
         }
+        else if (argument == "--display-state") {
+            const auto value = require_value(argc, argv, index);
+            if (!track_timer::simulator::parse_display_fixture(value,
+                                                                options.display_fixture)) {
+                throw std::invalid_argument(
+                    "--display-state must be live, day, night, dimmed, or rotated");
+            }
+        }
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
                          "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
-                         "[--diagnostics-state STATE] [--snapshot FILE]\n"
+                         "[--diagnostics-state STATE] [--display-state STATE] "
+                         "[--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure, "
                          "lap-faster, lap-slower, lap-unavailable-best\n"
                          "Use pointer/touch controls or keyboard focus and Enter to navigate.\n";
@@ -196,6 +208,7 @@ struct ApplicationContext {
     track_timer::settings::SettingsManager* settings;
     const track_timer::simulator::TrackFixture* track_fixture;
     track_timer::simulator::DiagnosticsFixtureId diagnostics_fixture;
+    track_timer::simulator::DisplayFixture display_fixture;
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
@@ -206,10 +219,12 @@ struct ApplicationContext {
                        track_timer::settings::SettingsManager* settings_manager,
                        const track_timer::simulator::TrackFixture* fixture_tracks,
                        const track_timer::simulator::DiagnosticsFixtureId fixture_diagnostics,
+                       const track_timer::simulator::DisplayFixture& fixture_display,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
           settings(settings_manager), track_fixture(fixture_tracks),
-          diagnostics_fixture(fixture_diagnostics), display(target_display)
+          diagnostics_fixture(fixture_diagnostics), display_fixture(fixture_display),
+          display(target_display)
     {
     }
 };
@@ -278,8 +293,10 @@ void update_screen(ApplicationContext& context)
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.player.diagnostics(),
         context.player.device().storage().status(), context.player.logger_metrics(),
         context.profiler.metrics());
-    context.screen->update(track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
-                           static_cast<std::uint64_t>(context.player.elapsed_ms()));
+    context.screen->update(
+        track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
+        static_cast<std::uint64_t>(context.player.elapsed_ms()), context.display_fixture.input,
+        context.display_fixture.override_settings ? &context.display_fixture.settings : nullptr);
 }
 
 void render_screen(ApplicationContext& context)
@@ -359,6 +376,8 @@ int run(const Options& options)
     const auto initial_match = track_timer::track::match_track_geofences(
         track_fixture.catalog(), initial_request);
     track_timer::simulator::SummaryFixtureProvider summary_provider{options.summary_fixture};
+    const auto display_fixture = track_timer::simulator::make_display_fixture(
+        options.display_fixture, settings_manager.current());
 
     track_timer::simulator::ApplicationScreen screen{lv_screen_active(), settings_manager,
                                                       track_fixture.catalog(), initial_match,
@@ -383,7 +402,7 @@ int run(const Options& options)
     }
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
                                &settings_manager, &track_fixture,
-                               options.diagnostics_fixture, display};
+                               options.diagnostics_fixture, display_fixture, display};
     render_screen(context);
 
     if (options.headless) {
@@ -463,6 +482,27 @@ int run(const Options& options)
               << " diagnostics-fixture="
               << track_timer::simulator::diagnostics_fixture_name(
                      options.diagnostics_fixture)
+              << " display-state="
+              << track_timer::simulator::display_fixture_name(options.display_fixture)
+              << " display-profile="
+              << track_timer::ui::brightness_profile_name(
+                     screen.display_policy().snapshot().brightness_profile)
+              << " display-brightness="
+              << static_cast<unsigned>(
+                     screen.display_policy().snapshot().command.brightness_percent)
+              << " display-orientation="
+              << track_timer::ui::display_orientation_name(
+                     screen.display_policy().snapshot().command.orientation)
+              << " display-dimmed="
+              << (screen.display_policy().snapshot().command.dimmed ? "yes" : "no")
+              << " display-shift="
+              << static_cast<int>(
+                     screen.display_policy().snapshot().command.layout_shift_x)
+              << ','
+              << static_cast<int>(
+                     screen.display_policy().snapshot().command.layout_shift_y)
+              << " display-preview="
+              << (screen.display_policy().snapshot().settings_preview ? "yes" : "no")
               << " lap-feedback="
               << track_timer::ui::lap_feedback_kind_name(
                      screen.active_session().view_model().feedback.kind)

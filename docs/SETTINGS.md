@@ -51,6 +51,29 @@ Defaults requires a separate confirmation before staging defaults for Save. Rest
 device defaults deliberately preserves the selected track because track ownership and
 selection are handled by the track workflow.
 
+Brightness and orientation drafts are previewed through the same display-policy path
+used by saved settings. Save makes the preview the effective policy; Cancel and a failed
+save immediately restore the persisted policy. No preview writes directly to a display
+driver.
+
+## Display policy
+
+Day and night select their corresponding brightness presets. Optional auto-dim applies
+only after 60 seconds of stationary Ready-screen inactivity and wakes on the next input.
+The minimum dimmed policy is the supported 25% preset. A bounded eight-position pattern
+moves stationary Ready content by at most four pixels every 30 seconds to reduce static
+AMOLED exposure.
+
+Fixed orientations map directly to 0, 90, 180, or 270 degrees. Automatic orientation
+uses a valid sensed orientation and retains the prior value when no sensor result is
+available. Brightness, orientation, dimming, and layout movement are frozen safely on
+entry to active timing: active content never auto-dims, shifts, or rotates. A changed
+automatic orientation is reported as deferred and becomes effective after timing ends.
+
+The policy produces a fixed-size `board::DisplayCommand`; only a board adapter may turn
+that command into panel brightness or rotation operations. Diagnostics reports the
+effective brightness, orientation, dim state, and layout offset.
+
 ## Active-session safety
 
 Valid settings submitted while a session is active replace one bounded pending value;
