@@ -14,6 +14,7 @@ struct DeviceViewModel {
     std::array<char, 32> previous_lap{};
     std::array<char, 32> best_lap{};
     std::array<char, 32> session_remaining{};
+    std::array<char, 24> session_status{};
     std::array<char, 16> gnss_status{};
     std::array<char, 16> logging_status{};
     domain::GnssHealth gnss_health{domain::GnssHealth::unavailable};

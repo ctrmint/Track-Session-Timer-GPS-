@@ -30,6 +30,7 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 
 add_library(
     track_timer_simulator_model
+    ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/settings/component.cpp
     src/device_backends.cpp
@@ -48,6 +49,17 @@ target_include_directories(
 )
 target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 
+add_library(
+    track_timer_lvgl_ui
+    ../firmware/components/ui/lvgl_visual_system.cpp
+)
+target_include_directories(
+    track_timer_lvgl_ui
+    PUBLIC ../firmware/components/ui/include
+)
+target_compile_features(track_timer_lvgl_ui PUBLIC cxx_std_17)
+target_link_libraries(track_timer_lvgl_ui PUBLIC lvgl::lvgl)
+
 add_executable(
     track_timer_simulator
     src/device_screen.cpp
@@ -59,6 +71,7 @@ target_link_libraries(
     track_timer_simulator
     PRIVATE
         track_timer_simulator_model
+        track_timer_lvgl_ui
         lvgl::lvgl
         SDL2::SDL2
 )
@@ -72,9 +85,39 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         track_timer_simulator
         PRIVATE -Wall -Wextra -Werror -pedantic
     )
+    target_compile_options(
+        track_timer_lvgl_ui
+        PRIVATE -Wall -Wextra -Werror -pedantic
+    )
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_ui_foundation_test
+        ../tests/cpp/test_ui_foundation.cpp
+    )
+    target_link_libraries(
+        track_timer_ui_foundation_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_ui_foundation_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-ui-foundation
+        COMMAND track_timer_ui_foundation_test
+    )
+    set_tests_properties(
+        simulator-ui-foundation
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "UI foundation budgets, contrast, cues, and metrics passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_settings_test
         ../tests/cpp/test_settings.cpp
@@ -144,6 +187,7 @@ if(BUILD_TESTING)
         track_timer_device_screen_test
         PRIVATE
             track_timer_simulator_model
+            track_timer_lvgl_ui
             lvgl::lvgl
             SDL2::SDL2
     )
@@ -162,7 +206,7 @@ if(BUILD_TESTING)
         simulator-gnss-indicator
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-            PASS_REGULAR_EXPRESSION "GPS indicator symbol, colours, and position passed"
+            PASS_REGULAR_EXPRESSION "GPS indicator symbol, text cues, colours, and position passed"
             TIMEOUT 20
     )
 
@@ -178,7 +222,7 @@ if(BUILD_TESTING)
         simulator-active-smoke
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-            PASS_REGULAR_EXPRESSION "scenario=active.*resolution=600x450"
+            PASS_REGULAR_EXPRESSION "scenario=active.*render-frames=[1-9][0-9]*.*lvgl-maximum-bytes=[1-9][0-9]*.*display-buffer-bytes=96000"
             TIMEOUT 20
     )
 

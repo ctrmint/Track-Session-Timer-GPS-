@@ -104,6 +104,10 @@ Prefer:
 - no unbounded in-RAM session history
 - logs streamed to SD
 
+The UI baseline uses two 600 x 40 RGB565 partial buffers (96,000 bytes total), with
+external RAM preferred. See [UI_FOUNDATION.md](UI_FOUNDATION.md) for the buffer
+contract, simulator measurements, and hardware-validation boundary.
+
 ## 6. Configuration
 
 Use versioned configuration structures. Suggested domains:

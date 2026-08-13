@@ -2,8 +2,8 @@
 
 These directories establish dependency direction before hardware drivers are added.
 `domain` contains product value contracts, `board` defines platform-facing interfaces,
-and `ui` contains the shared snapshot presenter. Remaining components retain link
-anchors so ESP-IDF verifies the intended graph.
+and `ui` contains the shared snapshot presenter and LVGL visual primitives. Remaining
+components retain link anchors so ESP-IDF verifies the intended graph.
 
 | Component | Owns | Direct dependencies |
 |---|---|---|
@@ -19,8 +19,9 @@ anchors so ESP-IDF verifies the intended graph.
 | `diagnostics` | Health/counter aggregation | all service components |
 
 The Waveshare, QEMU, and SDL implementations sit behind the `board` boundary. Domain
-and presenter code must not include ESP-IDF, LVGL, or SDL headers. The SDL screen
-renderer lives under `simulator/`; the eventual ESP-IDF renderer consumes the same
+and presenter code must not include ESP-IDF, LVGL, or SDL headers. The LVGL adapter is
+isolated behind `lvgl_visual_system.hpp`, uses the component-manager build on ESP-IDF,
+and is reused by the SDL renderer. Both render paths consume the same
 `DeviceViewModel`.
 
 ## Queue ownership

@@ -19,6 +19,11 @@ class DeviceScreen {
         return gnss_label_;
     }
 
+    [[nodiscard]] lv_obj_t* session_status_object() const noexcept
+    {
+        return session_caption_;
+    }
+
   private:
     lv_obj_t* root_;
     lv_obj_t* accent_line_;
@@ -27,6 +32,7 @@ class DeviceScreen {
     lv_obj_t* lap_label_;
     lv_obj_t* gnss_label_;
     lv_obj_t* logging_label_;
+    lv_obj_t* session_caption_;
     FixedCellLabel current_lap_label_{};
     FixedCellLabel previous_lap_label_{};
     FixedCellLabel best_lap_label_{};
