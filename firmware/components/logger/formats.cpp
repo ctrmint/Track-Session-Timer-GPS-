@@ -123,6 +123,7 @@ bool valid_settings_record(const SessionSettingsV1& record) noexcept
     source.orientation = record.orientation;
     source.auto_dim_enabled = record.auto_dim_enabled;
     source.lower_display = record.lower_display;
+    source.trackday_mode_enabled = record.trackday_mode_enabled;
     source.selected_track_id = record.selected_track_id;
     return settings::valid_settings(source);
 }
@@ -142,6 +143,7 @@ SessionSettingsV1 make_session_settings(const settings::DeviceSettings& source) 
     result.orientation = source.orientation;
     result.auto_dim_enabled = source.auto_dim_enabled;
     result.lower_display = source.lower_display;
+    result.trackday_mode_enabled = source.trackday_mode_enabled;
     result.selected_track_id = source.selected_track_id;
     return result;
 }

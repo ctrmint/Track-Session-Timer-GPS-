@@ -109,27 +109,56 @@ DeviceScreen::DeviceScreen(lv_obj_t* root, const DeviceScreenCallback callback,
     lv_obj_set_size(feedback_comparison_, 270, 34);
     lv_obj_add_flag(feedback_panel_, LV_OBJ_FLAG_HIDDEN);
 
-    auto* previous_caption = ui::create_label(root_, ui::Typography::caption,
-                                              ui::color::text_secondary);
-    lv_label_set_text(previous_caption, "LAST");
-    lv_obj_set_pos(previous_caption, 30, 210);
-    lv_obj_set_size(previous_caption, 250, 22);
+    previous_caption_ = ui::create_label(root_, ui::Typography::caption,
+                                         ui::color::text_secondary);
+    lv_label_set_text(previous_caption_, "LAST");
+    lv_obj_set_pos(previous_caption_, 30, 210);
+    lv_obj_set_size(previous_caption_, 250, 22);
 
     previous_lap_label_.create(root_, &lv_font_montserrat_28, lv_color_white(),
                                kLapTimeCellCount, kSmallLapTimeCellWidths, 38);
     previous_lap_label_.set_position(
         centered_lap_field_x(30, 250, previous_lap_label_.width(), 20), 236);
 
-    auto* best_caption = ui::create_label(root_, ui::Typography::caption,
-                                          ui::color::text_secondary);
-    lv_label_set_text(best_caption, "BEST");
-    lv_obj_set_pos(best_caption, 320, 210);
-    lv_obj_set_size(best_caption, 250, 22);
+    best_caption_ = ui::create_label(root_, ui::Typography::caption,
+                                     ui::color::text_secondary);
+    lv_label_set_text(best_caption_, "BEST");
+    lv_obj_set_pos(best_caption_, 320, 210);
+    lv_obj_set_size(best_caption_, 250, 22);
 
     best_lap_label_.create(root_, &lv_font_montserrat_28, lv_color_white(),
                            kLapTimeCellCount, kSmallLapTimeCellWidths, 38);
     best_lap_label_.set_position(
         centered_lap_field_x(320, 250, best_lap_label_.width(), 20), 236);
+
+    trackday_panel_ = lv_obj_create(root_);
+    ui::style_flat_panel(trackday_panel_, ui::color::background);
+    lv_obj_set_pos(trackday_panel_, 0, 72);
+    lv_obj_set_size(trackday_panel_, 600, 250);
+    auto* trackday_title = ui::create_label(trackday_panel_, ui::Typography::heading,
+                                            ui::color::text_primary);
+    lv_label_set_text(trackday_title, "TRACKDAY MODE");
+    lv_obj_set_pos(trackday_title, 0, 8);
+    lv_obj_set_size(trackday_title, 600, 34);
+    auto* countdown_caption = ui::create_label(trackday_panel_, ui::Typography::caption,
+                                               ui::color::text_secondary);
+    lv_label_set_text(countdown_caption, "SESSION REMAINING");
+    lv_obj_set_pos(countdown_caption, 0, 48);
+    lv_obj_set_size(countdown_caption, 600, 24);
+    trackday_countdown_.create(trackday_panel_, &lv_font_montserrat_48,
+                               lv_color_white(), kSessionTimeCellCount,
+                               kSessionTimeCellWidths, 62);
+    trackday_countdown_.set_position((600 - trackday_countdown_.width()) / 2, 76);
+    auto* estimate_caption = ui::create_label(trackday_panel_, ui::Typography::caption,
+                                              ui::color::text_secondary);
+    lv_label_set_text(estimate_caption, "ESTIMATED LAPS REMAINING");
+    lv_obj_set_pos(estimate_caption, 0, 154);
+    lv_obj_set_size(estimate_caption, 600, 24);
+    trackday_estimate_ = ui::create_label(trackday_panel_, ui::Typography::heading,
+                                          ui::color::text_primary);
+    lv_obj_set_pos(trackday_estimate_, 0, 184);
+    lv_obj_set_size(trackday_estimate_, 600, 40);
+    lv_obj_add_flag(trackday_panel_, LV_OBJ_FLAG_HIDDEN);
 
     logging_badge_ = lv_obj_create(root_);
     ui::style_flat_panel(logging_badge_, ui::color::logging_unavailable, 14);
@@ -200,6 +229,13 @@ void DeviceScreen::update(const ui::ActiveSessionViewModel& active) noexcept
     lv_label_set_text(logging_label_, model.logging_status.data());
     lv_label_set_text(session_caption_, model.session_status.data());
     session_label_.set_text(model.session_remaining.data());
+    trackday_countdown_.set_text(active.trackday.countdown.data());
+    lv_label_set_text(trackday_estimate_, active.trackday.estimated_laps.data());
+    lv_obj_set_style_text_color(
+        trackday_estimate_,
+        lv_color_hex(active.trackday.estimate_available ? ui::color::text_primary
+                                                        : ui::color::caution_bright),
+        0);
 
     const auto accent = lv_color_hex(model.accent_rgb);
     const auto accent_text = lv_color_hex(model.accent_text_rgb);
@@ -213,9 +249,22 @@ void DeviceScreen::update(const ui::ActiveSessionViewModel& active) noexcept
         logging_badge_,
         lv_color_hex(logging ? ui::color::logging : ui::color::logging_unavailable), 0);
 
-    if (active.feedback.visible) {
+    if (active.trackday.visible) {
+        lv_obj_remove_flag(trackday_panel_, LV_OBJ_FLAG_HIDDEN);
+        for (auto* object : {current_caption_, current_lap_label_.object(),
+                             previous_caption_, previous_lap_label_.object(),
+                             best_caption_, best_lap_label_.object(), feedback_panel_}) {
+            lv_obj_add_flag(object, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    else if (active.feedback.visible) {
+        lv_obj_add_flag(trackday_panel_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(current_caption_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(current_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(previous_caption_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(previous_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(best_caption_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(best_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(feedback_panel_, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(feedback_heading_, active.feedback.heading.data());
         lv_label_set_text(feedback_time_, active.feedback.completed_lap.data());
@@ -224,8 +273,13 @@ void DeviceScreen::update(const ui::ActiveSessionViewModel& active) noexcept
                                     lv_color_hex(active.feedback.color_rgb), 0);
     }
     else {
+        lv_obj_add_flag(trackday_panel_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(current_caption_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(current_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(previous_caption_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(previous_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(best_caption_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(best_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(feedback_panel_, LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -287,6 +341,36 @@ lv_obj_t* DeviceScreen::feedback_comparison_object() const noexcept
 lv_obj_t* DeviceScreen::session_panel_object() const noexcept
 {
     return session_panel_;
+}
+
+lv_obj_t* DeviceScreen::trackday_panel_object() const noexcept
+{
+    return trackday_panel_;
+}
+
+lv_obj_t* DeviceScreen::trackday_countdown_object() const noexcept
+{
+    return trackday_countdown_.object();
+}
+
+lv_obj_t* DeviceScreen::trackday_estimate_object() const noexcept
+{
+    return trackday_estimate_;
+}
+
+lv_obj_t* DeviceScreen::current_lap_object() const noexcept
+{
+    return current_lap_label_.object();
+}
+
+lv_obj_t* DeviceScreen::previous_lap_object() const noexcept
+{
+    return previous_lap_label_.object();
+}
+
+lv_obj_t* DeviceScreen::best_lap_object() const noexcept
+{
+    return best_lap_label_.object();
 }
 
 void DeviceScreen::stop_button_event(lv_event_t* event) noexcept

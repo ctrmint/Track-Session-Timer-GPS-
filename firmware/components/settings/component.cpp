@@ -10,7 +10,8 @@ namespace {
 constexpr std::array<std::uint8_t, 4> kMagic{'T', 'S', 'T', 'G'};
 constexpr std::size_t kHeaderSize = 12;
 constexpr std::size_t kLegacyV1PayloadSize = 7;
-constexpr std::size_t kCurrentPayloadSize = 62;
+constexpr std::size_t kLegacyV2PayloadSize = 62;
+constexpr std::size_t kCurrentPayloadSize = 63;
 
 bool valid_brightness(const std::uint8_t percent) noexcept
 {
@@ -153,16 +154,17 @@ bool settings_equal(const DeviceSettings& left, const DeviceSettings& right) noe
            left.operating_mode == right.operating_mode && left.orientation == right.orientation &&
            left.auto_dim_enabled == right.auto_dim_enabled &&
            left.lower_display == right.lower_display &&
-           left.selected_track_id == right.selected_track_id;
+           left.selected_track_id == right.selected_track_id &&
+           left.trackday_mode_enabled == right.trackday_mode_enabled;
 }
 
-SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+SettingsBlob encode_legacy_settings_v2(const DeviceSettings& settings) noexcept
 {
     if (!valid_settings(settings)) {
         return {};
     }
 
-    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::array<std::uint8_t, kLegacyV2PayloadSize> payload{};
     put_u16(payload.data(), settings.session_duration_minutes);
     put_u16(payload.data() + 2, settings.rest_duration_minutes);
     put_u16(payload.data() + 4, settings.launch_sensitivity_milli_g);
@@ -175,6 +177,18 @@ SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
     payload[13] = static_cast<std::uint8_t>(settings.lower_display);
     std::memcpy(payload.data() + 14, settings.selected_track_id.data(),
                 settings.selected_track_id.size());
+    return make_blob(2, payload.data(), payload.size());
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    const auto legacy = encode_legacy_settings_v2(settings);
+    if (legacy.size == 0) {
+        return {};
+    }
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV2PayloadSize, payload.data());
+    payload[62] = settings.trackday_mode_enabled ? 1U : 0U;
     return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
 }
 
@@ -217,10 +231,12 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         settings = candidate;
         return DecodeResult::migrated_v1;
     }
-    if (version != kCurrentSettingsVersion) {
+    if (version != 2 && version != kCurrentSettingsVersion) {
         return DecodeResult::unsupported_version;
     }
-    if (payload_size != kCurrentPayloadSize) {
+    const auto expected_payload_size =
+        version == 2 ? kLegacyV2PayloadSize : kCurrentPayloadSize;
+    if (payload_size != expected_payload_size) {
         return DecodeResult::corrupt;
     }
 
@@ -236,11 +252,16 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     candidate.lower_display = static_cast<LowerDisplayMode>(payload[13]);
     std::memcpy(candidate.selected_track_id.data(), payload + 14,
                 candidate.selected_track_id.size());
-    if (payload[12] > 1 || !valid_settings(candidate)) {
+    if (version == kCurrentSettingsVersion) {
+        candidate.trackday_mode_enabled = payload[62] != 0;
+    }
+    if (payload[12] > 1 ||
+        (version == kCurrentSettingsVersion && payload[62] > 1) ||
+        !valid_settings(candidate)) {
         return DecodeResult::corrupt;
     }
     settings = candidate;
-    return DecodeResult::current;
+    return version == 2 ? DecodeResult::migrated_v2 : DecodeResult::current;
 }
 
 FeatureAvailability evaluate_features(const SubsystemSnapshot& subsystems) noexcept
@@ -281,6 +302,9 @@ SettingsLoadReport SettingsManager::load() noexcept
     case DecodeResult::migrated_v1:
         current_ = decoded;
         return {SettingsSource::migrated_v1, persist(current_)};
+    case DecodeResult::migrated_v2:
+        current_ = decoded;
+        return {SettingsSource::migrated_v2, persist(current_)};
     case DecodeResult::corrupt:
         current_ = {};
         return {SettingsSource::defaults_corrupt, persist(current_)};

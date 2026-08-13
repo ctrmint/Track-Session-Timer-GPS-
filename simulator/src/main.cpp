@@ -41,6 +41,37 @@ enum class WorkflowFixture : std::uint8_t {
     rest,
 };
 
+enum class TrackdayFixture : std::uint8_t {
+    saved,
+    enabled,
+    disabled,
+};
+
+const char* trackday_fixture_name(const TrackdayFixture fixture) noexcept
+{
+    switch (fixture) {
+    case TrackdayFixture::saved:
+        return "saved";
+    case TrackdayFixture::enabled:
+        return "enabled";
+    case TrackdayFixture::disabled:
+        return "disabled";
+    }
+    return "saved";
+}
+
+bool parse_trackday_fixture(const std::string& name, TrackdayFixture& fixture) noexcept
+{
+    for (const auto candidate : {TrackdayFixture::saved, TrackdayFixture::enabled,
+                                 TrackdayFixture::disabled}) {
+        if (name == trackday_fixture_name(candidate)) {
+            fixture = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
 const char* workflow_fixture_name(const WorkflowFixture fixture) noexcept
 {
     switch (fixture) {
@@ -90,6 +121,7 @@ struct Options {
     track_timer::simulator::ImuFixtureId imu_fixture{
         track_timer::simulator::ImuFixtureId::normal};
     WorkflowFixture workflow_fixture{WorkflowFixture::live};
+    TrackdayFixture trackday_fixture{TrackdayFixture::saved};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -172,6 +204,13 @@ Options parse_options(const int argc, char** argv)
                     "--workflow-state must be live, overtime, completion, or rest");
             }
         }
+        else if (argument == "--trackday-mode") {
+            const auto value = require_value(argc, argv, index);
+            if (!parse_trackday_fixture(value, options.trackday_fixture)) {
+                throw std::invalid_argument(
+                    "--trackday-mode must be saved, enabled, or disabled");
+            }
+        }
         else if (argument == "--review-state") {
             const auto value = require_value(argc, argv, index);
             if (!track_timer::simulator::parse_summary_fixture(value,
@@ -209,7 +248,7 @@ Options parse_options(const int argc, char** argv)
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
                          "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|g-meter|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
-                         "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] [--workflow-state STATE] "
+                         "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] [--workflow-state STATE] [--trackday-mode saved|enabled|disabled] "
                          "[--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure, "
                          "lap-faster, lap-slower, lap-unavailable-best\n"
@@ -264,6 +303,8 @@ struct ApplicationContext {
     track_timer::simulator::DisplayFixture display_fixture;
     track_timer::simulator::ImuFixtureId imu_fixture;
     WorkflowFixture workflow_fixture;
+    TrackdayFixture trackday_fixture;
+    track_timer::settings::DeviceSettings active_settings_fixture{};
     track_timer::session::SessionController lifecycle{{60'000, 30'000}};
     std::int64_t workflow_time_offset_ms{0};
     bool workflow_active{false};
@@ -280,13 +321,24 @@ struct ApplicationContext {
                        const track_timer::simulator::DisplayFixture& fixture_display,
                        const track_timer::simulator::ImuFixtureId fixture_imu,
                        const WorkflowFixture fixture_workflow,
+                       const TrackdayFixture fixture_trackday,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
           settings(settings_manager), track_fixture(fixture_tracks),
           diagnostics_fixture(fixture_diagnostics), display_fixture(fixture_display),
           imu_fixture(fixture_imu), workflow_fixture(fixture_workflow),
+          trackday_fixture(fixture_trackday),
+          active_settings_fixture(settings_manager->current()),
           display(target_display)
     {
+        if (trackday_fixture != TrackdayFixture::saved) {
+            active_settings_fixture.trackday_mode_enabled =
+                trackday_fixture == TrackdayFixture::enabled;
+            if (active_settings_fixture.trackday_mode_enabled &&
+                active_settings_fixture.average_lap_seconds == 0) {
+                active_settings_fixture.average_lap_seconds = 100;
+            }
+        }
         switch (workflow_fixture) {
         case WorkflowFixture::live:
             return;
@@ -455,7 +507,9 @@ void update_screen(ApplicationContext& context)
         track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.display_fixture.input,
         context.display_fixture.override_settings ? &context.display_fixture.settings : nullptr,
-        imu);
+        imu, context.trackday_fixture == TrackdayFixture::saved
+                 ? nullptr
+                 : &context.active_settings_fixture);
 }
 
 void render_screen(ApplicationContext& context)
@@ -565,7 +619,8 @@ int run(const Options& options)
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
                                &settings_manager, &track_fixture,
                                options.diagnostics_fixture, display_fixture,
-                               options.imu_fixture, options.workflow_fixture, display};
+                               options.imu_fixture, options.workflow_fixture,
+                               options.trackday_fixture, display};
     render_screen(context);
 
     if (options.headless) {
@@ -598,12 +653,7 @@ int run(const Options& options)
         return 1;
     }
 
-    auto final_device_snapshot = context.player.snapshot();
-    if (context.workflow_active) {
-        final_device_snapshot = track_timer::ui::apply_session_timing(
-            final_device_snapshot, context.lifecycle.snapshot());
-    }
-    const auto model = track_timer::ui::present(final_device_snapshot);
+    const auto& model = screen.active_session().view_model().timing;
     const auto diagnostics = context.player.diagnostics();
     const auto& gnss = context.player.device().gnss();
     const auto& storage = context.player.device().storage();
@@ -680,6 +730,11 @@ int run(const Options& options)
               << " workflow-fixture=" << workflow_fixture_name(options.workflow_fixture)
               << " workflow-state="
               << track_timer::ui::session_state_name(context.lifecycle.snapshot().state)
+              << " trackday-mode="
+              << (screen.active_session().view_model().trackday.visible ? "enabled"
+                                                                          : "disabled")
+              << " trackday-estimate="
+              << screen.active_session().view_model().trackday.estimated_laps.data()
               << " lap-feedback="
               << track_timer::ui::lap_feedback_kind_name(
                      screen.active_session().view_model().feedback.kind)

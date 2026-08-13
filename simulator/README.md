@@ -104,6 +104,17 @@ build/simulator/track_timer_simulator \
 `--review-state complete|partial|empty|missing|corrupt|unsupported` exercises history
 paging, partial-log warnings, and each safe failure presentation.
 
+Use the saved Trackday Mode setting, or override it only for the current simulator run:
+
+```bash
+build/simulator/track_timer_simulator --scenario active --trackday-mode enabled
+build/simulator/track_timer_simulator --scenario active --trackday-mode disabled
+```
+
+`--trackday-mode saved|enabled|disabled` never writes the override to settings. Enabled
+mode suppresses live lap times and feedback while retaining the session countdown,
+estimated laps, GPS processing, logging, and post-session Review data.
+
 Render lifecycle states driven by the production session controller with:
 
 ```bash

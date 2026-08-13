@@ -68,6 +68,29 @@ int main()
     screen.update(active);
     assert(std::strcmp(lv_label_get_text(session_status), "FINAL 5 MIN") == 0);
 
+    active.trackday.visible = true;
+    active.trackday.estimate_available = true;
+    std::strcpy(active.trackday.countdown.data(), "15:00");
+    std::strcpy(active.trackday.estimated_laps.data(), "9.0 LAPS");
+    active.feedback.visible = true;
+    screen.update(active);
+    assert(!lv_obj_has_flag(screen.trackday_panel_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(screen.current_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(screen.previous_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(screen.best_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(lv_obj_has_flag(screen.feedback_panel_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(std::strcmp(lv_label_get_text(screen.trackday_estimate_object()),
+                       "9.0 LAPS") == 0);
+    assert(lv_obj_get_child_count(screen.trackday_countdown_object()) == 7);
+
+    active.trackday = {};
+    active.feedback = {};
+    screen.update(active);
+    assert(lv_obj_has_flag(screen.trackday_panel_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(!lv_obj_has_flag(screen.current_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(!lv_obj_has_flag(screen.previous_lap_object(), LV_OBJ_FLAG_HIDDEN));
+    assert(!lv_obj_has_flag(screen.best_lap_object(), LV_OBJ_FLAG_HIDDEN));
+
     lv_display_delete(display);
     lv_sdl_quit();
     lv_deinit();

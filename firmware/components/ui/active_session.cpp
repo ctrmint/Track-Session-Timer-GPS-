@@ -34,15 +34,47 @@ void format_delta(std::array<char, 32>& output, const std::int64_t delta_ms,
                   static_cast<unsigned long long>(absolute_ms % 1'000), suffix);
 }
 
+void format_estimated_laps(TrackdayModeViewModel& model,
+                           const std::int64_t remaining_ms,
+                           const std::uint16_t average_lap_seconds) noexcept
+{
+    model.estimate_available = remaining_ms != domain::kUnavailableTime &&
+                               average_lap_seconds > 0;
+    if (!model.estimate_available) {
+        std::snprintf(model.estimated_laps.data(), model.estimated_laps.size(), "--");
+        return;
+    }
+
+    const auto remaining_seconds = static_cast<std::uint64_t>(
+        std::max<std::int64_t>(0, remaining_ms) / 1'000);
+    if (remaining_seconds < static_cast<std::uint64_t>(average_lap_seconds) * 100U) {
+        const auto tenths =
+            (remaining_seconds * 10U + average_lap_seconds / 2U) /
+            average_lap_seconds;
+        std::snprintf(model.estimated_laps.data(), model.estimated_laps.size(),
+                      "%llu.%llu LAPS",
+                      static_cast<unsigned long long>(tenths / 10U),
+                      static_cast<unsigned long long>(tenths % 10U));
+        return;
+    }
+
+    const auto rounded =
+        (remaining_seconds + average_lap_seconds / 2U) / average_lap_seconds;
+    std::snprintf(model.estimated_laps.data(), model.estimated_laps.size(), "%llu LAPS",
+                  static_cast<unsigned long long>(rounded));
+}
+
 }  // namespace
 
 void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
-                                     const std::uint64_t now_ms) noexcept
+                                     const std::uint64_t now_ms,
+                                     const ActiveSessionDisplayConfig& display) noexcept
 {
     const auto starting_session = snapshot.session_active && !session_active_;
     const auto effective_now = starting_session ? now_ms : std::max(now_ms, last_update_ms_);
     last_update_ms_ = effective_now;
     view_.timing = present(snapshot);
+    view_.trackday = {};
 
     if (!snapshot.session_active) {
         session_active_ = false;
@@ -55,7 +87,20 @@ void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
 
     session_active_ = true;
     update_timeouts(effective_now);
-    detect_lap(snapshot, effective_now);
+    if (display.trackday_mode_enabled) {
+        view_.feedback = {};
+        view_.trackday.visible = true;
+        view_.trackday.countdown = view_.timing.session_remaining;
+        format_estimated_laps(view_.trackday, snapshot.session_remaining_ms,
+                              display.average_lap_seconds);
+        view_.timing.lap_label.fill('\0');
+        view_.timing.current_lap.fill('\0');
+        view_.timing.previous_lap.fill('\0');
+        view_.timing.best_lap.fill('\0');
+    }
+    else {
+        detect_lap(snapshot, effective_now);
+    }
     prior_lap_index_ = snapshot.lap_index;
     prior_best_lap_ms_ = snapshot.best_lap_ms;
     baseline_valid_ = true;

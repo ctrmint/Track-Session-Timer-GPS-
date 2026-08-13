@@ -27,6 +27,8 @@
 - FR-023: Duplicate crossings are suppressed using geometry, hysteresis and a minimum lap time.
 - FR-024: Current, previous and best lap are available to the UI.
 - FR-025: Every lap event is reproducible from the stored session trace.
+- FR-026: User can enable or disable Trackday Mode as a persisted setting.
+- FR-027: Trackday Mode shows countdown and estimated laps during a session while hiding live lap results; GNSS-derived laps remain logged and are available after the session stops.
 
 ### Storage
 

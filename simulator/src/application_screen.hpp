@@ -47,7 +47,8 @@ class ApplicationScreen {
                 std::uint64_t now_ms,
                 const ui::DisplayPolicyInput& display = {},
                 const settings::DeviceSettings* display_settings_override = nullptr,
-                const ui::ImuMeterInput& imu = {}) noexcept;
+                const ui::ImuMeterInput& imu = {},
+                const settings::DeviceSettings* active_settings_override = nullptr) noexcept;
     [[nodiscard]] ui::NavigationResult navigate(ui::NavigationAction action) noexcept;
     void synchronize_session(bool active) noexcept;
     void synchronize_workflow(const session::SessionSnapshot& snapshot,

@@ -83,6 +83,46 @@ int main()
     assert(std::strcmp(first_lap.view_model().feedback.comparison.data(),
                        "BEST ESTABLISHED") == 0);
 
+    ui::ActiveSessionController trackday;
+    auto hidden = active_snapshot();
+    trackday.update(hidden, 0, {100, true});
+    const auto& trackday_view = trackday.view_model();
+    assert(trackday_view.trackday.visible);
+    assert(trackday_view.trackday.estimate_available);
+    assert(std::strcmp(trackday_view.trackday.countdown.data(), "15:00") == 0);
+    assert(std::strcmp(trackday_view.trackday.estimated_laps.data(), "9.0 LAPS") == 0);
+    assert(trackday_view.timing.lap_label.front() == '\0');
+    assert(trackday_view.timing.current_lap[0] == '\0');
+    assert(trackday_view.timing.previous_lap[0] == '\0');
+    assert(trackday_view.timing.best_lap[0] == '\0');
+    assert(!trackday_view.feedback.visible);
+    assert(hidden.current_lap_ms == 54'000);
+    assert(hidden.previous_lap_ms == 1 * 60'000 + 41'000);
+    assert(hidden.best_lap_ms == 1 * 60'000 + 40'500);
+
+    hidden.lap_index = 8;
+    hidden.previous_lap_ms = 1 * 60'000 + 39'750;
+    hidden.best_lap_ms = hidden.previous_lap_ms;
+    trackday.update(hidden, 250, {100, true});
+    assert(!trackday.view_model().feedback.visible);
+    assert(trackday.view_model().timing.previous_lap[0] == '\0');
+    assert(hidden.previous_lap_ms == 1 * 60'000 + 39'750);
+
+    trackday.update(hidden, 300, {0, true});
+    assert(!trackday.view_model().trackday.estimate_available);
+    assert(std::strcmp(trackday.view_model().trackday.estimated_laps.data(), "--") == 0);
+    hidden.session_remaining_ms = 15 * 60'000;
+    trackday.update(hidden, 350, {7, true});
+    assert(std::strcmp(trackday.view_model().trackday.estimated_laps.data(), "129 LAPS") == 0);
+    hidden.session_remaining_ms = -5'000;
+    trackday.update(hidden, 400, {100, true});
+    assert(std::strcmp(trackday.view_model().trackday.estimated_laps.data(), "0.0 LAPS") == 0);
+
+    ui::ActiveSessionController standard_mode;
+    standard_mode.update(active_snapshot(), 0, {100, false});
+    assert(!standard_mode.view_model().trackday.visible);
+    assert(std::strcmp(standard_mode.view_model().timing.current_lap.data(), "0:54.000") == 0);
+
     ui::ActiveSessionController controls;
     controls.update(active_snapshot(), 0);
     controls.press_stop(100);
