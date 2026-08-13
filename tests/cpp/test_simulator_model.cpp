@@ -65,7 +65,10 @@ int main()
     assert(track_timer::simulator::parse_scenario("active", parsed));
     assert(parsed == ScenarioId::active);
     assert(!track_timer::simulator::parse_scenario("unknown", parsed));
-    assert(track_timer::simulator::next_scenario(ScenarioId::storage_failure) == ScenarioId::ready);
+    assert(track_timer::simulator::next_scenario(ScenarioId::storage_failure) ==
+           ScenarioId::lap_faster);
+    assert(track_timer::simulator::next_scenario(ScenarioId::lap_unavailable_best) ==
+           ScenarioId::ready);
 
     const auto narrow_lap = track_timer::simulator::layout_fixed_cell_text("1:11.111", 10);
     const auto wide_lap = track_timer::simulator::layout_fixed_cell_text("8:48.888", 10);

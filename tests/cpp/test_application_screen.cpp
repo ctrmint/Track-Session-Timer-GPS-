@@ -68,7 +68,8 @@ int main()
     diagnostics_snapshot.rtc = diagnostics::SubsystemState::ready;
     diagnostics_snapshot.touch = diagnostics::SubsystemState::ready;
     diagnostics_snapshot.display = diagnostics::SubsystemState::ready;
-    screen.update(ui::present_ready(snapshot), ui::DeviceViewModel{}, diagnostics_snapshot);
+    domain::UiSnapshot device_snapshot{};
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 0);
     lv_obj_update_layout(lv_screen_active());
 
     assert(screen.destination() == ui::Destination::ready);
@@ -204,6 +205,78 @@ int main()
     click(screen.ready_screen().button_for(ui::NavigationAction::start_session));
     assert(screen.destination() == ui::Destination::active);
     assert(screen.consume_start_request());
+    device_snapshot.session_active = true;
+    device_snapshot.session_remaining_ms = 15 * 60'000;
+    device_snapshot.current_lap_ms = 54'000;
+    device_snapshot.previous_lap_ms = 1 * 60'000 + 41'000;
+    device_snapshot.best_lap_ms = 1 * 60'000 + 40'500;
+    device_snapshot.lap_index = 7;
+    device_snapshot.gnss_health = domain::GnssHealth::good;
+    device_snapshot.logging_available = true;
+    screen.synchronize_session(true);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 1'000);
+    for (const auto action : {simulator::DeviceScreenAction::press_stop,
+                              simulator::DeviceScreenAction::cancel_stop,
+                              simulator::DeviceScreenAction::confirm_stop}) {
+        auto* button = screen.device_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+
+    auto* stop_button = screen.device_screen().button_for(
+        simulator::DeviceScreenAction::press_stop);
+    assert(lv_obj_send_event(stop_button, LV_EVENT_CLICKED, nullptr) == LV_RESULT_OK);
+    assert(lv_obj_send_event(stop_button, LV_EVENT_GESTURE, nullptr) == LV_RESULT_OK);
+    assert(screen.active_session().view_model().stop.state == ui::StopControlState::idle);
+    assert(!screen.consume_stop_request());
+
+    assert(lv_obj_send_event(stop_button, LV_EVENT_PRESSED, nullptr) == LV_RESULT_OK);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 2'499);
+    assert(lv_obj_send_event(screen.device_screen().button_for(
+                                 simulator::DeviceScreenAction::release_stop),
+                             LV_EVENT_RELEASED, nullptr) == LV_RESULT_OK);
+    assert(screen.active_session().view_model().stop.state == ui::StopControlState::idle);
+    assert(!screen.consume_stop_request());
+
+    assert(lv_obj_send_event(screen.device_screen().button_for(
+                                 simulator::DeviceScreenAction::press_stop),
+                             LV_EVENT_PRESSED, nullptr) == LV_RESULT_OK);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 4'000);
+    assert(lv_obj_send_event(screen.device_screen().button_for(
+                                 simulator::DeviceScreenAction::release_stop),
+                             LV_EVENT_RELEASED, nullptr) == LV_RESULT_OK);
+    assert(screen.active_session().view_model().stop.state ==
+           ui::StopControlState::confirming);
+    click(screen.device_screen().button_for(simulator::DeviceScreenAction::cancel_stop));
+    assert(screen.active_session().view_model().stop.state == ui::StopControlState::idle);
+
+    assert(lv_obj_send_event(screen.device_screen().button_for(
+                                 simulator::DeviceScreenAction::press_stop),
+                             LV_EVENT_PRESSED, nullptr) == LV_RESULT_OK);
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 5'500);
+    assert(lv_obj_send_event(screen.device_screen().button_for(
+                                 simulator::DeviceScreenAction::release_stop),
+                             LV_EVENT_RELEASED, nullptr) == LV_RESULT_OK);
+    click(screen.device_screen().button_for(simulator::DeviceScreenAction::confirm_stop));
+    assert(screen.consume_stop_request());
+
+    device_snapshot.lap_index = 8;
+    device_snapshot.previous_lap_ms = 1 * 60'000 + 39'750;
+    device_snapshot.best_lap_ms = device_snapshot.previous_lap_ms;
+    screen.update(ui::present_ready(snapshot), device_snapshot, diagnostics_snapshot, 5'750);
+    assert(screen.active_session().view_model().feedback.kind ==
+           ui::LapFeedbackKind::faster);
+    lv_obj_update_layout(lv_screen_active());
+    assert(!lv_obj_has_flag(screen.device_screen().feedback_panel_object(),
+                            LV_OBJ_FLAG_HIDDEN));
+    const auto* feedback_panel = screen.device_screen().feedback_panel_object();
+    const auto* session_panel = screen.device_screen().session_panel_object();
+    assert(lv_obj_get_y(feedback_panel) + lv_obj_get_height(feedback_panel) <=
+           lv_obj_get_y(session_panel));
+    assert(std::strcmp(lv_label_get_text(
+                           screen.device_screen().feedback_comparison_object()),
+                       "-0.750 FASTER") == 0);
     assert(!screen.navigate(ui::NavigationAction::open_setup).accepted);
     assert(!screen.navigate(ui::NavigationAction::open_diagnostics).accepted);
     assert(screen.destination() == ui::Destination::active);

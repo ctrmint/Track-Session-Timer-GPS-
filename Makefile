@@ -15,13 +15,14 @@ LOG_FORMAT_TEST_BINARY := build/host/log_format_test
 ASYNC_LOGGER_TEST_BINARY := build/host/async_logger_test
 SESSION_REVIEW_TEST_BINARY := build/host/session_review_test
 DIAGNOSTICS_TEST_BINARY := build/host/diagnostics_test
+ACTIVE_SESSION_TEST_BINARY := build/host/active_session_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test ui-foundation-test navigation-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -168,6 +169,17 @@ diagnostics-test:
 		simulator/src/diagnostics_fixtures.cpp \
 		tests/cpp/test_diagnostics.cpp -o $(DIAGNOSTICS_TEST_BINARY)
 	$(DIAGNOSTICS_TEST_BINARY)
+
+active-session-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/ui/include \
+		firmware/components/ui/active_session.cpp \
+		firmware/components/ui/foundation.cpp \
+		firmware/components/ui/presenter.cpp \
+		tests/cpp/test_active_session.cpp -o $(ACTIVE_SESSION_TEST_BINARY)
+	$(ACTIVE_SESSION_TEST_BINARY)
 
 ui-foundation-test:
 	mkdir -p build/host

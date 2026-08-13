@@ -30,6 +30,7 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 
 add_library(
     track_timer_simulator_model
+    ../firmware/components/ui/active_session.cpp
     ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/navigation.cpp
@@ -120,6 +121,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_active_session_test
+        ../tests/cpp/test_active_session.cpp
+    )
+    target_link_libraries(
+        track_timer_active_session_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_active_session_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-active-session-model
+        COMMAND track_timer_active_session_test
+    )
+    set_tests_properties(
+        simulator-active-session-model
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Deterministic lap feedback and hold-confirm stop controls passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_diagnostics_test
         ../tests/cpp/test_diagnostics.cpp
@@ -614,6 +640,28 @@ if(BUILD_TESTING)
             PASS_REGULAR_EXPRESSION "scenario=active.*render-frames=[1-9][0-9]*.*lvgl-maximum-bytes=[1-9][0-9]*.*display-buffer-bytes=96000"
             TIMEOUT 20
     )
+
+    function(add_lap_feedback_smoke scenario expected)
+        add_test(
+            NAME "simulator-${scenario}-feedback"
+            COMMAND track_timer_simulator
+                --headless
+                --scenario "${scenario}"
+                --frames 8
+                --snapshot "${CMAKE_CURRENT_BINARY_DIR}/${scenario}.ppm"
+        )
+        set_tests_properties(
+            "simulator-${scenario}-feedback"
+            PROPERTIES
+                ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+                PASS_REGULAR_EXPRESSION "scenario=${scenario}.*lap-feedback=${expected}"
+                TIMEOUT 20
+        )
+    endfunction()
+
+    add_lap_feedback_smoke(lap-faster faster)
+    add_lap_feedback_smoke(lap-slower slower)
+    add_lap_feedback_smoke(lap-unavailable-best unavailable-best)
 
     add_test(
         NAME simulator-gnss-loss-smoke

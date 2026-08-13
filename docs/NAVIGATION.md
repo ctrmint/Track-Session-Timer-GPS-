@@ -20,6 +20,20 @@ Pointer clicks, touchscreen taps, keyboard activation, and injected abstract act
 all dispatch `ui::NavigationAction`; there is no separate simulator-only navigation
 logic. Host tests exercise every accepted return path and every active-session guard.
 
+## Active session
+
+When a lap completes, the current-lap region shows the completed duration and its
+faster/slower comparison for a deterministic 1.8 seconds. A first valid lap states
+`BEST ESTABLISHED` instead of inventing a comparison. The session countdown remains
+in its own persistent panel throughout the feedback interval, and another completed
+lap replaces the prior feedback with a fresh bounded interval.
+
+Stopping is deliberately separate from ordinary navigation: the driver must hold the
+Stop control for 1.5 seconds, release it, and then choose Stop on the confirmation
+panel within five seconds. Short holds, press-loss events, Cancel, and confirmation
+timeouts return to timing without emitting a stop request. Setup, Review, Diagnostics,
+Back, taps, and swipes remain unable to end or leave an active session.
+
 ## Ready dashboard
 
 The dashboard shows:

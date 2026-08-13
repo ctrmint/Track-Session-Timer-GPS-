@@ -38,14 +38,17 @@ Defaults controls. Track Selection explains selected, suggested, ambiguous, miss
 invalid, and unavailable states and always offers a timer-only path. Saved simulator
 settings, including the selected track, live at
 `/tmp/track-session-timer-simulator/settings-v2.bin` on Linux, outside the checkout.
-Review shows bounded session history and lap pages, with best/previous emphasis and
+The active timer shows bounded completed-lap feedback while keeping session time
+visible. Stopping requires a 1.5-second hold, release, and separate confirmation;
+short holds and cancelled presses continue timing. Review shows bounded session history and lap pages, with best/previous emphasis and
 explicit REST/READY actions. Diagnostics pages through system, GNSS, logging, and
 peripheral health from immutable backend snapshots. All inputs dispatch the same
 deterministic navigation actions.
 
 The ready scenario deliberately keeps GNSS in acquisition. It demonstrates that the
 session timer remains available while lap timing is unavailable. Use `--scenario`
-for deterministic active, GNSS-loss, and storage-failure test states.
+for deterministic active, GNSS-loss, storage-failure, faster-lap, slower-lap, and
+first-lap/no-prior-best test states.
 
 Run deterministic headless smoke tests:
 
@@ -103,6 +106,17 @@ Use `--diagnostics-state normal|degraded|missing|recovery` with
 `--screen diagnostics` to render stationary subsystem health and retained fault
 counters without physical hardware.
 
+Capture each lap-feedback state without hardware:
+
+```bash
+build/simulator/track_timer_simulator --headless --scenario lap-faster --frames 8 \
+  --snapshot build/simulator/lap-faster.ppm
+build/simulator/track_timer_simulator --headless --scenario lap-slower --frames 8 \
+  --snapshot build/simulator/lap-slower.ppm
+build/simulator/track_timer_simulator --headless --scenario lap-unavailable-best --frames 8 \
+  --snapshot build/simulator/lap-unavailable-best.ppm
+```
+
 ## Peripheral replay
 
 The simulator provides deterministic implementations of the shared clock, GNSS,
@@ -141,6 +155,9 @@ rules.
 | `active` | 20/25 Hz GNSS, 100 Hz IMU, RTC progression, and ready storage |
 | `gnss-loss` | loss for 2 s, stale fixes for 1 s, corrupt fixes for 1 s, then recovery |
 | `storage-failure` | missing, full, slow, and write-failed storage for 1 s each, then recovery |
+| `lap-faster` | completed lap is 0.750 s faster than the previous best |
+| `lap-slower` | completed lap is 1.750 s slower than the previous best |
+| `lap-unavailable-best` | first completed lap establishes a best without a false delta |
 
 The session countdown continues through every failure. GNSS quality and logging
 availability change on the device screen, while the backend diagnostics retain

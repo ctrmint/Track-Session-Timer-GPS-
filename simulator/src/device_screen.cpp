@@ -56,7 +56,9 @@ constexpr std::int32_t centered_lap_field_x(const std::int32_t area_x,
 
 }  // namespace
 
-DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
+DeviceScreen::DeviceScreen(lv_obj_t* root, const DeviceScreenCallback callback,
+                           void* callback_context) noexcept
+    : callback_(callback), callback_context_(callback_context), root_(root)
 {
     ui::style_screen(root_);
     lv_obj_add_flag(root_, LV_OBJ_FLAG_CLICKABLE);
@@ -77,16 +79,35 @@ DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
     lv_obj_set_pos(accent_line_, 0, 62);
     lv_obj_set_size(accent_line_, 600, 6);
 
-    auto* current_caption = ui::create_label(root_, ui::Typography::caption,
-                                             ui::color::text_secondary);
-    lv_label_set_text(current_caption, "CURRENT LAP");
-    lv_obj_set_pos(current_caption, 0, 86);
-    lv_obj_set_size(current_caption, 600, 24);
+    current_caption_ = ui::create_label(root_, ui::Typography::caption,
+                                        ui::color::text_secondary);
+    lv_label_set_text(current_caption_, "CURRENT LAP");
+    lv_obj_set_pos(current_caption_, 0, 86);
+    lv_obj_set_size(current_caption_, 600, 24);
 
     current_lap_label_.create(root_, &lv_font_montserrat_48, lv_color_white(),
                               kLapTimeCellCount, kLargeLapTimeCellWidths, 62);
     current_lap_label_.set_position(
         centered_lap_field_x(0, 600, current_lap_label_.width(), 34), 112);
+
+    feedback_panel_ = lv_obj_create(root_);
+    ui::style_flat_panel(feedback_panel_, ui::color::surface, 12);
+    lv_obj_set_pos(feedback_panel_, 20, 78);
+    lv_obj_set_size(feedback_panel_, 560, 116);
+    feedback_heading_ = ui::create_label(feedback_panel_, ui::Typography::caption,
+                                         ui::color::text_secondary);
+    lv_obj_set_pos(feedback_heading_, 18, 9);
+    lv_obj_set_size(feedback_heading_, 170, 22);
+    feedback_time_ = ui::create_label(feedback_panel_, ui::Typography::timer_secondary,
+                                      ui::color::text_primary);
+    lv_obj_set_pos(feedback_time_, 18, 40);
+    lv_obj_set_size(feedback_time_, 250, 42);
+    feedback_comparison_ = ui::create_label(feedback_panel_, ui::Typography::body,
+                                            ui::color::caution_bright,
+                                            LV_TEXT_ALIGN_RIGHT);
+    lv_obj_set_pos(feedback_comparison_, 270, 44);
+    lv_obj_set_size(feedback_comparison_, 270, 34);
+    lv_obj_add_flag(feedback_panel_, LV_OBJ_FLAG_HIDDEN);
 
     auto* previous_caption = ui::create_label(root_, ui::Typography::caption,
                                               ui::color::text_secondary);
@@ -127,16 +148,48 @@ DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
     session_caption_ = ui::create_label(session_panel_, ui::Typography::body,
                                         ui::color::text_primary, LV_TEXT_ALIGN_LEFT);
     lv_label_set_text(session_caption_, "SESSION");
-    lv_obj_set_pos(session_caption_, 30, 16);
+    lv_obj_set_pos(session_caption_, 180, 16);
     lv_obj_set_size(session_caption_, 200, 30);
 
     session_label_.create(session_panel_, &lv_font_montserrat_48, lv_color_white(),
                           kSessionTimeCellCount, kSessionTimeCellWidths, 60);
     session_label_.set_position(570 - session_label_.width(), 25);
+
+    stop_button_ = lv_button_create(session_panel_);
+    ui::style_flat_panel(stop_button_, ui::color::critical, 10);
+    lv_obj_set_pos(stop_button_, 16, 48);
+    lv_obj_set_size(stop_button_, 148, 56);
+    stop_label_ = ui::create_label(stop_button_, ui::Typography::caption,
+                                   ui::color::text_primary);
+    lv_obj_center(stop_label_);
+    lv_obj_add_event_cb(stop_button_, stop_button_event, LV_EVENT_ALL, this);
+
+    cancel_button_ = lv_button_create(session_panel_);
+    ui::style_flat_panel(cancel_button_, ui::color::surface, 10);
+    lv_obj_set_pos(cancel_button_, 16, 48);
+    lv_obj_set_size(cancel_button_, 70, 56);
+    auto* cancel_label = ui::create_label(cancel_button_, ui::Typography::caption,
+                                          ui::color::text_primary);
+    lv_label_set_text(cancel_label, "CANCEL");
+    lv_obj_center(cancel_label);
+    lv_obj_add_event_cb(cancel_button_, confirmation_button_event, LV_EVENT_CLICKED, this);
+
+    confirm_button_ = lv_button_create(session_panel_);
+    ui::style_flat_panel(confirm_button_, ui::color::critical, 10);
+    lv_obj_set_pos(confirm_button_, 94, 48);
+    lv_obj_set_size(confirm_button_, 70, 56);
+    auto* confirm_label = ui::create_label(confirm_button_, ui::Typography::caption,
+                                           ui::color::text_primary);
+    lv_label_set_text(confirm_label, "STOP");
+    lv_obj_center(confirm_label);
+    lv_obj_add_event_cb(confirm_button_, confirmation_button_event, LV_EVENT_CLICKED, this);
+    lv_obj_add_flag(cancel_button_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(confirm_button_, LV_OBJ_FLAG_HIDDEN);
 }
 
-void DeviceScreen::update(const ui::DeviceViewModel& model) noexcept
+void DeviceScreen::update(const ui::ActiveSessionViewModel& active) noexcept
 {
+    const auto& model = active.timing;
     lv_label_set_text(lap_label_, model.lap_label.data());
     lv_label_set_text(gnss_label_, gnss_indicator_text(model.gnss_health));
     lv_obj_set_style_text_color(gnss_label_, lv_color_hex(gnss_indicator_color(model.gnss_health)),
@@ -159,6 +212,120 @@ void DeviceScreen::update(const ui::DeviceViewModel& model) noexcept
     lv_obj_set_style_bg_color(
         logging_badge_,
         lv_color_hex(logging ? ui::color::logging : ui::color::logging_unavailable), 0);
+
+    if (active.feedback.visible) {
+        lv_obj_add_flag(current_caption_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(current_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(feedback_panel_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(feedback_heading_, active.feedback.heading.data());
+        lv_label_set_text(feedback_time_, active.feedback.completed_lap.data());
+        lv_label_set_text(feedback_comparison_, active.feedback.comparison.data());
+        lv_obj_set_style_text_color(feedback_comparison_,
+                                    lv_color_hex(active.feedback.color_rgb), 0);
+    }
+    else {
+        lv_obj_remove_flag(current_caption_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(current_lap_label_.object(), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(feedback_panel_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    lv_label_set_text(stop_label_, active.stop.hold_label.data());
+    if (active.stop.hold_visible) {
+        lv_obj_remove_flag(stop_button_, LV_OBJ_FLAG_HIDDEN);
+    }
+    else {
+        lv_obj_add_flag(stop_button_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (active.stop.state == ui::StopControlState::requested) {
+        lv_obj_add_state(stop_button_, LV_STATE_DISABLED);
+    }
+    else {
+        lv_obj_remove_state(stop_button_, LV_STATE_DISABLED);
+    }
+    for (auto* button : {cancel_button_, confirm_button_}) {
+        if (active.stop.confirmation_visible) {
+            lv_obj_remove_flag(button, LV_OBJ_FLAG_HIDDEN);
+        }
+        else {
+            lv_obj_add_flag(button, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+void DeviceScreen::add_buttons_to_group(lv_group_t* group) noexcept
+{
+    lv_group_add_obj(group, stop_button_);
+    lv_group_add_obj(group, cancel_button_);
+    lv_group_add_obj(group, confirm_button_);
+}
+
+lv_obj_t* DeviceScreen::button_for(const DeviceScreenAction action) const noexcept
+{
+    switch (action) {
+    case DeviceScreenAction::press_stop:
+    case DeviceScreenAction::release_stop:
+    case DeviceScreenAction::cancel_stop_hold:
+        return stop_button_;
+    case DeviceScreenAction::cancel_stop:
+        return cancel_button_;
+    case DeviceScreenAction::confirm_stop:
+        return confirm_button_;
+    }
+    return nullptr;
+}
+
+lv_obj_t* DeviceScreen::feedback_panel_object() const noexcept
+{
+    return feedback_panel_;
+}
+
+lv_obj_t* DeviceScreen::feedback_comparison_object() const noexcept
+{
+    return feedback_comparison_;
+}
+
+lv_obj_t* DeviceScreen::session_panel_object() const noexcept
+{
+    return session_panel_;
+}
+
+void DeviceScreen::stop_button_event(lv_event_t* event) noexcept
+{
+    auto* screen = static_cast<DeviceScreen*>(lv_event_get_user_data(event));
+    if (screen == nullptr) {
+        return;
+    }
+    switch (lv_event_get_code(event)) {
+    case LV_EVENT_PRESSED:
+        screen->emit(DeviceScreenAction::press_stop);
+        break;
+    case LV_EVENT_RELEASED:
+        screen->emit(DeviceScreenAction::release_stop);
+        break;
+    case LV_EVENT_PRESS_LOST:
+        screen->emit(DeviceScreenAction::cancel_stop_hold);
+        break;
+    default:
+        break;
+    }
+}
+
+void DeviceScreen::confirmation_button_event(lv_event_t* event) noexcept
+{
+    auto* screen = static_cast<DeviceScreen*>(lv_event_get_user_data(event));
+    auto* target = lv_event_get_target_obj(event);
+    if (screen == nullptr || target == nullptr) {
+        return;
+    }
+    screen->emit(target == screen->confirm_button_ ? DeviceScreenAction::confirm_stop
+                                                   : DeviceScreenAction::cancel_stop);
+}
+
+void DeviceScreen::emit(const DeviceScreenAction action) noexcept
+{
+    if (callback_ != nullptr) {
+        callback_(action, callback_context_);
+    }
 }
 
 }  // namespace track_timer::simulator

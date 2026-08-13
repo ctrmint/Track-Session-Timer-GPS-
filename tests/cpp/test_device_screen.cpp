@@ -47,10 +47,11 @@ int main()
                                  LV_SYMBOL_GPS " STALE"},
     };
 
-    track_timer::ui::DeviceViewModel model{};
+    track_timer::ui::ActiveSessionViewModel active{};
+    auto& model = active.timing;
     for (const auto& expectation : expectations) {
         model.gnss_health = expectation.health;
-        screen.update(model);
+        screen.update(active);
         assert(std::strcmp(lv_label_get_text(indicator), expectation.text) == 0);
         assert(lv_color_eq(lv_obj_get_style_text_color(indicator, LV_PART_MAIN),
                            lv_color_hex(expectation.color_rgb)));
@@ -64,7 +65,7 @@ int main()
     std::strcpy(model.session_status.data(), "FINAL 5 MIN");
     model.accent_rgb = 0xD32F2F;
     model.accent_text_rgb = 0xFFFFFF;
-    screen.update(model);
+    screen.update(active);
     assert(std::strcmp(lv_label_get_text(session_status), "FINAL 5 MIN") == 0);
 
     lv_display_delete(display);

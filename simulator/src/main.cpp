@@ -146,7 +146,8 @@ Options parse_options(const int argc, char** argv)
                          "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
                          "[--diagnostics-state STATE] [--snapshot FILE]\n"
-                         "Scenarios: ready, active, gnss-loss, storage-failure\n"
+                         "Scenarios: ready, active, gnss-loss, storage-failure, "
+                         "lap-faster, lap-slower, lap-unavailable-best\n"
                          "Use pointer/touch controls or keyboard focus and Enter to navigate.\n";
             std::exit(0);
         }
@@ -218,6 +219,9 @@ void update_screen(ApplicationContext& context)
     if (context.screen->consume_start_request()) {
         context.player.reset(track_timer::simulator::ScenarioId::active);
     }
+    if (context.screen->consume_stop_request()) {
+        context.player.stop_session();
+    }
 
     const auto& active_snapshot = context.player.snapshot();
     context.screen->synchronize_session(active_snapshot.session_active);
@@ -274,8 +278,8 @@ void update_screen(ApplicationContext& context)
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.player.diagnostics(),
         context.player.device().storage().status(), context.player.logger_metrics(),
         context.profiler.metrics());
-    context.screen->update(track_timer::ui::present_ready(ready),
-                           track_timer::ui::present(active_snapshot), diagnostics);
+    context.screen->update(track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
+                           static_cast<std::uint64_t>(context.player.elapsed_ms()));
 }
 
 void render_screen(ApplicationContext& context)
@@ -459,6 +463,12 @@ int run(const Options& options)
               << " diagnostics-fixture="
               << track_timer::simulator::diagnostics_fixture_name(
                      options.diagnostics_fixture)
+              << " lap-feedback="
+              << track_timer::ui::lap_feedback_kind_name(
+                     screen.active_session().view_model().feedback.kind)
+              << " stop-control="
+              << track_timer::ui::stop_control_state_name(
+                     screen.active_session().view_model().stop.state)
               << " render-frames=" << render_metrics.frame_count
               << " render-average-us=" << render_metrics.average_render_us()
               << " render-maximum-us=" << render_metrics.maximum_render_us

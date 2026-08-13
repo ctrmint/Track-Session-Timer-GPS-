@@ -5,6 +5,7 @@
 #include "track_timer/settings/settings.hpp"
 #include "track_timer/logger/summary_provider.hpp"
 #include "track_timer/track/matching.hpp"
+#include "track_timer/ui/active_session.hpp"
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/diagnostics.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
@@ -35,13 +36,15 @@ class ApplicationScreen {
                       const track::TrackMatchResult& track_match,
                       logger::SessionSummaryProvider* summary_provider) noexcept;
 
-    void update(const ui::ReadyViewModel& ready, const ui::DeviceViewModel& active,
-                const diagnostics::DiagnosticsSnapshot& diagnostics) noexcept;
+    void update(const ui::ReadyViewModel& ready, const domain::UiSnapshot& active,
+                const diagnostics::DiagnosticsSnapshot& diagnostics,
+                std::uint64_t now_ms) noexcept;
     [[nodiscard]] ui::NavigationResult navigate(ui::NavigationAction action) noexcept;
     void synchronize_session(bool active) noexcept;
     void update_track_match(const track::TrackMatchResult& match) noexcept;
     void open_setup_page(SetupPage page) noexcept;
     [[nodiscard]] bool consume_start_request() noexcept;
+    [[nodiscard]] bool consume_stop_request() noexcept;
     [[nodiscard]] bool consume_rest_request() noexcept;
     [[nodiscard]] bool consume_ready_request() noexcept;
     void add_controls_to_group(lv_group_t* group) noexcept;
@@ -57,6 +60,8 @@ class ApplicationScreen {
     [[nodiscard]] const ui::SessionReviewController& session_review() const noexcept;
     [[nodiscard]] ui::DiagnosticsScreen& diagnostics_screen() noexcept;
     [[nodiscard]] const ui::DiagnosticsController& diagnostics() const noexcept;
+    [[nodiscard]] DeviceScreen& device_screen() noexcept;
+    [[nodiscard]] const ui::ActiveSessionController& active_session() const noexcept;
     [[nodiscard]] SetupPage setup_page() const noexcept;
 
     ApplicationScreen(const ApplicationScreen&) = delete;
@@ -69,6 +74,7 @@ class ApplicationScreen {
     static void track_action(ui::TrackSelectionAction action, void* context) noexcept;
     static void review_action(ui::SessionReviewAction action, void* context) noexcept;
     static void diagnostics_action(ui::DiagnosticsAction action, void* context) noexcept;
+    static void device_action(DeviceScreenAction action, void* context) noexcept;
     void show_destination() noexcept;
     void refresh_settings() noexcept;
     void refresh_track_selection() noexcept;
@@ -86,6 +92,7 @@ class ApplicationScreen {
     bool rest_requested_{false};
     bool ready_requested_{false};
     bool session_active_{false};
+    std::uint64_t active_now_ms_{0};
     lv_obj_t* ready_root_{nullptr};
     lv_obj_t* active_root_{nullptr};
     lv_obj_t* setup_menu_root_{nullptr};
@@ -94,6 +101,7 @@ class ApplicationScreen {
     lv_obj_t* session_review_root_{nullptr};
     lv_obj_t* diagnostics_root_{nullptr};
     ui::ReadyScreen ready_screen_;
+    ui::ActiveSessionController active_session_{};
     DeviceScreen active_screen_;
     ui::SetupMenuScreen setup_menu_screen_;
     ui::SettingsEditor settings_editor_{};
