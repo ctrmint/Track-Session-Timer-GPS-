@@ -31,6 +31,7 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 add_library(
     track_timer_simulator_model
     ../firmware/components/ui/foundation.cpp
+    ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/ui/session_review.cpp
@@ -42,6 +43,7 @@ add_library(
     ../firmware/components/track/definition.cpp
     ../firmware/components/track/matching.cpp
     src/device_backends.cpp
+    src/diagnostics_fixtures.cpp
     src/file_settings_store.cpp
     src/fixed_cell_text.cpp
     src/scenario.cpp
@@ -53,6 +55,7 @@ target_include_directories(
     PUBLIC
         include
         ../firmware/components/board/include
+        ../firmware/components/diagnostics/include
         ../firmware/components/domain/include
         ../firmware/components/logger/include
         ../firmware/components/settings/include
@@ -63,6 +66,7 @@ target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 
 add_library(
     track_timer_lvgl_ui
+    ../firmware/components/ui/diagnostics_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     ../firmware/components/ui/ready_screen.cpp
     ../firmware/components/ui/session_review_screen.cpp
@@ -73,6 +77,7 @@ add_library(
 target_include_directories(
     track_timer_lvgl_ui
     PUBLIC
+        ../firmware/components/diagnostics/include
         ../firmware/components/domain/include
         ../firmware/components/logger/include
         ../firmware/components/settings/include
@@ -115,6 +120,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_diagnostics_test
+        ../tests/cpp/test_diagnostics.cpp
+    )
+    target_link_libraries(
+        track_timer_diagnostics_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_diagnostics_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-diagnostics-model
+        COMMAND track_timer_diagnostics_test
+    )
+    set_tests_properties(
+        simulator-diagnostics-model
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Immutable diagnostics pages and normal/degraded/missing/recovery states passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_session_review_test
         ../tests/cpp/test_session_review.cpp
@@ -546,6 +576,30 @@ if(BUILD_TESTING)
     add_review_state_smoke(missing storage-unavailable)
     add_review_state_smoke(corrupt corrupt)
     add_review_state_smoke(unsupported unsupported-version)
+
+    function(add_diagnostics_state_smoke fixture expected)
+        add_test(
+            NAME "simulator-diagnostics-${fixture}-screen"
+            COMMAND track_timer_simulator
+                --headless
+                --scenario ready
+                --screen diagnostics
+                --diagnostics-state "${fixture}"
+                --frames 4
+        )
+        set_tests_properties(
+            "simulator-diagnostics-${fixture}-screen"
+            PROPERTIES
+                ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+                PASS_REGULAR_EXPRESSION "scenario=ready.*screen=diagnostics.*diagnostics-state=${expected}.*diagnostics-fixture=${fixture}"
+                TIMEOUT 20
+        )
+    endfunction()
+
+    add_diagnostics_state_smoke(normal normal)
+    add_diagnostics_state_smoke(degraded degraded)
+    add_diagnostics_state_smoke(missing missing)
+    add_diagnostics_state_smoke(recovery recovered)
     set_tests_properties(
         simulator-ready-smoke
         PROPERTIES

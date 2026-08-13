@@ -28,44 +28,28 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       active_root_(make_screen_root(root)), setup_menu_root_(make_screen_root(root)),
       settings_root_(make_screen_root(root)), track_selection_root_(make_screen_root(root)),
       session_review_root_(make_screen_root(root)),
-      destination_root_(make_screen_root(root)),
+      diagnostics_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this), active_screen_(active_root_),
       setup_menu_screen_(setup_menu_root_, setup_action, this),
       settings_screen_(settings_root_, settings_action, this),
       track_selection_screen_(track_selection_root_, track_action, this),
-      session_review_screen_(session_review_root_, review_action, this)
+      session_review_screen_(session_review_root_, review_action, this),
+      diagnostics_screen_(diagnostics_root_, diagnostics_action, this)
 {
-    destination_title_ = ui::create_label(destination_root_, ui::Typography::heading,
-                                          ui::color::text_primary);
-    lv_obj_set_pos(destination_title_, 20, 70);
-    lv_obj_set_size(destination_title_, 560, 40);
-
-    destination_message_ = ui::create_label(destination_root_, ui::Typography::body,
-                                            ui::color::text_secondary);
-    lv_label_set_text(destination_message_, "Screen content is delivered by its linked issue");
-    lv_obj_set_pos(destination_message_, 40, 155);
-    lv_obj_set_size(destination_message_, 520, 70);
-    lv_label_set_long_mode(destination_message_, LV_LABEL_LONG_WRAP);
-
-    back_button_ = lv_button_create(destination_root_);
-    ui::style_flat_panel(back_button_, ui::color::surface, 12);
-    lv_obj_set_pos(back_button_, 170, 330);
-    lv_obj_set_size(back_button_, 260, 80);
-    lv_obj_add_flag(back_button_, LV_OBJ_FLAG_EVENT_BUBBLE);
-    auto* back_label = ui::create_label(back_button_, ui::Typography::body,
-                                       ui::color::text_primary);
-    lv_label_set_text(back_label, LV_SYMBOL_LEFT " BACK TO READY");
-    lv_obj_center(back_label);
-    lv_obj_add_event_cb(back_button_, back_event, LV_EVENT_CLICKED, this);
-
     show_destination();
 }
 
 void ApplicationScreen::update(const ui::ReadyViewModel& ready,
-                               const ui::DeviceViewModel& active) noexcept
+                               const ui::DeviceViewModel& active,
+                               const diagnostics::DiagnosticsSnapshot& diagnostics) noexcept
 {
     ready_screen_.update(ready);
     active_screen_.update(active);
+    diagnostics_snapshot_ = diagnostics;
+    diagnostics_.update(diagnostics_snapshot_);
+    if (navigation_.destination() == ui::Destination::diagnostics) {
+        refresh_diagnostics();
+    }
 }
 
 ui::NavigationResult ApplicationScreen::navigate(const ui::NavigationAction action) noexcept
@@ -80,9 +64,17 @@ ui::NavigationResult ApplicationScreen::navigate(const ui::NavigationAction acti
         session_review_.begin(summary_provider_);
         refresh_session_review();
     }
+    else if (result.accepted && action == ui::NavigationAction::open_diagnostics) {
+        diagnostics_.begin(diagnostics_snapshot_);
+        refresh_diagnostics();
+    }
     else if (previous == ui::Destination::review &&
              result.current != ui::Destination::review) {
         session_review_.close();
+    }
+    else if (previous == ui::Destination::diagnostics &&
+             result.current != ui::Destination::diagnostics) {
+        diagnostics_.close();
     }
     show_destination();
     return result;
@@ -149,7 +141,7 @@ void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
     settings_screen_.add_buttons_to_group(group);
     track_selection_screen_.add_buttons_to_group(group);
     session_review_screen_.add_buttons_to_group(group);
-    lv_group_add_obj(group, back_button_);
+    diagnostics_screen_.add_buttons_to_group(group);
 }
 
 ui::Destination ApplicationScreen::destination() const noexcept
@@ -197,14 +189,19 @@ const ui::SessionReviewController& ApplicationScreen::session_review() const noe
     return session_review_;
 }
 
+ui::DiagnosticsScreen& ApplicationScreen::diagnostics_screen() noexcept
+{
+    return diagnostics_screen_;
+}
+
+const ui::DiagnosticsController& ApplicationScreen::diagnostics() const noexcept
+{
+    return diagnostics_;
+}
+
 SetupPage ApplicationScreen::setup_page() const noexcept
 {
     return setup_page_;
-}
-
-lv_obj_t* ApplicationScreen::back_button_object() const noexcept
-{
-    return back_button_;
 }
 
 void ApplicationScreen::ready_navigation(const ui::NavigationAction action,
@@ -342,12 +339,25 @@ void ApplicationScreen::review_action(const ui::SessionReviewAction action,
     screen->refresh_session_review();
 }
 
-void ApplicationScreen::back_event(lv_event_t* event) noexcept
+void ApplicationScreen::diagnostics_action(const ui::DiagnosticsAction action,
+                                           void* context) noexcept
 {
-    auto* screen = static_cast<ApplicationScreen*>(lv_event_get_user_data(event));
-    if (screen != nullptr) {
-        (void)screen->navigate(ui::NavigationAction::back);
+    auto* screen = static_cast<ApplicationScreen*>(context);
+    if (screen == nullptr) {
+        return;
     }
+    switch (action) {
+    case ui::DiagnosticsAction::previous_page:
+        screen->diagnostics_.previous_page();
+        break;
+    case ui::DiagnosticsAction::next_page:
+        screen->diagnostics_.next_page();
+        break;
+    case ui::DiagnosticsAction::back:
+        (void)screen->navigate(ui::NavigationAction::back);
+        return;
+    }
+    screen->refresh_diagnostics();
 }
 
 void ApplicationScreen::show_destination() noexcept
@@ -358,7 +368,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(settings_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(track_selection_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(diagnostics_root_, LV_OBJ_FLAG_HIDDEN);
 
     switch (navigation_.destination()) {
     case ui::Destination::ready:
@@ -382,8 +392,7 @@ void ApplicationScreen::show_destination() noexcept
         lv_obj_remove_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     case ui::Destination::diagnostics:
-        lv_label_set_text(destination_title_, LV_SYMBOL_WARNING " DIAGNOSTICS");
-        lv_obj_remove_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(diagnostics_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     }
 }
@@ -401,6 +410,11 @@ void ApplicationScreen::refresh_track_selection() noexcept
 void ApplicationScreen::refresh_session_review() noexcept
 {
     session_review_screen_.update(session_review_.view_model());
+}
+
+void ApplicationScreen::refresh_diagnostics() noexcept
+{
+    diagnostics_screen_.update(diagnostics_.view_model());
 }
 
 const char* setup_page_name(const SetupPage page) noexcept

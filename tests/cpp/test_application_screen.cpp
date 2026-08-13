@@ -56,7 +56,19 @@ int main()
     snapshot.storage = ui::Readiness::ready;
     snapshot.imu = ui::Readiness::ready;
     snapshot.logging_available = true;
-    screen.update(ui::present_ready(snapshot), ui::DeviceViewModel{});
+    diagnostics::DiagnosticsSnapshot diagnostics_snapshot{};
+    diagnostics_snapshot.overall = diagnostics::OverallState::normal;
+    std::strcpy(diagnostics_snapshot.firmware_version.data(), "application-test");
+    diagnostics_snapshot.internal_ram = {diagnostics::SubsystemState::ready, 1'024, 2'048};
+    diagnostics_snapshot.psram = {diagnostics::SubsystemState::not_simulated, 0, 0};
+    diagnostics_snapshot.backend = diagnostics::BackendKind::simulator;
+    diagnostics_snapshot.gnss = diagnostics::SubsystemState::ready;
+    diagnostics_snapshot.storage = diagnostics::SubsystemState::ready;
+    diagnostics_snapshot.imu = diagnostics::SubsystemState::ready;
+    diagnostics_snapshot.rtc = diagnostics::SubsystemState::ready;
+    diagnostics_snapshot.touch = diagnostics::SubsystemState::ready;
+    diagnostics_snapshot.display = diagnostics::SubsystemState::ready;
+    screen.update(ui::present_ready(snapshot), ui::DeviceViewModel{}, diagnostics_snapshot);
     lv_obj_update_layout(lv_screen_active());
 
     assert(screen.destination() == ui::Destination::ready);
@@ -173,12 +185,27 @@ int main()
     assert(screen.consume_rest_request());
     click(screen.ready_screen().button_for(ui::NavigationAction::open_diagnostics));
     assert(screen.destination() == ui::Destination::diagnostics);
-    click(screen.back_button_object());
+    assert(screen.diagnostics().view_model().current_page == ui::DiagnosticsPage::system);
+    assert(std::strcmp(lv_label_get_text(screen.diagnostics_screen().row_value_object(0)),
+                       "application-test") == 0);
+    for (const auto action : {ui::DiagnosticsAction::previous_page,
+                              ui::DiagnosticsAction::next_page,
+                              ui::DiagnosticsAction::back}) {
+        auto* button = screen.diagnostics_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+    click(screen.diagnostics_screen().button_for(ui::DiagnosticsAction::next_page));
+    assert(screen.diagnostics().view_model().current_page == ui::DiagnosticsPage::gnss);
+    click(screen.diagnostics_screen().button_for(ui::DiagnosticsAction::back));
+    assert(screen.destination() == ui::Destination::ready);
 
     click(screen.ready_screen().button_for(ui::NavigationAction::start_session));
     assert(screen.destination() == ui::Destination::active);
     assert(screen.consume_start_request());
     assert(!screen.navigate(ui::NavigationAction::open_setup).accepted);
+    assert(!screen.navigate(ui::NavigationAction::open_diagnostics).accepted);
     assert(screen.destination() == ui::Destination::active);
     assert(screen.navigate(ui::NavigationAction::session_ended).current ==
            ui::Destination::ready);

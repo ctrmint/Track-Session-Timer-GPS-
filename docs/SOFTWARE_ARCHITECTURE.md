@@ -148,6 +148,12 @@ Expose a diagnostic screen containing at least:
 - display frame/update metrics
 - IMU state
 
+`DiagnosticsSnapshot` is the immutable service-to-UI boundary. The stationary screen
+shows bounded System, GNSS, Logging, and Peripheral pages and never calls a backend
+directly. Unavailable hardware and values that a backend does not simulate are
+different states. Recovery changes current subsystem health but retains drop, write
+failure, and recovery counters so an intermittent fault is not silently erased.
+
 ## 8. Watchdog
 
 Use watchdogs to detect dead tasks, but do not disguise recurrent software faults with endless silent resets. Store a bounded reset reason/diagnostic record where possible.

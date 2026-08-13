@@ -54,5 +54,11 @@ files or loads a GNSS trace. REST and READY emit separate handoff requests for t
 session service before returning to the ready destination. Deterministic simulator
 fixtures exercise all summary states while physical storage is unavailable.
 
-Diagnostics remains a returnable destination shell whose detailed content is bounded
-to issue #81.
+## Diagnostics
+
+Diagnostics is available only while stationary and pages through System, GNSS,
+Logging, and Peripheral values. It consumes one immutable snapshot, so LVGL never
+queries a driver or queue directly. Normal, degraded, missing, and recovered states
+use text and colour cues; historical drop/failure/recovery counters remain visible
+after recovery. Back always returns to Ready, and the navigation guard rejects the
+destination while timing is active.
