@@ -16,6 +16,12 @@ sudo apt-get update
 sudo apt-get install --yes cmake g++ libsdl2-dev ninja-build
 ```
 
+On Fedora:
+
+```bash
+sudo dnf install cmake gcc-c++ ninja-build SDL2-devel
+```
+
 Build and launch the ready dashboard:
 
 ```bash
@@ -26,8 +32,10 @@ make simulator-run
 Use the large on-screen Start, Setup, Review, and Diagnostics controls with a pointer
 or touchscreen. Keyboard focus and Enter activate the same actions. Setup, Review,
 and Diagnostics return through their Back control; Start enters the active timer and
-configuration is then locked. All inputs dispatch the same deterministic navigation
-actions.
+configuration is then locked. Setup includes every versioned configuration option and
+explicit Save, Cancel, and confirmed Defaults controls. Saved simulator settings live
+at `/tmp/track-session-timer-simulator/settings-v2.bin` on Linux, outside the checkout.
+All inputs dispatch the same deterministic navigation actions.
 
 The ready scenario deliberately keeps GNSS in acquisition. It demonstrates that the
 session timer remains available while lap timing is unavailable. Use `--scenario`
@@ -58,14 +66,16 @@ the supported visual workflow.
 ```bash
 build/simulator/track_timer_simulator \
   --headless \
-  --scenario gnss-loss \
+  --scenario ready \
+  --screen setup \
   --frames 25 \
   --frame-ms 40 \
-  --snapshot build/simulator/gnss-loss.ppm
+  --snapshot build/simulator/settings.ppm
 ```
 
 Every headless frame advances scenario time by the requested fixed interval; it does
-not use wall-clock timing. This makes state and screen generation reproducible.
+not use wall-clock timing. `--screen ready|setup` selects the initial screen, which
+makes state and screen generation reproducible.
 
 ## Peripheral replay
 

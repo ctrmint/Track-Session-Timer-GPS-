@@ -32,7 +32,24 @@ persisted.
 
 The simulator file adapter writes a temporary file, preserves the previous file as a
 backup during replacement, and recovers that backup if a replacement was interrupted.
+The interactive simulator places that record at
+`/tmp/track-session-timer-simulator/settings-v2.bin` on Linux so normal use cannot
+dirty the repository.
 The hardware adapter can provide the same contract through NVS once the board arrives.
+
+## On-device editor contract
+
+Setup presents all version 2 options through one consistent field/value editor. Track
+and rest duration retain the established 1, 5, 10, 15, 20, 25, 30, 40, 50, and 60
+minute choices; launch sensitivity and brightness use their supported discrete values.
+Average lap time is second-precise from `00:00` through `59:59`. Selecting `LAPS LEFT`
+without an average lap is rejected visibly, and clearing the average automatically
+restores `COUNT UP`.
+
+Edits remain a draft until Save. Cancel discards the complete draft, and Restore
+Defaults requires a separate confirmation before staging defaults for Save. Restoring
+device defaults deliberately preserves the selected track because track ownership and
+selection are handled by the track workflow.
 
 ## Active-session safety
 

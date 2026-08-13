@@ -9,6 +9,20 @@
 
 namespace {
 
+class MemoryStore final : public track_timer::settings::SettingsStore {
+  public:
+    track_timer::settings::StoreReadResult read(
+        track_timer::settings::SettingsBlob&) noexcept override
+    {
+        return track_timer::settings::StoreReadResult::missing;
+    }
+
+    bool write_atomic(const track_timer::settings::SettingsBlob&) noexcept override
+    {
+        return true;
+    }
+};
+
 void click(lv_obj_t* object)
 {
     assert(object != nullptr);
@@ -26,7 +40,10 @@ int main()
     auto* display = lv_sdl_window_create(600, 450);
     assert(display != nullptr);
 
-    simulator::ApplicationScreen screen{lv_screen_active()};
+    MemoryStore store{};
+    settings::SettingsManager settings_manager{store};
+    (void)settings_manager.load();
+    simulator::ApplicationScreen screen{lv_screen_active(), settings_manager};
     ui::ReadySnapshot snapshot{};
     std::strcpy(snapshot.selected_track.data(), "Synthetic Test Loop");
     snapshot.gnss_health = domain::GnssHealth::searching;
@@ -52,7 +69,31 @@ int main()
 
     click(screen.ready_screen().button_for(ui::NavigationAction::open_setup));
     assert(screen.destination() == ui::Destination::setup);
-    click(screen.back_button_object());
+    assert(std::strcmp(lv_label_get_text(screen.settings_screen().field_label_object()),
+                       "TRACK SESSION") == 0);
+    assert(std::strcmp(lv_label_get_text(screen.settings_screen().value_label_object()),
+                       "20 MIN") == 0);
+    for (const auto action : {ui::SettingsScreenAction::previous_field,
+                              ui::SettingsScreenAction::next_field,
+                              ui::SettingsScreenAction::decrement,
+                              ui::SettingsScreenAction::increment,
+                              ui::SettingsScreenAction::save,
+                              ui::SettingsScreenAction::cancel,
+                              ui::SettingsScreenAction::restore_defaults}) {
+        auto* button = screen.settings_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::increment));
+    assert(screen.settings_editor().draft().session_duration_minutes == 25);
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::restore_defaults));
+    assert(screen.settings_editor().status() == ui::SettingsEditorStatus::confirm_defaults);
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel_defaults));
+    assert(screen.settings_editor().draft().session_duration_minutes == 25);
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::save));
+    assert(settings_manager.current().session_duration_minutes == 25);
+    click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel));
     assert(screen.destination() == ui::Destination::ready);
 
     click(screen.ready_screen().button_for(ui::NavigationAction::open_review));

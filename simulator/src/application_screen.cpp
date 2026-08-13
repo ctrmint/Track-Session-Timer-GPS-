@@ -17,10 +17,13 @@ lv_obj_t* make_screen_root(lv_obj_t* parent) noexcept
 
 }  // namespace
 
-ApplicationScreen::ApplicationScreen(lv_obj_t* root) noexcept
-    : ready_root_(make_screen_root(root)), active_root_(make_screen_root(root)),
+ApplicationScreen::ApplicationScreen(lv_obj_t* root,
+                                     settings::SettingsManager& settings_manager) noexcept
+    : settings_manager_(settings_manager), ready_root_(make_screen_root(root)),
+      active_root_(make_screen_root(root)), settings_root_(make_screen_root(root)),
       destination_root_(make_screen_root(root)),
-      ready_screen_(ready_root_, ready_navigation, this), active_screen_(active_root_)
+      ready_screen_(ready_root_, ready_navigation, this), active_screen_(active_root_),
+      settings_screen_(settings_root_, settings_action, this)
 {
     destination_title_ = ui::create_label(destination_root_, ui::Typography::heading,
                                           ui::color::text_primary);
@@ -57,15 +60,30 @@ void ApplicationScreen::update(const ui::ReadyViewModel& ready,
 
 ui::NavigationResult ApplicationScreen::navigate(const ui::NavigationAction action) noexcept
 {
+    const auto previous = navigation_.destination();
     const auto result = navigation_.dispatch(action);
     start_requested_ = start_requested_ || result.start_requested;
+    if (result.accepted && action == ui::NavigationAction::open_setup) {
+        (void)settings_editor_.begin(settings_manager_.current(), session_active_);
+        refresh_settings();
+    }
+    else if (result.accepted && action == ui::NavigationAction::back &&
+             previous == ui::Destination::setup) {
+        settings_editor_.cancel();
+        refresh_settings();
+    }
     show_destination();
     return result;
 }
 
 void ApplicationScreen::synchronize_session(const bool active) noexcept
 {
+    const auto was_active = session_active_;
+    session_active_ = active;
     navigation_.synchronize_session(active);
+    if (was_active && !active) {
+        (void)settings_manager_.apply_deferred(false);
+    }
     show_destination();
 }
 
@@ -79,6 +97,7 @@ bool ApplicationScreen::consume_start_request() noexcept
 void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
 {
     ready_screen_.add_buttons_to_group(group);
+    settings_screen_.add_buttons_to_group(group);
     lv_group_add_obj(group, back_button_);
 }
 
@@ -90,6 +109,16 @@ ui::Destination ApplicationScreen::destination() const noexcept
 ui::ReadyScreen& ApplicationScreen::ready_screen() noexcept
 {
     return ready_screen_;
+}
+
+ui::SettingsScreen& ApplicationScreen::settings_screen() noexcept
+{
+    return settings_screen_;
+}
+
+const ui::SettingsEditor& ApplicationScreen::settings_editor() const noexcept
+{
+    return settings_editor_;
 }
 
 lv_obj_t* ApplicationScreen::back_button_object() const noexcept
@@ -106,6 +135,46 @@ void ApplicationScreen::ready_navigation(const ui::NavigationAction action,
     }
 }
 
+void ApplicationScreen::settings_action(const ui::SettingsScreenAction action,
+                                        void* context) noexcept
+{
+    auto* screen = static_cast<ApplicationScreen*>(context);
+    if (screen == nullptr) {
+        return;
+    }
+    switch (action) {
+    case ui::SettingsScreenAction::previous_field:
+        screen->settings_editor_.previous_field();
+        break;
+    case ui::SettingsScreenAction::next_field:
+        screen->settings_editor_.next_field();
+        break;
+    case ui::SettingsScreenAction::decrement:
+        (void)screen->settings_editor_.decrement();
+        break;
+    case ui::SettingsScreenAction::increment:
+        (void)screen->settings_editor_.increment();
+        break;
+    case ui::SettingsScreenAction::save:
+        (void)screen->settings_editor_.save(screen->settings_manager_, screen->session_active_);
+        break;
+    case ui::SettingsScreenAction::cancel:
+        screen->settings_editor_.cancel();
+        (void)screen->navigate(ui::NavigationAction::back);
+        return;
+    case ui::SettingsScreenAction::restore_defaults:
+        screen->settings_editor_.request_restore_defaults();
+        break;
+    case ui::SettingsScreenAction::confirm_defaults:
+        screen->settings_editor_.resolve_restore_defaults(true);
+        break;
+    case ui::SettingsScreenAction::cancel_defaults:
+        screen->settings_editor_.resolve_restore_defaults(false);
+        break;
+    }
+    screen->refresh_settings();
+}
+
 void ApplicationScreen::back_event(lv_event_t* event) noexcept
 {
     auto* screen = static_cast<ApplicationScreen*>(lv_event_get_user_data(event));
@@ -118,6 +187,7 @@ void ApplicationScreen::show_destination() noexcept
 {
     lv_obj_add_flag(ready_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(active_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(settings_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
 
     switch (navigation_.destination()) {
@@ -128,8 +198,7 @@ void ApplicationScreen::show_destination() noexcept
         lv_obj_remove_flag(active_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     case ui::Destination::setup:
-        lv_label_set_text(destination_title_, LV_SYMBOL_SETTINGS " SETUP");
-        lv_obj_remove_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(settings_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     case ui::Destination::review:
         lv_label_set_text(destination_title_, LV_SYMBOL_LIST " REVIEW");
@@ -140,6 +209,11 @@ void ApplicationScreen::show_destination() noexcept
         lv_obj_remove_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     }
+}
+
+void ApplicationScreen::refresh_settings() noexcept
+{
+    settings_screen_.update(settings_editor_.view_model());
 }
 
 }  // namespace track_timer::simulator

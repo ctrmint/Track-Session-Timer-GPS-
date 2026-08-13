@@ -33,6 +33,7 @@ add_library(
     ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
+    ../firmware/components/ui/settings_editor.cpp
     ../firmware/components/settings/component.cpp
     src/device_backends.cpp
     src/file_settings_store.cpp
@@ -54,11 +55,13 @@ add_library(
     track_timer_lvgl_ui
     ../firmware/components/ui/lvgl_visual_system.cpp
     ../firmware/components/ui/ready_screen.cpp
+    ../firmware/components/ui/settings_screen.cpp
 )
 target_include_directories(
     track_timer_lvgl_ui
     PUBLIC
         ../firmware/components/domain/include
+        ../firmware/components/settings/include
         ../firmware/components/ui/include
 )
 target_compile_features(track_timer_lvgl_ui PUBLIC cxx_std_17)
@@ -97,6 +100,32 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_settings_editor_test
+        ../tests/cpp/test_settings_editor.cpp
+    )
+    target_link_libraries(
+        track_timer_settings_editor_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_settings_editor_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-settings-editors
+        COMMAND track_timer_settings_editor_test
+    )
+    set_tests_properties(
+        simulator-settings-editors
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Settings editor options, boundaries, defaults, and safe saves passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_navigation_test
         ../tests/cpp/test_navigation.cpp
@@ -292,6 +321,22 @@ if(BUILD_TESTING)
             --scenario ready
             --frames 4
             --snapshot "${CMAKE_CURRENT_BINARY_DIR}/ready.ppm"
+    )
+    add_test(
+        NAME simulator-settings-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen setup
+            --frames 4
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/settings.ppm"
+    )
+    set_tests_properties(
+        simulator-settings-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*display-buffer-bytes=96000"
+            TIMEOUT 20
     )
     set_tests_properties(
         simulator-ready-smoke

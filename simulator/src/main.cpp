@@ -1,5 +1,7 @@
 #include "application_screen.hpp"
 
+#include "track_timer/settings/settings.hpp"
+#include "track_timer/simulator/file_settings_store.hpp"
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/ui/foundation.hpp"
 #include "track_timer/ui/presenter.hpp"
@@ -14,6 +16,7 @@
 #include <cstdlib>
 #include <exception>
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -33,6 +36,7 @@ struct Options {
     std::int64_t frame_ms{40};
     std::string snapshot_path{};
     std::string gnss_fixture_path{};
+    std::string initial_screen{"ready"};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -91,10 +95,16 @@ Options parse_options(const int argc, char** argv)
         else if (argument == "--snapshot") {
             options.snapshot_path = require_value(argc, argv, index);
         }
+        else if (argument == "--screen") {
+            options.initial_screen = require_value(argc, argv, index);
+            if (options.initial_screen != "ready" && options.initial_screen != "setup") {
+                throw std::invalid_argument("--screen must be ready or setup");
+            }
+        }
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--snapshot FILE]\n"
+                         "[--gnss-fixture FILE] [--screen ready|setup] [--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure\n"
                          "Use pointer/touch controls or keyboard focus and Enter to navigate.\n";
             std::exit(0);
@@ -141,6 +151,7 @@ bool write_snapshot(const std::string& path)
 struct ApplicationContext {
     track_timer::simulator::ScenarioPlayer player;
     track_timer::simulator::ApplicationScreen* screen;
+    track_timer::settings::SettingsManager* settings;
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
@@ -148,9 +159,10 @@ struct ApplicationContext {
                        track_timer::simulator::GnssFixture fixture,
                        const track_timer::simulator::GnssReplayRate rate,
                        track_timer::simulator::ApplicationScreen* application_screen,
+                       track_timer::settings::SettingsManager* settings_manager,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
-          display(target_display)
+          settings(settings_manager), display(target_display)
     {
     }
 };
@@ -167,8 +179,8 @@ void update_screen(ApplicationContext& context)
     track_timer::ui::ReadySnapshot ready{};
     std::snprintf(ready.selected_track.data(), ready.selected_track.size(), "%s",
                   "Synthetic Test Loop");
-    ready.session_duration_minutes = 20;
-    ready.rest_duration_minutes = 20;
+    ready.session_duration_minutes = context.settings->current().session_duration_minutes;
+    ready.rest_duration_minutes = context.settings->current().rest_duration_minutes;
     ready.gnss_health = active_snapshot.gnss_health;
     const auto storage_health = context.player.device().storage().status().health;
     ready.storage = storage_health == track_timer::board::StorageHealth::ready
@@ -238,10 +250,19 @@ int run(const Options& options)
         }
     }
 
-    track_timer::simulator::ApplicationScreen screen{lv_screen_active()};
+    const auto settings_path = std::filesystem::temp_directory_path() /
+                               "track-session-timer-simulator" / "settings-v2.bin";
+    track_timer::simulator::FileSettingsStore settings_store{settings_path};
+    track_timer::settings::SettingsManager settings_manager{settings_store};
+    (void)settings_manager.load();
+
+    track_timer::simulator::ApplicationScreen screen{lv_screen_active(), settings_manager};
     screen.add_controls_to_group(input_group);
+    if (options.initial_screen == "setup") {
+        (void)screen.navigate(track_timer::ui::NavigationAction::open_setup);
+    }
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
-                               display};
+                               &settings_manager, display};
     render_screen(context);
 
     if (options.headless) {

@@ -32,5 +32,7 @@ The dashboard shows:
 Start remains usable in the degraded timer-only path. Setup is disabled/deferred once
 a session is active. Interactive controls meet the shared 56 pixel minimum target.
 
-Setup, Review, and Diagnostics currently provide real, returnable destination shells.
-Their detailed content is intentionally bounded to issues #77/#78, #80, and #81.
+Setup is a complete, returnable settings editor with explicit Save, Cancel, validation,
+and confirmed Defaults behavior. Review and Diagnostics remain returnable destination
+shells whose detailed content is bounded to issues #80 and #81. Track selection and
+readiness remain bounded to issue #78.
