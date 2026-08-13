@@ -135,28 +135,23 @@ DeviceScreen::DeviceScreen(lv_obj_t* root, const DeviceScreenCallback callback,
     ui::style_flat_panel(trackday_panel_, ui::color::background);
     lv_obj_set_pos(trackday_panel_, 0, 72);
     lv_obj_set_size(trackday_panel_, 600, 250);
-    auto* trackday_title = ui::create_label(trackday_panel_, ui::Typography::heading,
-                                            ui::color::text_primary);
-    lv_label_set_text(trackday_title, "TRACKDAY MODE");
-    lv_obj_set_pos(trackday_title, 0, 8);
-    lv_obj_set_size(trackday_title, 600, 34);
     auto* countdown_caption = ui::create_label(trackday_panel_, ui::Typography::caption,
                                                ui::color::text_secondary);
     lv_label_set_text(countdown_caption, "SESSION REMAINING");
-    lv_obj_set_pos(countdown_caption, 0, 48);
+    lv_obj_set_pos(countdown_caption, 0, 18);
     lv_obj_set_size(countdown_caption, 600, 24);
     trackday_countdown_.create(trackday_panel_, &lv_font_montserrat_48,
                                lv_color_white(), kSessionTimeCellCount,
                                kSessionTimeCellWidths, 62);
-    trackday_countdown_.set_position((600 - trackday_countdown_.width()) / 2, 76);
+    trackday_countdown_.set_position((600 - trackday_countdown_.width()) / 2, 47);
     auto* estimate_caption = ui::create_label(trackday_panel_, ui::Typography::caption,
                                               ui::color::text_secondary);
     lv_label_set_text(estimate_caption, "ESTIMATED LAPS REMAINING");
-    lv_obj_set_pos(estimate_caption, 0, 154);
+    lv_obj_set_pos(estimate_caption, 0, 135);
     lv_obj_set_size(estimate_caption, 600, 24);
     trackday_estimate_ = ui::create_label(trackday_panel_, ui::Typography::heading,
                                           ui::color::text_primary);
-    lv_obj_set_pos(trackday_estimate_, 0, 184);
+    lv_obj_set_pos(trackday_estimate_, 0, 165);
     lv_obj_set_size(trackday_estimate_, 600, 40);
     lv_obj_add_flag(trackday_panel_, LV_OBJ_FLAG_HIDDEN);
 

@@ -17,6 +17,21 @@ struct GnssIndicatorExpectation {
     const char* text;
 };
 
+bool contains_label_text(lv_obj_t* object, const char* text)
+{
+    if (lv_obj_check_type(object, &lv_label_class) &&
+        std::strcmp(lv_label_get_text(object), text) == 0) {
+        return true;
+    }
+    const auto child_count = lv_obj_get_child_count(object);
+    for (std::uint32_t index = 0; index < child_count; ++index) {
+        if (contains_label_text(lv_obj_get_child(object, index), text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 int main()
@@ -82,6 +97,7 @@ int main()
     assert(std::strcmp(lv_label_get_text(screen.trackday_estimate_object()),
                        "9.0 LAPS") == 0);
     assert(lv_obj_get_child_count(screen.trackday_countdown_object()) == 7);
+    assert(!contains_label_text(screen.trackday_panel_object(), "TRACKDAY MODE"));
 
     active.trackday = {};
     active.feedback = {};
