@@ -31,6 +31,7 @@ target_link_libraries(lvgl PUBLIC SDL2::SDL2)
 add_library(
     track_timer_simulator_model
     ../firmware/components/ui/foundation.cpp
+    ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/settings/component.cpp
     src/device_backends.cpp
@@ -52,16 +53,20 @@ target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 add_library(
     track_timer_lvgl_ui
     ../firmware/components/ui/lvgl_visual_system.cpp
+    ../firmware/components/ui/ready_screen.cpp
 )
 target_include_directories(
     track_timer_lvgl_ui
-    PUBLIC ../firmware/components/ui/include
+    PUBLIC
+        ../firmware/components/domain/include
+        ../firmware/components/ui/include
 )
 target_compile_features(track_timer_lvgl_ui PUBLIC cxx_std_17)
 target_link_libraries(track_timer_lvgl_ui PUBLIC lvgl::lvgl)
 
 add_executable(
     track_timer_simulator
+    src/application_screen.cpp
     src/device_screen.cpp
     src/fixed_cell_label.cpp
     src/main.cpp
@@ -92,6 +97,32 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_navigation_test
+        ../tests/cpp/test_navigation.cpp
+    )
+    target_link_libraries(
+        track_timer_navigation_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_navigation_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-navigation-model
+        COMMAND track_timer_navigation_test
+    )
+    set_tests_properties(
+        simulator-navigation-model
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Ready navigation transitions and degraded timer path passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_ui_foundation_test
         ../tests/cpp/test_ui_foundation.cpp
@@ -202,6 +233,41 @@ if(BUILD_TESTING)
         NAME simulator-gnss-indicator
         COMMAND track_timer_device_screen_test
     )
+
+    add_executable(
+        track_timer_application_screen_test
+        ../tests/cpp/test_application_screen.cpp
+        src/application_screen.cpp
+        src/device_screen.cpp
+        src/fixed_cell_label.cpp
+    )
+    target_include_directories(track_timer_application_screen_test PRIVATE src)
+    target_link_libraries(
+        track_timer_application_screen_test
+        PRIVATE
+            track_timer_simulator_model
+            track_timer_lvgl_ui
+            lvgl::lvgl
+            SDL2::SDL2
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_application_screen_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+
+    add_test(
+        NAME simulator-ready-navigation
+        COMMAND track_timer_application_screen_test
+    )
+    set_tests_properties(
+        simulator-ready-navigation
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "Ready dashboard controls and application destinations passed"
+            TIMEOUT 20
+    )
     set_tests_properties(
         simulator-gnss-indicator
         PROPERTIES
@@ -217,6 +283,22 @@ if(BUILD_TESTING)
             --scenario active
             --frames 4
             --snapshot "${CMAKE_CURRENT_BINARY_DIR}/active.ppm"
+    )
+
+    add_test(
+        NAME simulator-ready-smoke
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --frames 4
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/ready.ppm"
+    )
+    set_tests_properties(
+        simulator-ready-smoke
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=ready.*screen=ready.*display-buffer-bytes=96000"
+            TIMEOUT 20
     )
     set_tests_properties(
         simulator-active-smoke

@@ -91,6 +91,23 @@ void set_session_accent(DeviceViewModel& model, const std::int64_t remaining_ms)
     model.accent_text_rgb = contrast_text_rgb(model.accent_rgb);
 }
 
+void set_readiness_item(ReadinessItem& item, const Readiness readiness,
+                        const char* ready_text, const char* degraded_text,
+                        const char* unavailable_text) noexcept
+{
+    const char* text = unavailable_text;
+    item.color_rgb = color::critical_bright;
+    if (readiness == Readiness::ready) {
+        text = ready_text;
+        item.color_rgb = color::positive_bright;
+    }
+    else if (readiness == Readiness::degraded) {
+        text = degraded_text;
+        item.color_rgb = color::caution_bright;
+    }
+    std::snprintf(item.text.data(), item.text.size(), "%s", text);
+}
+
 }  // namespace
 
 DeviceViewModel present(const domain::UiSnapshot& snapshot) noexcept
@@ -108,6 +125,49 @@ DeviceViewModel present(const domain::UiSnapshot& snapshot) noexcept
                   snapshot.logging_available ? "LOGGING" : "NO LOG");
     model.gnss_health = snapshot.gnss_health;
     set_session_accent(model, snapshot.session_remaining_ms);
+    return model;
+}
+
+ReadyViewModel present_ready(const ReadySnapshot& snapshot) noexcept
+{
+    ReadyViewModel model{};
+    std::snprintf(model.selected_track.data(), model.selected_track.size(), "%.47s",
+                  snapshot.selected_track[0] == '\0' ? "NO TRACK SELECTED"
+                                                      : snapshot.selected_track.data());
+    std::snprintf(model.session_duration.data(), model.session_duration.size(), "%u MIN SESSION",
+                  static_cast<unsigned>(snapshot.session_duration_minutes));
+    std::snprintf(model.rest_duration.data(), model.rest_duration.size(), "%u MIN REST",
+                  static_cast<unsigned>(snapshot.rest_duration_minutes));
+
+    std::snprintf(model.gnss.text.data(), model.gnss.text.size(), "%s",
+                  gnss_label(snapshot.gnss_health));
+    switch (snapshot.gnss_health) {
+    case domain::GnssHealth::good:
+        model.gnss.color_rgb = color::positive_bright;
+        std::snprintf(model.timing_mode.data(), model.timing_mode.size(), "LAP TIMING READY");
+        break;
+    case domain::GnssHealth::poor:
+        model.gnss.color_rgb = color::caution_bright;
+        std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                      "TIMER ONLY - GPS QUALITY");
+        break;
+    case domain::GnssHealth::unavailable:
+    case domain::GnssHealth::searching:
+    case domain::GnssHealth::stale:
+        model.gnss.color_rgb = color::critical_bright;
+        std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                      "TIMER ONLY - GPS UNAVAILABLE");
+        break;
+    }
+
+    set_readiness_item(model.storage, snapshot.storage, "STORAGE READY", "STORAGE DEGRADED",
+                       "NO STORAGE");
+    set_readiness_item(model.imu, snapshot.imu, "IMU READY", "IMU DEGRADED", "NO IMU");
+    set_readiness_item(model.logging,
+                       snapshot.logging_available ? Readiness::ready : Readiness::unavailable,
+                       "LOGGING READY", "LOGGING DEGRADED", "NO LOGGING");
+    model.start_enabled = true;
+    model.setup_enabled = !snapshot.session_active;
     return model;
 }
 
