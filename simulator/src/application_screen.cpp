@@ -20,16 +20,20 @@ lv_obj_t* make_screen_root(lv_obj_t* parent) noexcept
 ApplicationScreen::ApplicationScreen(lv_obj_t* root,
                                      settings::SettingsManager& settings_manager,
                                      const track::TrackCatalogView track_catalog,
-                                     const track::TrackMatchResult& track_match) noexcept
+                                     const track::TrackMatchResult& track_match,
+                                     logger::SessionSummaryProvider* summary_provider) noexcept
     : settings_manager_(settings_manager), track_catalog_(track_catalog),
-      track_match_(track_match), ready_root_(make_screen_root(root)),
+      track_match_(track_match), summary_provider_(summary_provider),
+      ready_root_(make_screen_root(root)),
       active_root_(make_screen_root(root)), setup_menu_root_(make_screen_root(root)),
       settings_root_(make_screen_root(root)), track_selection_root_(make_screen_root(root)),
+      session_review_root_(make_screen_root(root)),
       destination_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this), active_screen_(active_root_),
       setup_menu_screen_(setup_menu_root_, setup_action, this),
       settings_screen_(settings_root_, settings_action, this),
-      track_selection_screen_(track_selection_root_, track_action, this)
+      track_selection_screen_(track_selection_root_, track_action, this),
+      session_review_screen_(session_review_root_, review_action, this)
 {
     destination_title_ = ui::create_label(destination_root_, ui::Typography::heading,
                                           ui::color::text_primary);
@@ -66,10 +70,19 @@ void ApplicationScreen::update(const ui::ReadyViewModel& ready,
 
 ui::NavigationResult ApplicationScreen::navigate(const ui::NavigationAction action) noexcept
 {
+    const auto previous = navigation_.destination();
     const auto result = navigation_.dispatch(action);
     start_requested_ = start_requested_ || result.start_requested;
     if (result.accepted && action == ui::NavigationAction::open_setup) {
         setup_page_ = SetupPage::menu;
+    }
+    if (result.accepted && action == ui::NavigationAction::open_review) {
+        session_review_.begin(summary_provider_);
+        refresh_session_review();
+    }
+    else if (previous == ui::Destination::review &&
+             result.current != ui::Destination::review) {
+        session_review_.close();
     }
     show_destination();
     return result;
@@ -115,12 +128,27 @@ bool ApplicationScreen::consume_start_request() noexcept
     return requested;
 }
 
+bool ApplicationScreen::consume_rest_request() noexcept
+{
+    const auto requested = rest_requested_;
+    rest_requested_ = false;
+    return requested;
+}
+
+bool ApplicationScreen::consume_ready_request() noexcept
+{
+    const auto requested = ready_requested_;
+    ready_requested_ = false;
+    return requested;
+}
+
 void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
 {
     ready_screen_.add_buttons_to_group(group);
     setup_menu_screen_.add_buttons_to_group(group);
     settings_screen_.add_buttons_to_group(group);
     track_selection_screen_.add_buttons_to_group(group);
+    session_review_screen_.add_buttons_to_group(group);
     lv_group_add_obj(group, back_button_);
 }
 
@@ -157,6 +185,16 @@ ui::TrackSelectionScreen& ApplicationScreen::track_selection_screen() noexcept
 const ui::TrackSelectionController& ApplicationScreen::track_selection() const noexcept
 {
     return track_selection_;
+}
+
+ui::SessionReviewScreen& ApplicationScreen::session_review_screen() noexcept
+{
+    return session_review_screen_;
+}
+
+const ui::SessionReviewController& ApplicationScreen::session_review() const noexcept
+{
+    return session_review_;
 }
 
 SetupPage ApplicationScreen::setup_page() const noexcept
@@ -272,6 +310,38 @@ void ApplicationScreen::track_action(const ui::TrackSelectionAction action,
     screen->refresh_track_selection();
 }
 
+void ApplicationScreen::review_action(const ui::SessionReviewAction action,
+                                      void* context) noexcept
+{
+    auto* screen = static_cast<ApplicationScreen*>(context);
+    if (screen == nullptr) {
+        return;
+    }
+    switch (action) {
+    case ui::SessionReviewAction::newer_session:
+        screen->session_review_.newer_session();
+        break;
+    case ui::SessionReviewAction::older_session:
+        screen->session_review_.older_session();
+        break;
+    case ui::SessionReviewAction::previous_page:
+        screen->session_review_.previous_lap_page();
+        break;
+    case ui::SessionReviewAction::next_page:
+        screen->session_review_.next_lap_page();
+        break;
+    case ui::SessionReviewAction::return_to_rest:
+        screen->rest_requested_ = true;
+        (void)screen->navigate(ui::NavigationAction::back);
+        return;
+    case ui::SessionReviewAction::return_to_ready:
+        screen->ready_requested_ = true;
+        (void)screen->navigate(ui::NavigationAction::back);
+        return;
+    }
+    screen->refresh_session_review();
+}
+
 void ApplicationScreen::back_event(lv_event_t* event) noexcept
 {
     auto* screen = static_cast<ApplicationScreen*>(lv_event_get_user_data(event));
@@ -287,6 +357,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(setup_menu_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(settings_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(track_selection_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
 
     switch (navigation_.destination()) {
@@ -308,8 +379,7 @@ void ApplicationScreen::show_destination() noexcept
         }
         break;
     case ui::Destination::review:
-        lv_label_set_text(destination_title_, LV_SYMBOL_LIST " REVIEW");
-        lv_obj_remove_flag(destination_root_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     case ui::Destination::diagnostics:
         lv_label_set_text(destination_title_, LV_SYMBOL_WARNING " DIAGNOSTICS");
@@ -326,6 +396,11 @@ void ApplicationScreen::refresh_settings() noexcept
 void ApplicationScreen::refresh_track_selection() noexcept
 {
     track_selection_screen_.update(track_selection_.view_model());
+}
+
+void ApplicationScreen::refresh_session_review() noexcept
+{
+    session_review_screen_.update(session_review_.view_model());
 }
 
 const char* setup_page_name(const SetupPage page) noexcept

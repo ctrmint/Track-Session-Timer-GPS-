@@ -13,13 +13,14 @@ TRACK_MATCHING_TEST_BINARY := build/host/track_matching_test
 TRACK_SELECTION_TEST_BINARY := build/host/track_selection_test
 LOG_FORMAT_TEST_BINARY := build/host/log_format_test
 ASYNC_LOGGER_TEST_BINARY := build/host/async_logger_test
+SESSION_REVIEW_TEST_BINARY := build/host/session_review_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test ui-foundation-test navigation-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -136,6 +137,21 @@ async-logger-test:
 		firmware/components/logger/async_logger.cpp \
 		tests/cpp/test_async_logger.cpp -o $(ASYNC_LOGGER_TEST_BINARY)
 	$(ASYNC_LOGGER_TEST_BINARY)
+
+session-review-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
+		-Ifirmware/components/logger/include \
+		-Ifirmware/components/ui/include \
+		-Isimulator/include \
+		firmware/components/settings/component.cpp \
+		firmware/components/logger/formats.cpp \
+		firmware/components/ui/session_review.cpp \
+		simulator/src/summary_fixtures.cpp \
+		tests/cpp/test_session_review.cpp -o $(SESSION_REVIEW_TEST_BINARY)
+	$(SESSION_REVIEW_TEST_BINARY)
 
 ui-foundation-test:
 	mkdir -p build/host

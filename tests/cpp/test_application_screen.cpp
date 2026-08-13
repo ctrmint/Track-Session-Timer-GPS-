@@ -1,5 +1,6 @@
 #include "application_screen.hpp"
 #include "track_timer/simulator/track_fixtures.hpp"
+#include "track_timer/simulator/summary_fixtures.hpp"
 
 #include <SDL2/SDL.h>
 #include <lvgl.h>
@@ -46,8 +47,9 @@ int main()
     (void)settings_manager.load();
     const auto tracks = simulator::make_track_fixture(simulator::TrackFixtureId::suggested);
     const auto track_match = track::match_track_geofences(tracks.catalog(), tracks.request);
+    simulator::SummaryFixtureProvider summaries{simulator::SummaryFixtureId::complete};
     simulator::ApplicationScreen screen{lv_screen_active(), settings_manager, tracks.catalog(),
-                                        track_match};
+                                        track_match, &summaries};
     ui::ReadySnapshot snapshot{};
     std::strcpy(snapshot.selected_track.data(), "Synthetic Test Loop");
     snapshot.gnss_health = domain::GnssHealth::searching;
@@ -141,7 +143,34 @@ int main()
 
     click(screen.ready_screen().button_for(ui::NavigationAction::open_review));
     assert(screen.destination() == ui::Destination::review);
-    click(screen.back_button_object());
+    assert(screen.session_review().view_model().status == ui::SessionReviewStatus::ready);
+    assert(std::strcmp(lv_label_get_text(screen.session_review_screen().lap_object(0)),
+                       "1:04.210") == 0);
+    for (const auto action : {ui::SessionReviewAction::newer_session,
+                              ui::SessionReviewAction::older_session,
+                              ui::SessionReviewAction::previous_page,
+                              ui::SessionReviewAction::next_page,
+                              ui::SessionReviewAction::return_to_rest,
+                              ui::SessionReviewAction::return_to_ready}) {
+        auto* button = screen.session_review_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::next_page));
+    assert(screen.session_review().view_model().lap_offset == 4);
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::previous_page));
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::older_session));
+    assert(screen.session_review().view_model().history_index == 1);
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::newer_session));
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::return_to_ready));
+    assert(screen.destination() == ui::Destination::ready);
+    assert(screen.consume_ready_request());
+
+    click(screen.ready_screen().button_for(ui::NavigationAction::open_review));
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::return_to_rest));
+    assert(screen.destination() == ui::Destination::ready);
+    assert(screen.consume_rest_request());
     click(screen.ready_screen().button_for(ui::NavigationAction::open_diagnostics));
     assert(screen.destination() == ui::Destination::diagnostics);
     click(screen.back_button_object());

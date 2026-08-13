@@ -38,7 +38,9 @@ Defaults controls. Track Selection explains selected, suggested, ambiguous, miss
 invalid, and unavailable states and always offers a timer-only path. Saved simulator
 settings, including the selected track, live at
 `/tmp/track-session-timer-simulator/settings-v2.bin` on Linux, outside the checkout.
-All inputs dispatch the same deterministic navigation actions.
+Review shows bounded session history and lap pages, with best/previous emphasis and
+explicit REST/READY actions. All inputs dispatch the same deterministic navigation
+actions.
 
 The ready scenario deliberately keeps GNSS in acquisition. It demonstrates that the
 session timer remains available while lap timing is unavailable. Use `--scenario`
@@ -78,11 +80,22 @@ build/simulator/track_timer_simulator \
 ```
 
 Every headless frame advances scenario time by the requested fixed interval; it does
-not use wall-clock timing. `--screen ready|setup|settings|tracks` selects the initial
+not use wall-clock timing. `--screen ready|setup|settings|tracks|review` selects the initial
 screen. `--track-state selected|missing|invalid|ambiguous|suggested|none|unavailable`
 selects a deterministic track fixture and deliberately replaces the persisted track
 selection for that run. Omit `--track-state` during normal interactive use so a track
 chosen on screen remains selected after restarting the simulator.
+
+Review data is deterministic and never touches the checkout or an SD card:
+
+```bash
+build/simulator/track_timer_simulator \
+  --screen review \
+  --review-state complete
+```
+
+`--review-state complete|partial|empty|missing|corrupt|unsupported` exercises history
+paging, partial-log warnings, and each safe failure presentation.
 
 ## Peripheral replay
 
