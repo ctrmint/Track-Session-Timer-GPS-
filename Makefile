@@ -3,13 +3,14 @@ CXX ?= c++
 IDF_IMAGE ?= espressif/idf:v6.0.2
 HOST_TEST_BINARY := build/host/domain_contracts_test
 SIMULATOR_MODEL_TEST_BINARY := build/host/simulator_model_test
+SESSION_STATE_TEST_BINARY := build/host/session_state_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -40,6 +41,15 @@ simulator-model-test:
 		simulator/src/scenario.cpp \
 		tests/cpp/test_simulator_model.cpp -o $(SIMULATOR_MODEL_TEST_BINARY)
 	$(SIMULATOR_MODEL_TEST_BINARY)
+
+session-state-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/session/include \
+		firmware/components/session/component.cpp \
+		tests/cpp/test_session_controller.cpp -o $(SESSION_STATE_TEST_BINARY)
+	$(SESSION_STATE_TEST_BINARY)
 
 simulator-configure:
 	$(CMAKE) -S simulator -B $(SIMULATOR_BUILD_DIR) -G Ninja
