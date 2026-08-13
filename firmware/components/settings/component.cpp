@@ -1,0 +1,353 @@
+#include "track_timer/settings/settings.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstring>
+
+namespace track_timer::settings {
+namespace {
+
+constexpr std::array<std::uint8_t, 4> kMagic{'T', 'S', 'T', 'G'};
+constexpr std::size_t kHeaderSize = 12;
+constexpr std::size_t kLegacyV1PayloadSize = 7;
+constexpr std::size_t kCurrentPayloadSize = 62;
+
+bool valid_brightness(const std::uint8_t percent) noexcept
+{
+    return percent == 25 || percent == 50 || percent == 75 || percent == 100;
+}
+
+bool valid_launch_sensitivity(const std::uint16_t milli_g) noexcept
+{
+    constexpr std::array<std::uint16_t, 10> values{0, 500, 1'000, 1'250, 1'500,
+                                                   1'750, 2'000, 2'500, 3'500, 4'000};
+    return std::find(values.begin(), values.end(), milli_g) != values.end();
+}
+
+bool valid_track_identifier(
+    const std::array<char, kTrackIdentifierCapacity>& identifier) noexcept
+{
+    bool terminated = false;
+    for (const char character : identifier) {
+        if (character == '\0') {
+            terminated = true;
+            continue;
+        }
+        if (terminated) {
+            return false;
+        }
+        const auto value = static_cast<unsigned char>(character);
+        if (!std::isalnum(value) && character != '-' && character != '_' && character != '.') {
+            return false;
+        }
+    }
+    return terminated;
+}
+
+void put_u16(std::uint8_t* output, const std::uint16_t value) noexcept
+{
+    output[0] = static_cast<std::uint8_t>(value & 0xFFU);
+    output[1] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+}
+
+void put_u32(std::uint8_t* output, const std::uint32_t value) noexcept
+{
+    output[0] = static_cast<std::uint8_t>(value & 0xFFU);
+    output[1] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+    output[2] = static_cast<std::uint8_t>((value >> 16U) & 0xFFU);
+    output[3] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
+}
+
+std::uint16_t get_u16(const std::uint8_t* input) noexcept
+{
+    return static_cast<std::uint16_t>(input[0]) |
+           static_cast<std::uint16_t>(static_cast<std::uint16_t>(input[1]) << 8U);
+}
+
+std::uint32_t get_u32(const std::uint8_t* input) noexcept
+{
+    return static_cast<std::uint32_t>(input[0]) |
+           (static_cast<std::uint32_t>(input[1]) << 8U) |
+           (static_cast<std::uint32_t>(input[2]) << 16U) |
+           (static_cast<std::uint32_t>(input[3]) << 24U);
+}
+
+std::uint32_t checksum(const std::uint8_t* data, const std::size_t size) noexcept
+{
+    std::uint32_t value = 2'166'136'261U;
+    for (std::size_t index = 0; index < size; ++index) {
+        value ^= data[index];
+        value *= 16'777'619U;
+    }
+    return value;
+}
+
+SettingsBlob make_blob(const std::uint16_t version, const std::uint8_t* payload,
+                       const std::size_t payload_size) noexcept
+{
+    SettingsBlob blob{};
+    if (payload_size > kSettingsBlobCapacity - kHeaderSize) {
+        return blob;
+    }
+    std::copy(kMagic.begin(), kMagic.end(), blob.bytes.begin());
+    put_u16(blob.bytes.data() + 4, version);
+    put_u16(blob.bytes.data() + 6, static_cast<std::uint16_t>(payload_size));
+    put_u32(blob.bytes.data() + 8, checksum(payload, payload_size));
+    std::copy(payload, payload + payload_size, blob.bytes.begin() + kHeaderSize);
+    blob.size = kHeaderSize + payload_size;
+    return blob;
+}
+
+bool header_valid(const SettingsBlob& blob, std::uint16_t& version,
+                  std::size_t& payload_size) noexcept
+{
+    if (blob.size < kHeaderSize || blob.size > blob.bytes.size() ||
+        !std::equal(kMagic.begin(), kMagic.end(), blob.bytes.begin())) {
+        return false;
+    }
+    version = get_u16(blob.bytes.data() + 4);
+    payload_size = get_u16(blob.bytes.data() + 6);
+    if (payload_size != blob.size - kHeaderSize) {
+        return false;
+    }
+    return get_u32(blob.bytes.data() + 8) ==
+           checksum(blob.bytes.data() + kHeaderSize, payload_size);
+}
+
+bool valid_legacy_settings(const LegacySettingsV1& settings) noexcept
+{
+    return settings.session_duration_minutes >= 1 &&
+           settings.session_duration_minutes <= 24 * 60 &&
+           settings.rest_duration_minutes <= 24 * 60 &&
+           valid_brightness(settings.brightness_percent) &&
+           settings.orientation <= OrientationMode::automatic;
+}
+
+}  // namespace
+
+bool valid_settings(const DeviceSettings& settings) noexcept
+{
+    return settings.session_duration_minutes >= 1 &&
+           settings.session_duration_minutes <= 24 * 60 &&
+           settings.rest_duration_minutes <= 24 * 60 &&
+           valid_launch_sensitivity(settings.launch_sensitivity_milli_g) &&
+           settings.average_lap_seconds <= 59 * 60 + 59 &&
+           valid_brightness(settings.day_brightness_percent) &&
+           valid_brightness(settings.night_brightness_percent) &&
+           settings.operating_mode <= OperatingMode::g_meter &&
+           settings.orientation <= OrientationMode::automatic &&
+           settings.lower_display <= LowerDisplayMode::laps_remaining &&
+           (settings.average_lap_seconds > 0 ||
+            settings.lower_display == LowerDisplayMode::elapsed) &&
+           valid_track_identifier(settings.selected_track_id);
+}
+
+bool settings_equal(const DeviceSettings& left, const DeviceSettings& right) noexcept
+{
+    return left.session_duration_minutes == right.session_duration_minutes &&
+           left.rest_duration_minutes == right.rest_duration_minutes &&
+           left.launch_sensitivity_milli_g == right.launch_sensitivity_milli_g &&
+           left.average_lap_seconds == right.average_lap_seconds &&
+           left.day_brightness_percent == right.day_brightness_percent &&
+           left.night_brightness_percent == right.night_brightness_percent &&
+           left.operating_mode == right.operating_mode && left.orientation == right.orientation &&
+           left.auto_dim_enabled == right.auto_dim_enabled &&
+           left.lower_display == right.lower_display &&
+           left.selected_track_id == right.selected_track_id;
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    if (!valid_settings(settings)) {
+        return {};
+    }
+
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    put_u16(payload.data(), settings.session_duration_minutes);
+    put_u16(payload.data() + 2, settings.rest_duration_minutes);
+    put_u16(payload.data() + 4, settings.launch_sensitivity_milli_g);
+    put_u16(payload.data() + 6, settings.average_lap_seconds);
+    payload[8] = settings.day_brightness_percent;
+    payload[9] = settings.night_brightness_percent;
+    payload[10] = static_cast<std::uint8_t>(settings.operating_mode);
+    payload[11] = static_cast<std::uint8_t>(settings.orientation);
+    payload[12] = settings.auto_dim_enabled ? 1U : 0U;
+    payload[13] = static_cast<std::uint8_t>(settings.lower_display);
+    std::memcpy(payload.data() + 14, settings.selected_track_id.data(),
+                settings.selected_track_id.size());
+    return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
+}
+
+SettingsBlob encode_legacy_settings_v1(const LegacySettingsV1& settings) noexcept
+{
+    if (!valid_legacy_settings(settings)) {
+        return {};
+    }
+    std::array<std::uint8_t, kLegacyV1PayloadSize> payload{};
+    put_u16(payload.data(), settings.session_duration_minutes);
+    put_u16(payload.data() + 2, settings.rest_duration_minutes);
+    payload[4] = settings.brightness_percent;
+    payload[5] = static_cast<std::uint8_t>(settings.orientation);
+    payload[6] = settings.auto_dim_enabled ? 1U : 0U;
+    return make_blob(1, payload.data(), payload.size());
+}
+
+DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings) noexcept
+{
+    std::uint16_t version = 0;
+    std::size_t payload_size = 0;
+    if (!header_valid(blob, version, payload_size)) {
+        return DecodeResult::corrupt;
+    }
+
+    const auto* payload = blob.bytes.data() + kHeaderSize;
+    DeviceSettings candidate{};
+    if (version == 1) {
+        if (payload_size != kLegacyV1PayloadSize) {
+            return DecodeResult::corrupt;
+        }
+        candidate.session_duration_minutes = get_u16(payload);
+        candidate.rest_duration_minutes = get_u16(payload + 2);
+        candidate.day_brightness_percent = payload[4];
+        candidate.orientation = static_cast<OrientationMode>(payload[5]);
+        candidate.auto_dim_enabled = payload[6] != 0;
+        if (payload[6] > 1 || !valid_settings(candidate)) {
+            return DecodeResult::corrupt;
+        }
+        settings = candidate;
+        return DecodeResult::migrated_v1;
+    }
+    if (version != kCurrentSettingsVersion) {
+        return DecodeResult::unsupported_version;
+    }
+    if (payload_size != kCurrentPayloadSize) {
+        return DecodeResult::corrupt;
+    }
+
+    candidate.session_duration_minutes = get_u16(payload);
+    candidate.rest_duration_minutes = get_u16(payload + 2);
+    candidate.launch_sensitivity_milli_g = get_u16(payload + 4);
+    candidate.average_lap_seconds = get_u16(payload + 6);
+    candidate.day_brightness_percent = payload[8];
+    candidate.night_brightness_percent = payload[9];
+    candidate.operating_mode = static_cast<OperatingMode>(payload[10]);
+    candidate.orientation = static_cast<OrientationMode>(payload[11]);
+    candidate.auto_dim_enabled = payload[12] != 0;
+    candidate.lower_display = static_cast<LowerDisplayMode>(payload[13]);
+    std::memcpy(candidate.selected_track_id.data(), payload + 14,
+                candidate.selected_track_id.size());
+    if (payload[12] > 1 || !valid_settings(candidate)) {
+        return DecodeResult::corrupt;
+    }
+    settings = candidate;
+    return DecodeResult::current;
+}
+
+FeatureAvailability evaluate_features(const SubsystemSnapshot& subsystems) noexcept
+{
+    return FeatureAvailability{
+        true,
+        subsystems.gnss == SubsystemState::ready,
+        subsystems.storage == SubsystemState::ready ||
+            subsystems.storage == SubsystemState::degraded,
+        subsystems.imu == SubsystemState::ready,
+        subsystems.touch == SubsystemState::ready,
+        subsystems.rtc == SubsystemState::ready || subsystems.rtc == SubsystemState::degraded,
+    };
+}
+
+SettingsManager::SettingsManager(SettingsStore& store) noexcept : store_(store) {}
+
+SettingsLoadReport SettingsManager::load() noexcept
+{
+    SettingsBlob blob{};
+    const auto read_result = store_.read(blob);
+    has_pending_change_ = false;
+    pending_ = {};
+    if (read_result == StoreReadResult::error) {
+        current_ = {};
+        return {SettingsSource::defaults_storage_error, false};
+    }
+    if (read_result == StoreReadResult::missing) {
+        current_ = {};
+        return {SettingsSource::defaults_missing, persist(current_)};
+    }
+
+    DeviceSettings decoded{};
+    switch (decode_settings(blob, decoded)) {
+    case DecodeResult::current:
+        current_ = decoded;
+        return {SettingsSource::current, true};
+    case DecodeResult::migrated_v1:
+        current_ = decoded;
+        return {SettingsSource::migrated_v1, persist(current_)};
+    case DecodeResult::corrupt:
+        current_ = {};
+        return {SettingsSource::defaults_corrupt, persist(current_)};
+    case DecodeResult::unsupported_version:
+        current_ = {};
+        return {SettingsSource::defaults_unsupported, persist(current_)};
+    }
+    current_ = {};
+    return {SettingsSource::defaults_corrupt, false};
+}
+
+SettingsApplyResult SettingsManager::apply(const DeviceSettings& settings,
+                                           const bool session_active) noexcept
+{
+    if (!valid_settings(settings)) {
+        return SettingsApplyResult::invalid_settings;
+    }
+    if (session_active) {
+        pending_ = settings;
+        has_pending_change_ = true;
+        return SettingsApplyResult::deferred;
+    }
+    if (!persist(settings)) {
+        return SettingsApplyResult::storage_error;
+    }
+    current_ = settings;
+    pending_ = {};
+    has_pending_change_ = false;
+    return SettingsApplyResult::applied;
+}
+
+SettingsApplyResult SettingsManager::apply_deferred(const bool session_active) noexcept
+{
+    if (!has_pending_change_) {
+        return SettingsApplyResult::no_pending_change;
+    }
+    if (session_active) {
+        return SettingsApplyResult::deferred;
+    }
+    if (!persist(pending_)) {
+        return SettingsApplyResult::storage_error;
+    }
+    current_ = pending_;
+    pending_ = {};
+    has_pending_change_ = false;
+    return SettingsApplyResult::applied;
+}
+
+const DeviceSettings& SettingsManager::current() const noexcept
+{
+    return current_;
+}
+
+const DeviceSettings& SettingsManager::pending() const noexcept
+{
+    return pending_;
+}
+
+bool SettingsManager::has_pending_change() const noexcept
+{
+    return has_pending_change_;
+}
+
+bool SettingsManager::persist(const DeviceSettings& settings) noexcept
+{
+    const auto blob = encode_settings(settings);
+    return blob.size > 0 && store_.write_atomic(blob);
+}
+
+}  // namespace track_timer::settings
