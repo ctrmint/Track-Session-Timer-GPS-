@@ -14,6 +14,9 @@ Fast, deterministic tests for:
 - rearm/hysteresis
 - timestamp rollover/ordering assumptions
 - track schema validation
+- ready/running/overtime/review/rest lifecycle transitions
+- guarded active-stop and rest-skip confirmation timeouts
+- fixed-cell countdown and overrun presentation
 
 ### Host replay tests
 
@@ -33,6 +36,11 @@ partial-axis, and recovery fixtures. It verifies the 24-sample capacity, peak/re
 rules, all four orientation transforms, and continued active timing while IMU data is
 absent. These checks do not replace physical QMI8658 calibration and axis-direction
 validation after the board arrives.
+
+Workflow fixtures render overtime, driver-stop completion review, and rest without
+hardware. Interaction tests verify that timing remains visible during stop
+confirmation, non-stop gestures are inert, rest expires automatically, and early
+rest exit requires hold plus confirmation against the session controller.
 
 ### Outdoor tests
 

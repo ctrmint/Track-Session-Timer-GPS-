@@ -32,6 +32,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       session_review_root_(make_screen_root(root)),
       diagnostics_root_(make_screen_root(root)),
       g_meter_root_(make_screen_root(root)),
+      rest_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this),
       active_screen_(active_root_, device_action, this),
       setup_menu_screen_(setup_menu_root_, setup_action, this),
@@ -39,7 +40,8 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       track_selection_screen_(track_selection_root_, track_action, this),
       session_review_screen_(session_review_root_, review_action, this),
       diagnostics_screen_(diagnostics_root_, diagnostics_action, this),
-      g_meter_screen_(g_meter_root_, g_meter_action, this)
+      g_meter_screen_(g_meter_root_, g_meter_action, this),
+      rest_screen_(rest_root_, rest_action, this)
 {
     ui::style_screen(root);
     brightness_overlay_ = lv_obj_create(root);
@@ -178,6 +180,46 @@ void ApplicationScreen::synchronize_session(const bool active) noexcept
     show_destination();
 }
 
+void ApplicationScreen::synchronize_workflow(const session::SessionSnapshot& snapshot,
+                                             const std::uint64_t now_ms) noexcept
+{
+    active_now_ms_ = now_ms;
+    rest_session_.update(snapshot, now_ms);
+    rest_screen_.update(rest_session_.view_model());
+    switch (snapshot.state) {
+    case session::SessionState::running:
+    case session::SessionState::overtime:
+        synchronize_session(true);
+        return;
+    case session::SessionState::review:
+        synchronize_session(false);
+        if (navigation_.destination() != ui::Destination::review) {
+            (void)navigate(ui::NavigationAction::open_review);
+        }
+        return;
+    case session::SessionState::rest:
+        synchronize_session(false);
+        if (navigation_.destination() != ui::Destination::rest) {
+            (void)navigation_.dispatch(ui::NavigationAction::rest_started);
+            show_destination();
+        }
+        return;
+    case session::SessionState::ready:
+        if (navigation_.destination() == ui::Destination::active ||
+            navigation_.destination() == ui::Destination::rest) {
+            (void)navigation_.dispatch(ui::NavigationAction::session_ended);
+            show_destination();
+        }
+        else {
+            synchronize_session(false);
+        }
+        return;
+    case session::SessionState::configuring:
+        synchronize_session(false);
+        return;
+    }
+}
+
 bool ApplicationScreen::consume_start_request() noexcept
 {
     const auto requested = start_requested_;
@@ -204,6 +246,13 @@ bool ApplicationScreen::consume_ready_request() noexcept
     return requested;
 }
 
+bool ApplicationScreen::consume_skip_rest_request() noexcept
+{
+    const auto requested = skip_rest_requested_ || rest_session_.consume_skip_request();
+    skip_rest_requested_ = false;
+    return requested;
+}
+
 void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
 {
     ready_screen_.add_buttons_to_group(group);
@@ -214,6 +263,7 @@ void ApplicationScreen::add_controls_to_group(lv_group_t* group) noexcept
     session_review_screen_.add_buttons_to_group(group);
     diagnostics_screen_.add_buttons_to_group(group);
     g_meter_screen_.add_buttons_to_group(group);
+    rest_screen_.add_buttons_to_group(group);
 }
 
 ui::Destination ApplicationScreen::destination() const noexcept
@@ -279,6 +329,16 @@ ui::GmeterScreen& ApplicationScreen::g_meter_screen() noexcept
 const ui::ImuMeterController& ApplicationScreen::g_meter() const noexcept
 {
     return g_meter_;
+}
+
+RestScreen& ApplicationScreen::rest_screen() noexcept
+{
+    return rest_screen_;
+}
+
+const ui::RestSessionController& ApplicationScreen::rest_session() const noexcept
+{
+    return rest_session_;
 }
 
 DeviceScreen& ApplicationScreen::device_screen() noexcept
@@ -357,6 +417,34 @@ void ApplicationScreen::g_meter_action(const ui::GmeterAction action,
         screen->show_destination();
         break;
     }
+}
+
+void ApplicationScreen::rest_action(const RestScreenAction action, void* context) noexcept
+{
+    auto* screen = static_cast<ApplicationScreen*>(context);
+    if (screen == nullptr || screen->navigation_.destination() != ui::Destination::rest) {
+        return;
+    }
+    screen->activity_pending_ = true;
+    switch (action) {
+    case RestScreenAction::press_skip:
+        screen->rest_session_.press_skip(screen->active_now_ms_);
+        break;
+    case RestScreenAction::release_skip:
+        screen->rest_session_.release_skip(screen->active_now_ms_);
+        break;
+    case RestScreenAction::cancel_skip_hold:
+        screen->rest_session_.cancel_skip_hold(screen->active_now_ms_);
+        break;
+    case RestScreenAction::cancel_skip:
+        screen->rest_session_.cancel_skip(screen->active_now_ms_);
+        break;
+    case RestScreenAction::confirm_skip:
+        screen->rest_session_.confirm_skip(screen->active_now_ms_);
+        screen->skip_rest_requested_ = screen->rest_session_.consume_skip_request();
+        break;
+    }
+    screen->rest_screen_.update(screen->rest_session_.view_model());
 }
 
 void ApplicationScreen::settings_action(const ui::SettingsScreenAction action,
@@ -536,6 +624,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(diagnostics_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(g_meter_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(rest_root_, LV_OBJ_FLAG_HIDDEN);
 
     switch (navigation_.destination()) {
     case ui::Destination::ready:
@@ -563,6 +652,9 @@ void ApplicationScreen::show_destination() noexcept
         break;
     case ui::Destination::diagnostics:
         lv_obj_remove_flag(diagnostics_root_, LV_OBJ_FLAG_HIDDEN);
+        break;
+    case ui::Destination::rest:
+        lv_obj_remove_flag(rest_root_, LV_OBJ_FLAG_HIDDEN);
         break;
     }
 }
@@ -595,7 +687,7 @@ void ApplicationScreen::apply_display_policy(const board::DisplayCommand& comman
     const auto scale = portrait ? 192 : 256;
     for (auto* root : {ready_root_, active_root_, setup_menu_root_, settings_root_,
                        track_selection_root_, session_review_root_, diagnostics_root_,
-                       g_meter_root_}) {
+                       g_meter_root_, rest_root_}) {
         lv_obj_set_pos(root, command.layout_shift_x, command.layout_shift_y);
         lv_obj_set_style_transform_pivot_x(root, 300, 0);
         lv_obj_set_style_transform_pivot_y(root, 225, 0);

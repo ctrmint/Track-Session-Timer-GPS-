@@ -40,10 +40,12 @@ settings, including the selected track, live at
 `/tmp/track-session-timer-simulator/settings-v2.bin` on Linux, outside the checkout.
 The active timer shows bounded completed-lap feedback while keeping session time
 visible. Stopping requires a 1.5-second hold, release, and separate confirmation;
-short holds and cancelled presses continue timing. Review shows bounded session history and lap pages, with best/previous emphasis and
-explicit REST/READY actions. Diagnostics pages through system, GNSS, logging, and
-peripheral health from immutable backend snapshots. All inputs dispatch the same
-deterministic navigation actions.
+short holds and cancelled presses continue timing. Overtime replaces the countdown
+with a signed overrun. Review shows bounded session history and lap pages, with
+best/previous emphasis and explicit REST/READY actions. Rest has its own monotonic
+countdown and guarded hold-to-skip confirmation. Diagnostics pages through system,
+GNSS, logging, and peripheral health from immutable backend snapshots. All inputs
+dispatch the same deterministic navigation actions.
 
 The ready scenario deliberately keeps GNSS in acquisition. It demonstrates that the
 session timer remains available while lap timing is unavailable. Use `--scenario`
@@ -101,6 +103,19 @@ build/simulator/track_timer_simulator \
 
 `--review-state complete|partial|empty|missing|corrupt|unsupported` exercises history
 paging, partial-log warnings, and each safe failure presentation.
+
+Render lifecycle states driven by the production session controller with:
+
+```bash
+build/simulator/track_timer_simulator --workflow-state overtime
+build/simulator/track_timer_simulator --workflow-state completion
+build/simulator/track_timer_simulator --workflow-state rest
+```
+
+`--workflow-state live|overtime|completion|rest` starts from a deterministic monotonic
+time and exercises the same running, overtime, review, and rest transitions used by
+the application. Overtime displays a signed overrun; completion records `DRIVER STOP`;
+rest counts down and requires a hold plus confirmation to skip.
 
 Use `--diagnostics-state normal|degraded|missing|recovery` with
 `--screen diagnostics` to render stationary subsystem health and retained fault

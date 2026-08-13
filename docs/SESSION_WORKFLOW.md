@@ -25,6 +25,13 @@ while confirmation is visible, short or accidental input can cancel it, and only
 separate confirmation event ends the active phase. GNSS, storage, IMU, display refresh,
 and wall-clock time are deliberately absent from the controller contract.
 
+The UI synchronizes directly from controller snapshots. Overtime keeps the normal
+timing display but replaces the countdown with a signed overrun and an `OVERTIME` text
+heading. Confirmation keeps that live time visible. Review reports the frozen
+completion reason, and Rest uses its own `REST / RECOVERY` screen with a fixed-cell
+countdown. Skipping rest repeats the same hold, release, and confirmation safeguard;
+ordinary taps, gestures, or Back cannot complete either timed state.
+
 ## Configuration invariants
 
 - Session duration is between one minute and 24 hours.

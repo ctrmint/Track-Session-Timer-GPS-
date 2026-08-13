@@ -54,6 +54,12 @@ NavigationResult NavigationController::dispatch(const NavigationAction action) n
         break;
     case NavigationAction::session_ended:
         break;
+    case NavigationAction::rest_started:
+        if (destination_ == Destination::ready || destination_ == Destination::review) {
+            destination_ = Destination::rest;
+            result.accepted = true;
+        }
+        break;
     }
 
     result.current = destination_;
@@ -99,6 +105,8 @@ const char* destination_name(const Destination destination) noexcept
         return "review";
     case Destination::diagnostics:
         return "diagnostics";
+    case Destination::rest:
+        return "rest";
     }
     return "ready";
 }

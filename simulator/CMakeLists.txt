@@ -37,10 +37,12 @@ add_library(
     ../firmware/components/ui/imu_meter.cpp
     ../firmware/components/ui/navigation.cpp
     ../firmware/components/ui/presenter.cpp
+    ../firmware/components/ui/rest_session.cpp
     ../firmware/components/ui/session_review.cpp
     ../firmware/components/ui/settings_editor.cpp
     ../firmware/components/ui/track_selection.cpp
     ../firmware/components/settings/component.cpp
+    ../firmware/components/session/component.cpp
     ../firmware/components/logger/async_logger.cpp
     ../firmware/components/logger/formats.cpp
     ../firmware/components/track/definition.cpp
@@ -64,6 +66,7 @@ target_include_directories(
         ../firmware/components/domain/include
         ../firmware/components/logger/include
         ../firmware/components/settings/include
+        ../firmware/components/session/include
         ../firmware/components/track/include
         ../firmware/components/ui/include
 )
@@ -100,6 +103,7 @@ add_executable(
     src/device_screen.cpp
     src/fixed_cell_label.cpp
     src/main.cpp
+    src/rest_screen.cpp
 )
 target_include_directories(track_timer_simulator PRIVATE src)
 target_link_libraries(
@@ -127,6 +131,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_rest_session_test
+        ../tests/cpp/test_rest_session.cpp
+    )
+    target_link_libraries(
+        track_timer_rest_session_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_rest_session_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-rest-session-model
+        COMMAND track_timer_rest_session_test
+    )
+    set_tests_properties(
+        simulator-rest-session-model
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Session-driven overtime, completion, guarded rest skip, and fault independence passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_imu_meter_test
         ../tests/cpp/test_imu_meter.cpp
@@ -522,6 +551,7 @@ if(BUILD_TESTING)
         src/application_screen.cpp
         src/device_screen.cpp
         src/fixed_cell_label.cpp
+        src/rest_screen.cpp
     )
     target_include_directories(track_timer_application_screen_test PRIVATE src)
     target_link_libraries(
@@ -724,6 +754,29 @@ if(BUILD_TESTING)
             PASS_REGULAR_EXPRESSION "scenario=active.*current=1:43.638.*session=15:26.*imu-fixture=failure.*imu-state=unavailable"
             TIMEOUT 20
     )
+
+    function(add_workflow_state_smoke fixture expected)
+        add_test(
+            NAME "simulator-workflow-${fixture}"
+            COMMAND track_timer_simulator
+                --headless
+                --scenario ready
+                --workflow-state "${fixture}"
+                --frames 4
+                --snapshot "${CMAKE_CURRENT_BINARY_DIR}/workflow-${fixture}.ppm"
+        )
+        set_tests_properties(
+            "simulator-workflow-${fixture}"
+            PROPERTIES
+                ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+                PASS_REGULAR_EXPRESSION "${expected}"
+                TIMEOUT 20
+        )
+    endfunction()
+
+    add_workflow_state_smoke(overtime "session=\\+00:05.*screen=active.*workflow-fixture=overtime.*workflow-state=overtime")
+    add_workflow_state_smoke(completion "screen=review.*review-state=ready.*workflow-fixture=completion.*workflow-state=review")
+    add_workflow_state_smoke(rest "screen=rest.*workflow-fixture=rest.*workflow-state=rest")
 
     function(add_display_state_smoke fixture expected)
         add_test(

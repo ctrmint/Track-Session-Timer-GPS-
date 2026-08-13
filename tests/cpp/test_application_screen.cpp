@@ -395,6 +395,65 @@ int main()
     assert(screen.navigate(ui::NavigationAction::session_ended).current ==
            ui::Destination::ready);
 
+    session::SessionController lifecycle{{60'000, 30'000}};
+    assert(lifecycle.start(0) == session::TransitionResult::accepted);
+    assert(lifecycle.advance(65'000) == session::TransitionResult::accepted);
+    auto overtime_snapshot = ui::apply_session_timing(device_snapshot,
+                                                       lifecycle.snapshot());
+    screen.synchronize_workflow(lifecycle.snapshot(), 65'000);
+    screen.update(ui::present_ready(snapshot), overtime_snapshot, diagnostics_snapshot,
+                  65'000);
+    assert(screen.destination() == ui::Destination::active);
+    assert(std::strcmp(lv_label_get_text(screen.device_screen().session_status_object()),
+                       "OVERTIME") == 0);
+    assert(std::strcmp(ui::present(overtime_snapshot).session_remaining.data(),
+                       "+00:05") == 0);
+
+    assert(lifecycle.request_stop(65'000) == session::TransitionResult::accepted);
+    assert(lifecycle.confirm_stop(65'001) == session::TransitionResult::accepted);
+    screen.synchronize_workflow(lifecycle.snapshot(), 65'001);
+    assert(screen.destination() == ui::Destination::review);
+    click(screen.session_review_screen().button_for(ui::SessionReviewAction::return_to_rest));
+    assert(screen.consume_rest_request());
+    assert(lifecycle.complete_review(65'002) == session::TransitionResult::accepted);
+    screen.synchronize_workflow(lifecycle.snapshot(), 65'002);
+    assert(screen.destination() == ui::Destination::rest);
+    assert(std::strcmp(lv_label_get_text(screen.rest_screen().title_object()),
+                       "REST / RECOVERY") == 0);
+    assert(std::strstr(lv_label_get_text(screen.rest_screen().completion_object()),
+                       "DRIVER STOP") != nullptr);
+    assert(std::strcmp(screen.rest_session().view_model().remaining.data(), "00:30") == 0);
+    auto* remaining = screen.rest_screen().remaining_object();
+    assert(lv_obj_get_child_count(remaining) == 5);
+    assert(std::strcmp(lv_label_get_text(lv_obj_get_child(remaining, 0)), "0") == 0);
+    assert(std::strcmp(lv_label_get_text(lv_obj_get_child(remaining, 2)), ":") == 0);
+    assert(std::strcmp(lv_label_get_text(lv_obj_get_child(remaining, 4)), "0") == 0);
+    for (const auto action : {simulator::RestScreenAction::press_skip,
+                              simulator::RestScreenAction::cancel_skip,
+                              simulator::RestScreenAction::confirm_skip}) {
+        auto* button = screen.rest_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 56);
+    }
+
+    auto* skip_button = screen.rest_screen().button_for(
+        simulator::RestScreenAction::press_skip);
+    assert(lv_obj_send_event(skip_button, LV_EVENT_CLICKED, nullptr) == LV_RESULT_OK);
+    assert(lv_obj_send_event(skip_button, LV_EVENT_GESTURE, nullptr) == LV_RESULT_OK);
+    assert(!screen.consume_skip_rest_request());
+    assert(lv_obj_send_event(skip_button, LV_EVENT_PRESSED, nullptr) == LV_RESULT_OK);
+    screen.synchronize_workflow(lifecycle.snapshot(), 66'502);
+    assert(lv_obj_send_event(screen.rest_screen().button_for(
+                                 simulator::RestScreenAction::release_skip),
+                             LV_EVENT_RELEASED, nullptr) == LV_RESULT_OK);
+    click(screen.rest_screen().button_for(simulator::RestScreenAction::confirm_skip));
+    assert(screen.consume_skip_rest_request());
+    assert(lifecycle.request_stop(66'502) == session::TransitionResult::accepted);
+    assert(lifecycle.confirm_stop(66'503) == session::TransitionResult::accepted);
+    screen.synchronize_workflow(lifecycle.snapshot(), 66'503);
+    assert(screen.destination() == ui::Destination::ready);
+
     lv_display_delete(display);
     lv_sdl_quit();
     lv_deinit();

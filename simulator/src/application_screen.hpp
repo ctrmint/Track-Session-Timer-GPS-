@@ -1,6 +1,7 @@
 #pragma once
 
 #include "device_screen.hpp"
+#include "rest_screen.hpp"
 
 #include "track_timer/settings/settings.hpp"
 #include "track_timer/logger/summary_provider.hpp"
@@ -49,12 +50,15 @@ class ApplicationScreen {
                 const ui::ImuMeterInput& imu = {}) noexcept;
     [[nodiscard]] ui::NavigationResult navigate(ui::NavigationAction action) noexcept;
     void synchronize_session(bool active) noexcept;
+    void synchronize_workflow(const session::SessionSnapshot& snapshot,
+                              std::uint64_t now_ms) noexcept;
     void update_track_match(const track::TrackMatchResult& match) noexcept;
     void open_setup_page(SetupPage page) noexcept;
     [[nodiscard]] bool consume_start_request() noexcept;
     [[nodiscard]] bool consume_stop_request() noexcept;
     [[nodiscard]] bool consume_rest_request() noexcept;
     [[nodiscard]] bool consume_ready_request() noexcept;
+    [[nodiscard]] bool consume_skip_rest_request() noexcept;
     void add_controls_to_group(lv_group_t* group) noexcept;
 
     [[nodiscard]] ui::Destination destination() const noexcept;
@@ -70,6 +74,8 @@ class ApplicationScreen {
     [[nodiscard]] const ui::DiagnosticsController& diagnostics() const noexcept;
     [[nodiscard]] ui::GmeterScreen& g_meter_screen() noexcept;
     [[nodiscard]] const ui::ImuMeterController& g_meter() const noexcept;
+    [[nodiscard]] RestScreen& rest_screen() noexcept;
+    [[nodiscard]] const ui::RestSessionController& rest_session() const noexcept;
     [[nodiscard]] DeviceScreen& device_screen() noexcept;
     [[nodiscard]] const ui::ActiveSessionController& active_session() const noexcept;
     [[nodiscard]] const ui::DisplayPolicyController& display_policy() const noexcept;
@@ -87,6 +93,7 @@ class ApplicationScreen {
     static void review_action(ui::SessionReviewAction action, void* context) noexcept;
     static void diagnostics_action(ui::DiagnosticsAction action, void* context) noexcept;
     static void g_meter_action(ui::GmeterAction action, void* context) noexcept;
+    static void rest_action(RestScreenAction action, void* context) noexcept;
     static void device_action(DeviceScreenAction action, void* context) noexcept;
     static void activity_event(lv_event_t* event) noexcept;
     void show_destination() noexcept;
@@ -107,6 +114,7 @@ class ApplicationScreen {
     bool start_requested_{false};
     bool rest_requested_{false};
     bool ready_requested_{false};
+    bool skip_rest_requested_{false};
     bool session_active_{false};
     bool activity_pending_{false};
     std::uint64_t active_now_ms_{0};
@@ -118,6 +126,7 @@ class ApplicationScreen {
     lv_obj_t* session_review_root_{nullptr};
     lv_obj_t* diagnostics_root_{nullptr};
     lv_obj_t* g_meter_root_{nullptr};
+    lv_obj_t* rest_root_{nullptr};
     lv_obj_t* brightness_overlay_{nullptr};
     ui::ReadyScreen ready_screen_;
     ui::ActiveSessionController active_session_{};
@@ -134,6 +143,8 @@ class ApplicationScreen {
     ui::DiagnosticsScreen diagnostics_screen_;
     ui::ImuMeterController g_meter_{};
     ui::GmeterScreen g_meter_screen_;
+    ui::RestSessionController rest_session_{};
+    RestScreen rest_screen_;
 };
 
 [[nodiscard]] const char* setup_page_name(SetupPage page) noexcept;

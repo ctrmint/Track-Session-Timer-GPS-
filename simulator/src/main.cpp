@@ -1,6 +1,7 @@
 #include "application_screen.hpp"
 
 #include "track_timer/settings/settings.hpp"
+#include "track_timer/session/controller.hpp"
 #include "track_timer/simulator/file_settings_store.hpp"
 #include "track_timer/simulator/diagnostics_fixtures.hpp"
 #include "track_timer/simulator/display_fixtures.hpp"
@@ -33,6 +34,40 @@ namespace {
 constexpr std::int32_t kDisplayWidth = 600;
 constexpr std::int32_t kDisplayHeight = 450;
 
+enum class WorkflowFixture : std::uint8_t {
+    live,
+    overtime,
+    completion,
+    rest,
+};
+
+const char* workflow_fixture_name(const WorkflowFixture fixture) noexcept
+{
+    switch (fixture) {
+    case WorkflowFixture::live:
+        return "live";
+    case WorkflowFixture::overtime:
+        return "overtime";
+    case WorkflowFixture::completion:
+        return "completion";
+    case WorkflowFixture::rest:
+        return "rest";
+    }
+    return "live";
+}
+
+bool parse_workflow_fixture(const std::string& name, WorkflowFixture& fixture) noexcept
+{
+    for (const auto candidate : {WorkflowFixture::live, WorkflowFixture::overtime,
+                                 WorkflowFixture::completion, WorkflowFixture::rest}) {
+        if (name == workflow_fixture_name(candidate)) {
+            fixture = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
 struct Options {
     track_timer::simulator::ScenarioId scenario{track_timer::simulator::ScenarioId::ready};
     track_timer::simulator::GnssReplayRate gnss_rate{
@@ -54,6 +89,7 @@ struct Options {
         track_timer::simulator::DisplayFixtureId::live};
     track_timer::simulator::ImuFixtureId imu_fixture{
         track_timer::simulator::ImuFixtureId::normal};
+    WorkflowFixture workflow_fixture{WorkflowFixture::live};
 };
 
 std::string require_value(const int argc, char** argv, int& index)
@@ -129,6 +165,13 @@ Options parse_options(const int argc, char** argv)
                     "--imu-state must be normal, calibration, failure, partial, or recovery");
             }
         }
+        else if (argument == "--workflow-state") {
+            const auto value = require_value(argc, argv, index);
+            if (!parse_workflow_fixture(value, options.workflow_fixture)) {
+                throw std::invalid_argument(
+                    "--workflow-state must be live, overtime, completion, or rest");
+            }
+        }
         else if (argument == "--review-state") {
             const auto value = require_value(argc, argv, index);
             if (!track_timer::simulator::parse_summary_fixture(value,
@@ -166,7 +209,7 @@ Options parse_options(const int argc, char** argv)
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
                          "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|g-meter|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
-                         "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] "
+                         "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] [--workflow-state STATE] "
                          "[--snapshot FILE]\n"
                          "Scenarios: ready, active, gnss-loss, storage-failure, "
                          "lap-faster, lap-slower, lap-unavailable-best\n"
@@ -220,6 +263,10 @@ struct ApplicationContext {
     track_timer::simulator::DiagnosticsFixtureId diagnostics_fixture;
     track_timer::simulator::DisplayFixture display_fixture;
     track_timer::simulator::ImuFixtureId imu_fixture;
+    WorkflowFixture workflow_fixture;
+    track_timer::session::SessionController lifecycle{{60'000, 30'000}};
+    std::int64_t workflow_time_offset_ms{0};
+    bool workflow_active{false};
     lv_display_t* display;
     track_timer::ui::RenderProfiler profiler{};
 
@@ -232,27 +279,95 @@ struct ApplicationContext {
                        const track_timer::simulator::DiagnosticsFixtureId fixture_diagnostics,
                        const track_timer::simulator::DisplayFixture& fixture_display,
                        const track_timer::simulator::ImuFixtureId fixture_imu,
+                       const WorkflowFixture fixture_workflow,
                        lv_display_t* target_display)
         : player(scenario, std::move(fixture), rate), screen(application_screen),
           settings(settings_manager), track_fixture(fixture_tracks),
           diagnostics_fixture(fixture_diagnostics), display_fixture(fixture_display),
-          imu_fixture(fixture_imu),
+          imu_fixture(fixture_imu), workflow_fixture(fixture_workflow),
           display(target_display)
     {
+        switch (workflow_fixture) {
+        case WorkflowFixture::live:
+            return;
+        case WorkflowFixture::overtime:
+            (void)lifecycle.start(0);
+            workflow_time_offset_ms = 65'000;
+            workflow_active = true;
+            break;
+        case WorkflowFixture::completion:
+            (void)lifecycle.start(0);
+            (void)lifecycle.request_stop(65'000);
+            (void)lifecycle.confirm_stop(65'001);
+            workflow_time_offset_ms = 65'001;
+            workflow_active = true;
+            player.stop_session();
+            break;
+        case WorkflowFixture::rest:
+            (void)lifecycle.start(0);
+            (void)lifecycle.request_stop(65'000);
+            (void)lifecycle.confirm_stop(65'001);
+            (void)lifecycle.complete_review(65'002);
+            workflow_time_offset_ms = 65'002;
+            workflow_active = true;
+            player.stop_session();
+            break;
+        }
     }
 };
 
 void update_screen(ApplicationContext& context)
 {
+    const auto workflow_now = context.player.elapsed_ms() + context.workflow_time_offset_ms;
     if (context.screen->consume_start_request()) {
         context.player.reset(track_timer::simulator::ScenarioId::active);
+        context.workflow_time_offset_ms = workflow_now;
+        context.lifecycle = track_timer::session::SessionController{{
+            static_cast<std::int64_t>(context.settings->current().session_duration_minutes) *
+                60'000,
+            static_cast<std::int64_t>(context.settings->current().rest_duration_minutes) *
+                60'000}};
+        (void)context.lifecycle.start(workflow_now);
+        context.workflow_active = true;
     }
     if (context.screen->consume_stop_request()) {
+        if (context.workflow_active) {
+            (void)context.lifecycle.request_stop(workflow_now);
+            (void)context.lifecycle.confirm_stop(workflow_now);
+        }
         context.player.stop_session();
     }
 
-    const auto& active_snapshot = context.player.snapshot();
-    context.screen->synchronize_session(active_snapshot.session_active);
+    const auto rest_requested = context.screen->consume_rest_request();
+    const auto ready_requested = context.screen->consume_ready_request();
+    if (context.workflow_active && (rest_requested || ready_requested) &&
+        context.lifecycle.snapshot().state == track_timer::session::SessionState::review) {
+        (void)context.lifecycle.complete_review(workflow_now);
+        if (ready_requested &&
+            context.lifecycle.snapshot().state == track_timer::session::SessionState::rest) {
+            (void)context.lifecycle.request_stop(workflow_now);
+            (void)context.lifecycle.confirm_stop(workflow_now);
+        }
+    }
+    if (context.workflow_active && context.screen->consume_skip_rest_request() &&
+        context.lifecycle.snapshot().state == track_timer::session::SessionState::rest) {
+        (void)context.lifecycle.request_stop(workflow_now);
+        (void)context.lifecycle.confirm_stop(workflow_now);
+    }
+    if (context.workflow_active) {
+        (void)context.lifecycle.advance(workflow_now);
+    }
+
+    auto active_snapshot = context.player.snapshot();
+    if (context.workflow_active) {
+        active_snapshot = track_timer::ui::apply_session_timing(
+            active_snapshot, context.lifecycle.snapshot());
+        context.screen->synchronize_workflow(context.lifecycle.snapshot(),
+                                             static_cast<std::uint64_t>(workflow_now));
+    }
+    else {
+        context.screen->synchronize_session(active_snapshot.session_active);
+    }
 
     auto match_request = context.track_fixture->request;
     match_request.selected_track_id = context.settings->current().selected_track_id.data();
@@ -450,7 +565,7 @@ int run(const Options& options)
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
                                &settings_manager, &track_fixture,
                                options.diagnostics_fixture, display_fixture,
-                               options.imu_fixture, display};
+                               options.imu_fixture, options.workflow_fixture, display};
     render_screen(context);
 
     if (options.headless) {
@@ -483,7 +598,12 @@ int run(const Options& options)
         return 1;
     }
 
-    const auto model = track_timer::ui::present(context.player.snapshot());
+    auto final_device_snapshot = context.player.snapshot();
+    if (context.workflow_active) {
+        final_device_snapshot = track_timer::ui::apply_session_timing(
+            final_device_snapshot, context.lifecycle.snapshot());
+    }
+    const auto model = track_timer::ui::present(final_device_snapshot);
     const auto diagnostics = context.player.diagnostics();
     const auto& gnss = context.player.device().gnss();
     const auto& storage = context.player.device().storage();
@@ -557,6 +677,9 @@ int run(const Options& options)
               << track_timer::ui::imu_meter_state_name(screen.g_meter().snapshot().state)
               << " imu-samples=" << screen.g_meter().snapshot().accepted_samples
               << " imu-trail=" << screen.g_meter().snapshot().trail_count
+              << " workflow-fixture=" << workflow_fixture_name(options.workflow_fixture)
+              << " workflow-state="
+              << track_timer::ui::session_state_name(context.lifecycle.snapshot().state)
               << " lap-feedback="
               << track_timer::ui::lap_feedback_kind_name(
                      screen.active_session().view_model().feedback.kind)
