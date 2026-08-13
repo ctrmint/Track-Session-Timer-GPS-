@@ -36,6 +36,7 @@ simulator-model-test:
 		-Ifirmware/components/ui/include \
 		-Isimulator/include \
 		firmware/components/ui/presenter.cpp simulator/src/device_backends.cpp \
+		simulator/src/fixed_cell_text.cpp \
 		simulator/src/scenario.cpp \
 		tests/cpp/test_simulator_model.cpp -o $(SIMULATOR_MODEL_TEST_BINARY)
 	$(SIMULATOR_MODEL_TEST_BINARY)

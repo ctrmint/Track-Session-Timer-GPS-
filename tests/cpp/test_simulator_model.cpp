@@ -1,4 +1,5 @@
 #include "track_timer/board/platform.hpp"
+#include "track_timer/simulator/fixed_cell_text.hpp"
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/ui/presenter.hpp"
 
@@ -38,6 +39,17 @@ bool snapshots_equal(const track_timer::domain::UiSnapshot& left,
            left.logging_available == right.logging_available;
 }
 
+std::uint16_t occupied_cells(const track_timer::simulator::FixedCellText& layout) noexcept
+{
+    std::uint16_t mask = 0;
+    for (std::size_t index = 0; index < layout.cell_count; ++index) {
+        if (layout.cells[index] != '\0') {
+            mask = static_cast<std::uint16_t>(mask | (1U << index));
+        }
+    }
+    return mask;
+}
+
 }  // namespace
 
 int main()
@@ -54,6 +66,30 @@ int main()
     assert(parsed == ScenarioId::active);
     assert(!track_timer::simulator::parse_scenario("unknown", parsed));
     assert(track_timer::simulator::next_scenario(ScenarioId::storage_failure) == ScenarioId::ready);
+
+    const auto narrow_lap = track_timer::simulator::layout_fixed_cell_text("1:11.111", 10);
+    const auto wide_lap = track_timer::simulator::layout_fixed_cell_text("8:48.888", 10);
+    const auto two_digit_lap = track_timer::simulator::layout_fixed_cell_text("10:41.141", 10);
+    const auto unavailable_lap = track_timer::simulator::layout_fixed_cell_text("--:--.---", 10);
+    assert(!narrow_lap.overflowed && !wide_lap.overflowed && !two_digit_lap.overflowed);
+    assert(occupied_cells(narrow_lap) == occupied_cells(wide_lap));
+    assert(narrow_lap.cells[3] == ':' && wide_lap.cells[3] == ':' &&
+           two_digit_lap.cells[3] == ':' && unavailable_lap.cells[3] == ':');
+    assert(narrow_lap.cells[6] == '.' && wide_lap.cells[6] == '.' &&
+           two_digit_lap.cells[6] == '.' && unavailable_lap.cells[6] == '.');
+
+    const auto narrow_session = track_timer::simulator::layout_fixed_cell_text("11:11", 7);
+    const auto wide_session = track_timer::simulator::layout_fixed_cell_text("88:48", 7);
+    const auto long_session = track_timer::simulator::layout_fixed_cell_text("100:00", 7);
+    assert(occupied_cells(narrow_session) == occupied_cells(wide_session));
+    assert(narrow_session.cells[4] == ':' && wide_session.cells[4] == ':' &&
+           long_session.cells[4] == ':');
+
+    const auto overflow = track_timer::simulator::layout_fixed_cell_text("1234:56.789", 10);
+    assert(overflow.overflowed);
+    for (std::size_t index = 0; index < overflow.cell_count; ++index) {
+        assert(overflow.cells[index] == '#');
+    }
 
     const auto repo_root = std::filesystem::path{__FILE__}.parent_path().parent_path().parent_path();
     track_timer::simulator::GnssFixture recorded_fixture{};

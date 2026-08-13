@@ -3,6 +3,23 @@
 namespace track_timer::simulator {
 namespace {
 
+constexpr std::size_t kLapTimeCellCount = 10;
+constexpr std::size_t kSessionTimeCellCount = 7;
+constexpr auto kLargeLapTimeCellWidths = lap_time_cell_widths(34, 16, 12);
+constexpr auto kSmallLapTimeCellWidths = lap_time_cell_widths(20, 10, 8);
+constexpr auto kSessionTimeCellWidths = session_time_cell_widths(34, 16);
+
+constexpr std::int32_t centered_lap_field_x(const std::int32_t area_x,
+                                            const std::int32_t area_width,
+                                            const std::int32_t total_width,
+                                            const std::int32_t digit_width) noexcept
+{
+    constexpr std::int32_t kReservedLeadingCells = 2;
+    const auto leading_width = kReservedLeadingCells * digit_width;
+    const auto common_value_width = total_width - leading_width;
+    return area_x + (area_width - common_value_width) / 2 - leading_width;
+}
+
 lv_obj_t* make_label(lv_obj_t* parent, const lv_font_t* font, const lv_color_t color)
 {
     auto* label = lv_label_create(parent);
@@ -51,27 +68,30 @@ DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
     lv_obj_set_pos(current_caption, 0, 86);
     lv_obj_set_size(current_caption, 600, 24);
 
-    current_lap_label_ = make_label(root_, &lv_font_montserrat_48, lv_color_white());
-    lv_obj_set_pos(current_lap_label_, 0, 112);
-    lv_obj_set_size(current_lap_label_, 600, 62);
+    current_lap_label_.create(root_, &lv_font_montserrat_48, lv_color_white(),
+                              kLapTimeCellCount, kLargeLapTimeCellWidths, 62);
+    current_lap_label_.set_position(
+        centered_lap_field_x(0, 600, current_lap_label_.width(), 34), 112);
 
     auto* previous_caption = make_label(root_, &lv_font_montserrat_14, lv_color_hex(0x8F8F8F));
     lv_label_set_text(previous_caption, "LAST");
     lv_obj_set_pos(previous_caption, 30, 210);
     lv_obj_set_size(previous_caption, 250, 22);
 
-    previous_lap_label_ = make_label(root_, &lv_font_montserrat_28, lv_color_white());
-    lv_obj_set_pos(previous_lap_label_, 30, 236);
-    lv_obj_set_size(previous_lap_label_, 250, 38);
+    previous_lap_label_.create(root_, &lv_font_montserrat_28, lv_color_white(),
+                               kLapTimeCellCount, kSmallLapTimeCellWidths, 38);
+    previous_lap_label_.set_position(
+        centered_lap_field_x(30, 250, previous_lap_label_.width(), 20), 236);
 
     auto* best_caption = make_label(root_, &lv_font_montserrat_14, lv_color_hex(0x8F8F8F));
     lv_label_set_text(best_caption, "BEST");
     lv_obj_set_pos(best_caption, 320, 210);
     lv_obj_set_size(best_caption, 250, 22);
 
-    best_lap_label_ = make_label(root_, &lv_font_montserrat_28, lv_color_white());
-    lv_obj_set_pos(best_lap_label_, 320, 236);
-    lv_obj_set_size(best_lap_label_, 250, 38);
+    best_lap_label_.create(root_, &lv_font_montserrat_28, lv_color_white(),
+                           kLapTimeCellCount, kSmallLapTimeCellWidths, 38);
+    best_lap_label_.set_position(
+        centered_lap_field_x(320, 250, best_lap_label_.width(), 20), 236);
 
     logging_badge_ = lv_obj_create(root_);
     configure_panel(logging_badge_);
@@ -93,27 +113,26 @@ DeviceScreen::DeviceScreen(lv_obj_t* root) : root_(root)
     lv_obj_set_size(session_caption, 150, 30);
     lv_obj_set_style_text_align(session_caption, LV_TEXT_ALIGN_LEFT, 0);
 
-    session_label_ = make_label(session_panel_, &lv_font_montserrat_48, lv_color_white());
-    lv_obj_set_pos(session_label_, 190, 25);
-    lv_obj_set_size(session_label_, 380, 60);
-    lv_obj_set_style_text_align(session_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    session_label_.create(session_panel_, &lv_font_montserrat_48, lv_color_white(),
+                          kSessionTimeCellCount, kSessionTimeCellWidths, 60);
+    session_label_.set_position(570 - session_label_.width(), 25);
 }
 
 void DeviceScreen::update(const ui::DeviceViewModel& model) noexcept
 {
     lv_label_set_text(lap_label_, model.lap_label.data());
     lv_label_set_text(gnss_label_, model.gnss_status.data());
-    lv_label_set_text(current_lap_label_, model.current_lap.data());
-    lv_label_set_text(previous_lap_label_, model.previous_lap.data());
-    lv_label_set_text(best_lap_label_, model.best_lap.data());
+    current_lap_label_.set_text(model.current_lap.data());
+    previous_lap_label_.set_text(model.previous_lap.data());
+    best_lap_label_.set_text(model.best_lap.data());
     lv_label_set_text(logging_label_, model.logging_status.data());
-    lv_label_set_text(session_label_, model.session_remaining.data());
+    session_label_.set_text(model.session_remaining.data());
 
     const auto accent = lv_color_hex(model.accent_rgb);
     const auto accent_text = lv_color_hex(model.accent_text_rgb);
     lv_obj_set_style_bg_color(accent_line_, accent, 0);
     lv_obj_set_style_bg_color(session_panel_, accent, 0);
-    lv_obj_set_style_text_color(session_label_, accent_text, 0);
+    session_label_.set_color(accent_text);
 
     const bool logging = model.logging_status[0] != 'N';
     lv_obj_set_style_bg_color(logging_badge_, lv_color_hex(logging ? 0x1B5E20 : 0xB71C1C), 0);

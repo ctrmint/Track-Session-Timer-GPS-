@@ -1,5 +1,7 @@
 #pragma once
 
+#include "fixed_cell_label.hpp"
+
 #include "track_timer/ui/presenter.hpp"
 
 #include <lvgl.h>
@@ -19,11 +21,11 @@ class DeviceScreen {
     lv_obj_t* logging_badge_;
     lv_obj_t* lap_label_;
     lv_obj_t* gnss_label_;
-    lv_obj_t* current_lap_label_;
-    lv_obj_t* previous_lap_label_;
-    lv_obj_t* best_lap_label_;
     lv_obj_t* logging_label_;
-    lv_obj_t* session_label_;
+    FixedCellLabel current_lap_label_{};
+    FixedCellLabel previous_lap_label_{};
+    FixedCellLabel best_lap_label_{};
+    FixedCellLabel session_label_{};
 };
 
 }  // namespace track_timer::simulator

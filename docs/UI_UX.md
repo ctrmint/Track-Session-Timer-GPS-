@@ -31,6 +31,11 @@ Example only:
 
 For the first release, live delta may be omitted and the current lap/session values made larger.
 
+Dynamic time values must use tabular numerals or fixed character cells. Proportional
+glyph advances must never recenter or shift current, previous, best, or session time
+while the driver is reading them. Separator positions and field bounds require an
+automated layout regression test.
+
 ## 3. Session colour
 
 Preserve the original TrackSessionTimer strength: the whole visual environment indicates session progression.
