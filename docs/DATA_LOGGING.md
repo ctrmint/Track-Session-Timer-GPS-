@@ -27,7 +27,7 @@ Include:
 - GNSS model and configuration
 - configured update rate
 - track ID
-- track definition hash/revision
+- track schema version, identifier, and 16-character exact-file fingerprint
 - session settings
 - start/end UTC if available
 - reset reason at boot

@@ -35,6 +35,7 @@ add_library(
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/ui/settings_editor.cpp
     ../firmware/components/settings/component.cpp
+    ../firmware/components/track/definition.cpp
     src/device_backends.cpp
     src/file_settings_store.cpp
     src/fixed_cell_text.cpp
@@ -47,6 +48,7 @@ target_include_directories(
         ../firmware/components/board/include
         ../firmware/components/domain/include
         ../firmware/components/settings/include
+        ../firmware/components/track/include
         ../firmware/components/ui/include
 )
 target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
@@ -100,6 +102,32 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_track_definition_test
+        ../tests/cpp/test_track_definition.cpp
+    )
+    target_link_libraries(
+        track_timer_track_definition_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_track_definition_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-versioned-track-definition
+        COMMAND track_timer_track_definition_test
+            "${CMAKE_CURRENT_SOURCE_DIR}/../data/tracks/synthetic_test_loop.json"
+    )
+    set_tests_properties(
+        simulator-versioned-track-definition
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Versioned track loading, projection, hashing, and failure isolation passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_settings_editor_test
         ../tests/cpp/test_settings_editor.cpp
