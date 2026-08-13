@@ -7,15 +7,18 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate repo-check host-test simulator-model-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate repo-check host-test simulator-model-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
 
 track-validate:
 	$(PYTHON) -B tools/validate_tracks.py
+
+simulator-fixture-validate:
+	$(PYTHON) -B tools/validate_simulator_fixtures.py
 
 repo-check:
 	$(PYTHON) -B tools/check_repository.py
@@ -32,7 +35,8 @@ simulator-model-test:
 		-Ifirmware/components/domain/include \
 		-Ifirmware/components/ui/include \
 		-Isimulator/include \
-		firmware/components/ui/presenter.cpp simulator/src/scenario.cpp \
+		firmware/components/ui/presenter.cpp simulator/src/device_backends.cpp \
+		simulator/src/scenario.cpp \
 		tests/cpp/test_simulator_model.cpp -o $(SIMULATOR_MODEL_TEST_BINARY)
 	$(SIMULATOR_MODEL_TEST_BINARY)
 

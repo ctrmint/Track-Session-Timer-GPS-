@@ -1,6 +1,8 @@
 #include "track_timer/simulator/scenario.hpp"
 
 #include <algorithm>
+#include <limits>
+#include <utility>
 
 namespace track_timer::simulator {
 namespace {
@@ -93,13 +95,19 @@ ScenarioId next_scenario(const ScenarioId id) noexcept
     return *std::next(current);
 }
 
-ScenarioPlayer::ScenarioPlayer(const ScenarioId id) noexcept : id_(id), snapshot_(initial_snapshot(id)) {}
+ScenarioPlayer::ScenarioPlayer(const ScenarioId id, GnssFixture fixture, const GnssReplayRate rate)
+    : id_(id), snapshot_(initial_snapshot(id)), device_(std::move(fixture), rate)
+{
+    apply_fault_schedule();
+}
 
 void ScenarioPlayer::reset(const ScenarioId id) noexcept
 {
     id_ = id;
     elapsed_ms_ = 0;
     snapshot_ = initial_snapshot(id);
+    device_.reset();
+    apply_fault_schedule();
 }
 
 void ScenarioPlayer::advance(const std::int64_t elapsed_ms) noexcept
@@ -108,16 +116,27 @@ void ScenarioPlayer::advance(const std::int64_t elapsed_ms) noexcept
         return;
     }
 
-    elapsed_ms_ += elapsed_ms;
-    if (!snapshot_.session_active) {
-        return;
+    auto remaining_ms = elapsed_ms;
+    while (remaining_ms > 0) {
+        apply_fault_schedule();
+        const auto boundary_ms = next_fault_boundary_ms();
+        const auto until_boundary_ms = boundary_ms > elapsed_ms_ ? boundary_ms - elapsed_ms_
+                                                                  : remaining_ms;
+        const auto step_ms = std::min(remaining_ms, until_boundary_ms);
+        if (snapshot_.session_active) {
+            snapshot_.session_remaining_ms -= step_ms;
+            if (snapshot_.current_lap_ms == domain::kUnavailableTime) {
+                snapshot_.current_lap_ms = 0;
+            }
+            snapshot_.current_lap_ms += step_ms;
+        }
+        device_.advance(step_ms * 1'000);
+        consume_inputs();
+        elapsed_ms_ += step_ms;
+        remaining_ms -= step_ms;
     }
-
-    snapshot_.session_remaining_ms -= elapsed_ms;
-    if (snapshot_.current_lap_ms == domain::kUnavailableTime) {
-        snapshot_.current_lap_ms = 0;
-    }
-    snapshot_.current_lap_ms += elapsed_ms;
+    apply_fault_schedule();
+    consume_inputs();
 }
 
 ScenarioId ScenarioPlayer::id() const noexcept
@@ -133,6 +152,109 @@ std::int64_t ScenarioPlayer::elapsed_ms() const noexcept
 const domain::UiSnapshot& ScenarioPlayer::snapshot() const noexcept
 {
     return snapshot_;
+}
+
+DeviceDiagnostics ScenarioPlayer::diagnostics() const noexcept
+{
+    return device_.diagnostics();
+}
+
+SimulatedDevice& ScenarioPlayer::device() noexcept
+{
+    return device_;
+}
+
+void ScenarioPlayer::apply_fault_schedule() noexcept
+{
+    auto gnss_mode = GnssMode::normal;
+    auto storage_mode = StorageMode::ready;
+    if (id_ == ScenarioId::ready) {
+        gnss_mode = GnssMode::loss;
+    }
+    else if (id_ == ScenarioId::gnss_loss) {
+        if (elapsed_ms_ < 2'000) {
+            gnss_mode = GnssMode::loss;
+        }
+        else if (elapsed_ms_ < 3'000) {
+            gnss_mode = GnssMode::stale;
+        }
+        else if (elapsed_ms_ < 4'000) {
+            gnss_mode = GnssMode::corrupt;
+        }
+    }
+    else if (id_ == ScenarioId::storage_failure) {
+        if (elapsed_ms_ < 1'000) {
+            storage_mode = StorageMode::missing;
+        }
+        else if (elapsed_ms_ < 2'000) {
+            storage_mode = StorageMode::full;
+        }
+        else if (elapsed_ms_ < 3'000) {
+            storage_mode = StorageMode::slow;
+        }
+        else if (elapsed_ms_ < 4'000) {
+            storage_mode = StorageMode::write_failed;
+        }
+    }
+    device_.gnss().set_mode(gnss_mode);
+    device_.storage().set_mode(storage_mode);
+}
+
+void ScenarioPlayer::consume_inputs() noexcept
+{
+    if (device_.gnss().mode() == GnssMode::loss) {
+        snapshot_.gnss_health = id_ == ScenarioId::ready ? domain::GnssHealth::searching
+                                                         : domain::GnssHealth::stale;
+    }
+
+    domain::GnssFix fix{};
+    while (device_.gnss().try_read(fix)) {
+        if (fix.reject_reason == domain::FixRejectReason::stale) {
+            snapshot_.gnss_health = domain::GnssHealth::stale;
+        }
+        else if (!fix.accepted_for_timing) {
+            snapshot_.gnss_health = domain::GnssHealth::poor;
+        }
+        else {
+            snapshot_.gnss_health = domain::GnssHealth::good;
+        }
+
+        domain::LogRecord record{};
+        record.ordering_monotonic_us = fix.arrival_monotonic_us;
+        record.sequence_number = fix.sequence_number;
+        record.payload_size = static_cast<std::uint16_t>(sizeof(fix.sequence_number));
+        record.type = domain::LogRecordType::gnss_fix;
+        device_.storage().append(record);
+    }
+
+    board::ImuSample imu_sample{};
+    while (device_.imu().try_read(imu_sample)) {
+        (void)imu_sample;
+    }
+
+    const auto storage_health = device_.storage().status().health;
+    snapshot_.logging_available = storage_health == board::StorageHealth::ready ||
+                                  storage_health == board::StorageHealth::degraded;
+}
+
+std::int64_t ScenarioPlayer::next_fault_boundary_ms() const noexcept
+{
+    constexpr auto kNoBoundary = std::numeric_limits<std::int64_t>::max();
+    if (id_ == ScenarioId::gnss_loss) {
+        for (const auto boundary : {2'000, 3'000, 4'000}) {
+            if (elapsed_ms_ < boundary) {
+                return boundary;
+            }
+        }
+    }
+    else if (id_ == ScenarioId::storage_failure) {
+        for (const auto boundary : {1'000, 2'000, 3'000, 4'000}) {
+            if (elapsed_ms_ < boundary) {
+                return boundary;
+            }
+        }
+    }
+    return kNoBoundary;
 }
 
 }  // namespace track_timer::simulator

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "track_timer/domain/contracts.hpp"
+#include "track_timer/simulator/device_backends.hpp"
 
 #include <array>
 #include <cstdint>
@@ -28,7 +29,9 @@ inline constexpr std::array<ScenarioId, 4> kAllScenarios{
 
 class ScenarioPlayer {
   public:
-    explicit ScenarioPlayer(ScenarioId id) noexcept;
+    explicit ScenarioPlayer(ScenarioId id,
+                            GnssFixture fixture = make_synthetic_gnss_fixture(),
+                            GnssReplayRate rate = GnssReplayRate::hz25);
 
     void reset(ScenarioId id) noexcept;
     void advance(std::int64_t elapsed_ms) noexcept;
@@ -36,11 +39,23 @@ class ScenarioPlayer {
     [[nodiscard]] ScenarioId id() const noexcept;
     [[nodiscard]] std::int64_t elapsed_ms() const noexcept;
     [[nodiscard]] const domain::UiSnapshot& snapshot() const noexcept;
+    [[nodiscard]] DeviceDiagnostics diagnostics() const noexcept;
+    [[nodiscard]] SimulatedDevice& device() noexcept;
+
+    ScenarioPlayer(const ScenarioPlayer&) = delete;
+    ScenarioPlayer& operator=(const ScenarioPlayer&) = delete;
+    ScenarioPlayer(ScenarioPlayer&&) = delete;
+    ScenarioPlayer& operator=(ScenarioPlayer&&) = delete;
 
   private:
+    void apply_fault_schedule() noexcept;
+    void consume_inputs() noexcept;
+    [[nodiscard]] std::int64_t next_fault_boundary_ms() const noexcept;
+
     ScenarioId id_;
     std::int64_t elapsed_ms_{0};
     domain::UiSnapshot snapshot_{};
+    SimulatedDevice device_;
 };
 
 }  // namespace track_timer::simulator

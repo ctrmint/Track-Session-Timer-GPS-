@@ -49,9 +49,26 @@ make simulator-test
 make simulator-run
 ```
 
-The simulator opens a fixed 600 x 450 window. Click it to cycle deterministic ready,
-active, GNSS-loss, and storage-failure scenarios. The same presenter remains free of
-SDL and ESP-IDF dependencies so it can be compiled into both host and firmware builds.
+The simulator opens a fixed 600 x 450 window. Click it to inject touch and cycle
+deterministic ready, active, GNSS-loss/recovery, and storage-failure/recovery
+scenarios. The same presenter remains free of SDL and ESP-IDF dependencies so it can
+be compiled into both host and firmware builds.
+
+Use the built-in synthetic GNSS loop at 25 Hz, or replay the checked-in versioned
+fixture at 20 Hz:
+
+```bash
+build/simulator/track_timer_simulator --headless --scenario active --gnss-rate 25
+build/simulator/track_timer_simulator \
+  --headless --scenario active --gnss-rate 20 \
+  --gnss-fixture simulator/fixtures/recorded_reference_v1.csv
+make simulator-fixture-validate
+```
+
+The host backends also simulate 100 Hz IMU samples, RTC progression, bounded touch
+input, storage latency, and missing/full/write-failed storage. Their counters make
+queue high-water marks, drops, write failures, and recovery observable without real
+hardware or wall-clock delays.
 
 For a headless container validation without installing native build dependencies:
 
