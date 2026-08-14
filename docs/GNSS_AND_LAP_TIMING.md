@@ -215,6 +215,18 @@ GNSS rows, the applied quality-threshold snapshot, and fingerprinted track
 definition, this makes every acceptance or rejection reproducible during
 offline replay.
 
+The host and ESP32 builds compile the same `TimingEngine` source. On target, a
+high-priority timing task owns that engine and communicates only through static,
+bounded GNSS-fix and lap-event queues. Queue operations never wait, and the task
+does not call UI or storage code. Runtime metrics expose queue drops, high-water
+marks, maximum per-fix processing time, and misses of the 40 ms (25 Hz) deadline.
+
+A deterministic 25 Hz walking-speed loop is replayed with two arrival-latency
+patterns. Both paths must emit exactly three laps with identical receiver-time
+timestamps and durations, while every measured host processing call remains
+below the next-fix deadline. Physical outdoor and controlled-crossing validation
+is tracked separately in GitHub issue #53 for when hardware is available.
+
 Avoid over-filtering positions in a way that adds variable time lag to line crossing. If smoothing is used for UI position or heading, keep the raw accepted fixes available to the lap event engine unless testing proves a better approach.
 
 ## 11. GNSS time versus UART arrival
