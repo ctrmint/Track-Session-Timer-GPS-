@@ -204,8 +204,25 @@ int main()
                        "synthetic_test_loop") == 0);
     click(screen.track_selection_screen().button_for(
         ui::TrackSelectionAction::capture_information));
-    assert(screen.track_selection().status() ==
-           ui::TrackSelectionStatus::capture_information);
+    assert(screen.setup_page() == simulator::SetupPage::gate_capture);
+    assert(screen.gate_capture().status() == ui::GateCaptureStatus::editing);
+    assert(std::strstr(lv_label_get_text(screen.gate_capture_screen().status_object()),
+                       "PARK SAFELY") != nullptr);
+    for (const auto action : {ui::GateCaptureAction::previous_gate,
+                              ui::GateCaptureAction::next_gate,
+                              ui::GateCaptureAction::toggle_endpoint,
+                              ui::GateCaptureAction::capture,
+                              ui::GateCaptureAction::save,
+                              ui::GateCaptureAction::cancel}) {
+        auto* button = screen.gate_capture_screen().button_for(action);
+        assert(button != nullptr);
+        assert(lv_obj_get_width(button) >= 56);
+        assert(lv_obj_get_height(button) >= 54);
+    }
+    click(screen.gate_capture_screen().button_for(ui::GateCaptureAction::capture));
+    assert(screen.gate_capture().status() == ui::GateCaptureStatus::unusable_fix);
+    click(screen.gate_capture_screen().button_for(ui::GateCaptureAction::cancel));
+    assert(screen.setup_page() == simulator::SetupPage::track_selection);
     click(screen.track_selection_screen().button_for(ui::TrackSelectionAction::back));
     assert(screen.setup_page() == simulator::SetupPage::menu);
 

@@ -49,6 +49,7 @@ class ScenarioPlayer {
     [[nodiscard]] const domain::UiSnapshot& snapshot() const noexcept;
     [[nodiscard]] DeviceDiagnostics diagnostics() const noexcept;
     [[nodiscard]] logger::LoggerMetrics logger_metrics() const noexcept;
+    [[nodiscard]] bool latest_fix(domain::GnssFix& output) const noexcept;
     [[nodiscard]] SimulatedDevice& device() noexcept;
 
     ScenarioPlayer(const ScenarioPlayer&) = delete;
@@ -66,6 +67,8 @@ class ScenarioPlayer {
     std::int64_t elapsed_ms_{0};
     bool lap_emitted_{false};
     domain::UiSnapshot snapshot_{};
+    domain::GnssFix latest_fix_{};
+    bool has_latest_fix_{false};
     SimulatedDevice device_;
     logger::AsyncLogger logger_;
 };

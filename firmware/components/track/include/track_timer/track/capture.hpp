@@ -12,6 +12,7 @@ inline constexpr double kMinimumCapturedGateWidthM = 1.0;
 inline constexpr double kMaximumCapturedGateWidthM = 1'000.0;
 inline constexpr float kMaximumCaptureSpeedMps = 0.5F;
 inline constexpr float kMaximumCaptureHorizontalAccuracyM = 5.0F;
+inline constexpr std::int64_t kMaximumCaptureFixAgeUs = 2'000'000;
 
 enum class GateCaptureResult : std::uint8_t {
     captured,
@@ -21,6 +22,15 @@ enum class GateCaptureResult : std::uint8_t {
     poor_accuracy,
     invalid_request,
     projection_failed,
+};
+
+enum class EndpointCaptureResult : std::uint8_t {
+    captured,
+    active_session,
+    moving,
+    stale_fix,
+    unusable_fix,
+    poor_accuracy,
 };
 
 struct GateCaptureRequest {
@@ -46,7 +56,15 @@ struct GateCapturePreview {
     const domain::GnssFix& fix, const GateCaptureRequest& request,
     bool session_active, GateCapturePreview& output) noexcept;
 
+// Captures one physical gate endpoint from a fresh, accepted stationary fix.
+// Output remains unchanged on rejection.
+[[nodiscard]] EndpointCaptureResult capture_stationary_endpoint(
+    const domain::GnssFix& fix, std::int64_t evaluation_monotonic_us,
+    bool session_active, GeographicPoint& output) noexcept;
+
 [[nodiscard]] const char* gate_capture_result_name(GateCaptureResult result) noexcept;
+[[nodiscard]] const char* endpoint_capture_result_name(
+    EndpointCaptureResult result) noexcept;
 
 static_assert(std::is_trivially_copyable_v<GateCaptureRequest>);
 static_assert(std::is_trivially_copyable_v<GateCapturePreview>);
