@@ -148,12 +148,17 @@ At 25 Hz, adjacent nominal fixes are 40 ms apart. Interpolation removes update-g
 
 A geometric intersection is accepted only when movement crosses the line in the configured direction.
 
-Possible implementation:
+The production validator:
 
-1. create a signed side value of each position relative to the directed start line
-2. require a side transition consistent with track direction
-3. require vehicle speed above a minimum
-4. optionally compare GNSS heading with expected crossing heading
+1. computes signed perpendicular distances for both positions relative to the gate
+2. orients those distances using the gate's configured travel heading
+3. requires a transition from the negative side to the line or positive side
+4. interpolates speed and heading at the geometric intersection fraction
+5. requires the interpolated speed and shortest-arc heading difference to meet the
+   gate thresholds
+
+Heading interpolation and comparison use the shortest circular difference, so
+`359` degrees to `1` degree is a two-degree change rather than 358 degrees.
 
 Direction is essential for circuits where pit lanes, access roads or nearby loops pass close to the line.
 
@@ -179,6 +184,21 @@ The timing engine should be able to reject or mark suspect fixes based on:
 - horizontal accuracy above configured threshold
 - impossible speed/position discontinuity
 - stale fix age
+
+Both source fixes for a crossing must already be accepted for timing. The default
+crossing thresholds require a 3D fix, at least 6 satellites, horizontal accuracy
+no worse than 5 m, speed accuracy no worse than 2 m/s, and heading accuracy no
+worse than 25 degrees. These defaults are explicit configuration values rather
+than hidden constants; a track's gate separately defines minimum crossing speed
+and permitted heading tolerance. A 2D-fix policy can be selected explicitly, but
+dead-reckoning and time-only fixes are never silently treated as position fixes.
+
+Each geometric candidate produces one stable named validation result and records
+the two source sequence numbers, intersection fraction, signed distances,
+interpolated speed and heading, and heading difference. Together with the raw
+GNSS rows, the applied quality-threshold snapshot, and fingerprinted track
+definition, this makes every acceptance or rejection reproducible during
+offline replay.
 
 Avoid over-filtering positions in a way that adds variable time lag to line crossing. If smoothing is used for UI position or heading, keep the raw accepted fixes available to the lap event engine unless testing proves a better approach.
 
