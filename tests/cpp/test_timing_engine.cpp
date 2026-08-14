@@ -81,12 +81,15 @@ TimingEngineConfig configuration(CircuitProjection& projection)
     assert(track_timer::track::configure_circuit_projection(config.reference,
                                                              projection) ==
            track_timer::track::ProjectionResult::projected);
-    config.lap_gate.left = geographic(projection, {0.0, 10.0});
-    config.lap_gate.right = geographic(projection, {0.0, -10.0});
-    config.lap_gate.direction_heading_deg = 90.0;
-    config.lap_gate.heading_tolerance_deg = 20.0;
-    config.lap_gate.minimum_crossing_speed_mps = 1.0;
-    config.lap_gate.rearm_corridor_m = 2.0;
+    config.gates.finish.left = geographic(projection, {0.0, 10.0});
+    config.gates.finish.right = geographic(projection, {0.0, -10.0});
+    config.gates.finish.direction_heading_deg = 90.0;
+    config.gates.finish.heading_tolerance_deg = 20.0;
+    config.gates.finish.minimum_crossing_speed_mps = 1.0;
+    config.gates.finish.rearm_corridor_m = 2.0;
+    config.gates.start = config.gates.finish;
+    config.gates.pit_entry = config.gates.finish;
+    config.gates.pit_exit = config.gates.finish;
     config.minimum_lap_time_s = 8.0;
     return config;
 }
@@ -108,7 +111,11 @@ std::vector<GnssFix> walking_fixture(const CircuitProjection& projection)
 
 struct ReplayResult {
     std::array<LapEvent, track_timer::domain::queue_capacity::lap_events> events{};
+    std::array<track_timer::timing::GateCrossingDecision,
+               track_timer::domain::queue_capacity::gate_crossing_records>
+        gate_records{};
     std::size_t event_count{0};
+    std::size_t gate_record_count{0};
     std::int64_t maximum_processing_us{0};
 };
 
@@ -132,6 +139,16 @@ ReplayResult replay(TimingEngine& engine, const std::vector<GnssFix>& fixes,
             assert(result.event_count < result.events.size());
             result.events[result.event_count++] = decision.lap_update.lap_event;
         }
+        for (const auto& gate_decision : decision.gate_decisions) {
+            if (gate_decision.result ==
+                    track_timer::timing::GateCrossingResult::not_evaluated ||
+                gate_decision.result ==
+                    track_timer::timing::GateCrossingResult::no_intersection) {
+                continue;
+            }
+            assert(result.gate_record_count < result.gate_records.size());
+            result.gate_records[result.gate_record_count++] = gate_decision;
+        }
     }
     return result;
 }
@@ -154,11 +171,15 @@ int main()
     assert(unconfigured.configure(invalid_reference) ==
            TimingEngineConfigureResult::invalid_reference);
     auto invalid_gate = config;
-    invalid_gate.lap_gate.right = invalid_gate.lap_gate.left;
+    invalid_gate.gates.pit_exit.right = invalid_gate.gates.pit_exit.left;
     assert(unconfigured.configure(invalid_gate) ==
            TimingEngineConfigureResult::invalid_gate);
     auto invalid_policy = config;
     invalid_policy.minimum_lap_time_s = 0.0;
+    assert(unconfigured.configure(invalid_policy) ==
+           TimingEngineConfigureResult::invalid_lap_policy);
+    invalid_policy = config;
+    invalid_policy.lap_boundary = static_cast<LapBoundary>(255);
     assert(unconfigured.configure(invalid_policy) ==
            TimingEngineConfigureResult::invalid_lap_policy);
 
@@ -173,6 +194,8 @@ int main()
     const auto target_replay = replay(target_model, fixes, true);
     assert(host_replay.event_count == 3);
     assert(target_replay.event_count == host_replay.event_count);
+    assert(host_replay.gate_record_count == 16);
+    assert(target_replay.gate_record_count == host_replay.gate_record_count);
     for (std::size_t index = 0; index < host_replay.event_count; ++index) {
         const auto& expected = host_replay.events[index];
         const auto& actual = target_replay.events[index];
@@ -184,6 +207,20 @@ int main()
         assert(actual.segment_sequence_0 == expected.segment_sequence_0);
         assert(actual.segment_sequence_1 == expected.segment_sequence_1);
         assert(actual.quality_flags == expected.quality_flags);
+    }
+    for (std::size_t index = 0; index < host_replay.gate_record_count; ++index) {
+        const auto& expected = host_replay.gate_records[index];
+        const auto& actual = target_replay.gate_records[index];
+        assert(actual.crossing_measurement_time_ns ==
+               expected.crossing_measurement_time_ns);
+        assert(actual.intersection_fraction == expected.intersection_fraction);
+        assert(actual.segment_sequence_0 == expected.segment_sequence_0);
+        assert(actual.segment_sequence_1 == expected.segment_sequence_1);
+        assert(actual.gate == expected.gate);
+        assert(actual.result == expected.result);
+        assert(actual.validation_result == expected.validation_result);
+        assert(actual.time_result == expected.time_result);
+        assert(actual.has_event == expected.has_event);
     }
     assert(host.lap_snapshot().best_lap_duration_ns == 8'400'000'000LL);
     assert(target_replay.maximum_processing_us < kTimingFixDeadlineUs);
@@ -207,6 +244,7 @@ int main()
         TimingEngineResult::primed,             TimingEngineResult::no_crossing,
         TimingEngineResult::crossing_rejected,  TimingEngineResult::lap_state_updated,
         TimingEngineResult::lap_event,
+        TimingEngineResult::gate_events,
     };
     for (const auto result : engine_results) {
         assert(timing_engine_result_name(result)[0] != '\0');

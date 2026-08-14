@@ -16,6 +16,7 @@ CROSSING_VALIDATION_TEST_BINARY := build/host/crossing_validation_test
 CROSSING_TIME_TEST_BINARY := build/host/crossing_time_test
 LAP_STATE_MACHINE_TEST_BINARY := build/host/lap_state_machine_test
 TIMING_ENGINE_TEST_BINARY := build/host/timing_engine_test
+GATE_EVENT_ENGINE_TEST_BINARY := build/host/gate_event_engine_test
 TRACK_MATCHING_TEST_BINARY := build/host/track_matching_test
 TRACK_SELECTION_TEST_BINARY := build/host/track_selection_test
 LOG_FORMAT_TEST_BINARY := build/host/log_format_test
@@ -30,9 +31,9 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -157,6 +158,21 @@ timing-engine-test:
 		firmware/components/timing/engine.cpp \
 		tests/cpp/test_timing_engine.cpp -o $(TIMING_ENGINE_TEST_BINARY)
 	$(TIMING_ENGINE_TEST_BINARY)
+
+gate-event-engine-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/track/include \
+		-Ifirmware/components/timing/include \
+		firmware/components/track/projection.cpp \
+		firmware/components/timing/intersection.cpp \
+		firmware/components/timing/crossing_validation.cpp \
+		firmware/components/timing/crossing_time.cpp \
+		firmware/components/timing/lap_state_machine.cpp \
+		firmware/components/timing/engine.cpp \
+		tests/cpp/test_gate_event_engine.cpp -o $(GATE_EVENT_ENGINE_TEST_BINARY)
+	$(GATE_EVENT_ENGINE_TEST_BINARY)
 
 track-definition-test:
 	mkdir -p build/host

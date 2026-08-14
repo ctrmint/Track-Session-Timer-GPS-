@@ -98,12 +98,14 @@ namespace queue_capacity {
 // 64 fixes provide 2.56 seconds of headroom at 25 Hz.
 inline constexpr std::size_t gnss_fixes = 64;
 inline constexpr std::size_t lap_events = 16;
+inline constexpr std::size_t gate_crossing_records = 64;
 inline constexpr std::size_t log_records = 256;
 inline constexpr std::size_t ui_snapshots = 2;
 
 }  // namespace queue_capacity
 
 static_assert(queue_capacity::gnss_fixes >= 50);
+static_assert(queue_capacity::gate_crossing_records >= 16);
 static_assert(std::is_trivially_copyable_v<GnssFix>);
 static_assert(std::is_trivially_copyable_v<LapEvent>);
 static_assert(std::is_trivially_copyable_v<UiSnapshot>);

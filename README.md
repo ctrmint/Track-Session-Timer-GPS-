@@ -110,9 +110,13 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Lap timing principle
 
-The receiver produces a sequence of timestamped positions. A track file defines a start/finish line as two geographic points and an allowed crossing direction.
+The receiver produces a sequence of timestamped positions. A track file defines directed
+start, finish, pit-entry, and pit-exit lines. Start or finish is selected as the repeating
+lap boundary; the two pit gates remain independent typed events.
 
-For every new GNSS fix, the timing engine examines the segment between the previous and current position. If that segment crosses the start/finish line in the valid direction, the crossing fraction is calculated geometrically and applied to the GNSS timestamps on either side of the line.
+For every new GNSS fix, the timing engine examines the segment between the previous and
+current position against all four finite lines. A valid crossing fraction is calculated
+geometrically and applied to the GNSS timestamps on either side of the line.
 
 Example:
 

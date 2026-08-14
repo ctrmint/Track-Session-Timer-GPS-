@@ -18,14 +18,19 @@ struct EmbeddedTimingState {
     TimingEngine engine{};
     StaticQueue_t fix_queue_control{};
     StaticQueue_t event_queue_control{};
+    StaticQueue_t gate_record_queue_control{};
     std::array<std::uint8_t, domain::queue_capacity::gnss_fixes * sizeof(domain::GnssFix)>
         fix_queue_storage{};
     std::array<std::uint8_t, domain::queue_capacity::lap_events * sizeof(domain::LapEvent)>
         event_queue_storage{};
+    std::array<std::uint8_t, domain::queue_capacity::gate_crossing_records *
+                                 sizeof(GateCrossingDecision)>
+        gate_record_queue_storage{};
     StaticTask_t task_control{};
     std::array<StackType_t, kTimingTaskStackWords> task_stack{};
     QueueHandle_t fix_queue{nullptr};
     QueueHandle_t event_queue{nullptr};
+    QueueHandle_t gate_record_queue{nullptr};
     TaskHandle_t task{nullptr};
     EmbeddedTimingMetrics metrics{};
     portMUX_TYPE metrics_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -39,11 +44,15 @@ void update_queue_high_water_marks() noexcept
     const auto fix_depth = static_cast<std::size_t>(uxQueueMessagesWaiting(runtime.fix_queue));
     const auto event_depth =
         static_cast<std::size_t>(uxQueueMessagesWaiting(runtime.event_queue));
+    const auto gate_record_depth =
+        static_cast<std::size_t>(uxQueueMessagesWaiting(runtime.gate_record_queue));
     portENTER_CRITICAL(&runtime.metrics_lock);
     runtime.metrics.fix_queue_high_water_mark =
         std::max(runtime.metrics.fix_queue_high_water_mark, fix_depth);
     runtime.metrics.lap_event_queue_high_water_mark =
         std::max(runtime.metrics.lap_event_queue_high_water_mark, event_depth);
+    runtime.metrics.gate_record_queue_high_water_mark =
+        std::max(runtime.metrics.gate_record_queue_high_water_mark, gate_record_depth);
     portEXIT_CRITICAL(&runtime.metrics_lock);
 }
 
@@ -65,11 +74,30 @@ void timing_task(void*) noexcept
                 event_dropped = true;
             }
         }
+        std::uint64_t gate_events = 0;
+        std::uint64_t gate_records = 0;
+        std::uint64_t gate_record_drops = 0;
+        for (const auto& gate_decision : decision.gate_decisions) {
+            if (gate_decision.result == GateCrossingResult::not_evaluated ||
+                gate_decision.result == GateCrossingResult::no_intersection) {
+                continue;
+            }
+            gate_events += gate_decision.has_event ? 1U : 0U;
+            if (xQueueSend(runtime.gate_record_queue, &gate_decision, 0) == pdTRUE) {
+                ++gate_records;
+            }
+            else {
+                ++gate_record_drops;
+            }
+        }
         const auto elapsed_us = esp_timer_get_time() - started_us;
         portENTER_CRITICAL(&runtime.metrics_lock);
         ++runtime.metrics.fixes_processed;
         runtime.metrics.lap_events_emitted += event_emitted ? 1U : 0U;
         runtime.metrics.lap_event_queue_drops += event_dropped ? 1U : 0U;
+        runtime.metrics.gate_events_emitted += gate_events;
+        runtime.metrics.gate_records_emitted += gate_records;
+        runtime.metrics.gate_record_queue_drops += gate_record_drops;
         runtime.metrics.deadline_misses += elapsed_us >= kTimingFixDeadlineUs ? 1U : 0U;
         runtime.metrics.maximum_processing_us =
             std::max(runtime.metrics.maximum_processing_us, elapsed_us);
@@ -92,7 +120,11 @@ bool start_embedded_timing_runtime(const TimingEngineConfig& config) noexcept
     runtime.event_queue = xQueueCreateStatic(
         domain::queue_capacity::lap_events, sizeof(domain::LapEvent),
         runtime.event_queue_storage.data(), &runtime.event_queue_control);
-    if (runtime.fix_queue == nullptr || runtime.event_queue == nullptr) {
+    runtime.gate_record_queue = xQueueCreateStatic(
+        domain::queue_capacity::gate_crossing_records, sizeof(GateCrossingDecision),
+        runtime.gate_record_queue_storage.data(), &runtime.gate_record_queue_control);
+    if (runtime.fix_queue == nullptr || runtime.event_queue == nullptr ||
+        runtime.gate_record_queue == nullptr) {
         return false;
     }
     runtime.task = xTaskCreateStatic(timing_task, "lap_timing", kTimingTaskStackWords,
@@ -122,6 +154,14 @@ bool try_receive_lap_event(domain::LapEvent& event) noexcept
         return false;
     }
     return xQueueReceive(runtime.event_queue, &event, 0) == pdTRUE;
+}
+
+bool try_receive_gate_crossing_record(GateCrossingDecision& decision) noexcept
+{
+    if (!runtime.started) {
+        return false;
+    }
+    return xQueueReceive(runtime.gate_record_queue, &decision, 0) == pdTRUE;
 }
 
 EmbeddedTimingMetrics embedded_timing_metrics() noexcept
