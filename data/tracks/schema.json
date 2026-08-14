@@ -2,18 +2,28 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "TrackSessionTimer GPS track definition",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "schema_version",
+    "revision",
     "track_id",
     "name",
+    "country",
+    "provenance",
     "reference",
     "geofence",
     "gates",
-    "timing"
+    "timing",
+    "sectors"
   ],
   "properties": {
     "schema_version": {
       "const": 2
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
     },
     "track_id": {
       "type": "string",
@@ -24,11 +34,17 @@
     "name": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 63
+      "maxLength": 63,
+      "pattern": ".*\\S.*"
     },
     "country": {
       "type": "string",
-      "maxLength": 3
+      "minLength": 2,
+      "maxLength": 3,
+      "pattern": "^[A-Z]{2,3}$"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
     },
     "reference": {
       "$ref": "#/$defs/point"
@@ -54,7 +70,8 @@
         },
         "radius_m": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "maximum": 25000
         }
       }
     },
@@ -100,11 +117,66 @@
       "type": "array",
       "maxItems": 16,
       "items": {
-        "type": "object"
+        "$ref": "#/$defs/sector"
       }
     }
   },
   "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "license",
+        "verified_utc"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 127,
+          "pattern": ".*\\S.*"
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 47,
+          "pattern": ".*\\S.*"
+        },
+        "verified_utc": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 31,
+          "format": "date-time"
+        }
+      }
+    },
+    "sector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sector_id",
+        "name",
+        "gate"
+      ],
+      "properties": {
+        "sector_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 31,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 47,
+          "pattern": ".*\\S.*"
+        },
+        "gate": {
+          "$ref": "#/$defs/directed_gate"
+        }
+      }
+    },
     "point": {
       "type": "object",
       "additionalProperties": false,

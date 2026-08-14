@@ -1,8 +1,14 @@
 {
   "schema_version": 2,
+  "revision": 1,
   "track_id": "synthetic_test_loop",
   "name": "Synthetic Test Loop",
   "country": "XX",
+  "provenance": {
+    "source": "TrackSessionTimer synthetic test data",
+    "license": "CC0-1.0",
+    "verified_utc": "2026-08-14T00:00:00Z"
+  },
   "reference": {
     "lat_deg": 52.0,
     "lon_deg": -1.0
@@ -73,5 +79,24 @@
   "timing": {
     "minimum_lap_time_s": 20.0
   },
-  "sectors": []
+  "sectors": [
+    {
+      "sector_id": "sector_1",
+      "name": "Synthetic Sector 1",
+      "gate": {
+        "left": {
+          "lat_deg": 52.00005,
+          "lon_deg": -0.99952
+        },
+        "right": {
+          "lat_deg": 51.99995,
+          "lon_deg": -0.99948
+        },
+        "direction_heading_deg": 90.0,
+        "heading_tolerance_deg": 60.0,
+        "minimum_crossing_speed_mps": 2.0,
+        "rearm_corridor_m": 15.0
+      }
+    }
+  ]
 }

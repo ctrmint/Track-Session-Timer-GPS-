@@ -7,7 +7,7 @@ Store track timing geometry locally so the device works offline.
 ## 2. File model
 
 The database uses one JSON file per circuit layout. The firmware parser is allocation-free and
-accepts at most 4096 bytes, 16 sector records, a 47-byte identifier, a 63-byte display
+accepts at most 16384 bytes, 16 sector records, a 47-byte identifier, a 63-byte display
 name, and a three-character country value plus its terminator. A later packed database
 can be added if measured loading time requires it.
 
@@ -16,9 +16,15 @@ Schema version 2 fields:
 ```json
 {
   "schema_version": 2,
+  "revision": 1,
   "track_id": "example_circuit",
   "name": "Example Circuit",
   "country": "GB",
+  "provenance": {
+    "source": "survey or authoritative public source",
+    "license": "source licence identifier",
+    "verified_utc": "2026-08-14T00:00:00Z"
+  },
   "reference": {
     "lat_deg": 52.000000,
     "lon_deg": -1.000000
@@ -65,7 +71,20 @@ Schema version 2 fields:
   "timing": {
     "minimum_lap_time_s": 30
   },
-  "sectors": []
+  "sectors": [
+    {
+      "sector_id": "sector_1",
+      "name": "Sector 1",
+      "gate": {
+        "left": {"lat_deg": 52.000010, "lon_deg": -0.999520},
+        "right": {"lat_deg": 51.999990, "lon_deg": -0.999480},
+        "direction_heading_deg": 90.0,
+        "heading_tolerance_deg": 60.0,
+        "minimum_crossing_speed_mps": 2.0,
+        "rearm_corridor_m": 15.0
+      }
+    }
+  ]
 }
 ```
 
@@ -126,8 +145,9 @@ issue #37.
 
 Every track file includes `schema_version`; the current loader accepts exactly version 2.
 Unsupported versions, malformed JSON, missing fields, out-of-range geometry, capacity
-overflow, unknown geometry members, and any gate shorter than one metre are rejected. A
-failed load never modifies the caller's current active definition.
+overflow, unknown members, duplicate sector identifiers, gates outside the geofence,
+and implausible gate length/direction are rejected. Reports include a stable field path,
+and a failed load never modifies the caller's current active definition.
 
 On a successful load, all eight gate endpoints are projected to local east/north metres
 relative to the definition's reference point. The loaded object also carries a
