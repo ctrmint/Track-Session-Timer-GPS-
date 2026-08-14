@@ -23,6 +23,7 @@ enum class SessionState : std::uint8_t {
 enum class CompletionReason : std::uint8_t {
     none,
     driver_stop,
+    pit_entry,
 };
 
 enum class TransitionResult : std::uint8_t {
@@ -72,6 +73,7 @@ class SessionController {
     [[nodiscard]] TransitionResult request_stop(std::int64_t now_ms) noexcept;
     [[nodiscard]] TransitionResult cancel_stop(std::int64_t now_ms) noexcept;
     [[nodiscard]] TransitionResult confirm_stop(std::int64_t now_ms) noexcept;
+    [[nodiscard]] TransitionResult stop_from_pit_entry(std::int64_t now_ms) noexcept;
     [[nodiscard]] TransitionResult complete_review(std::int64_t now_ms) noexcept;
 
     [[nodiscard]] const SessionSnapshot& snapshot() const noexcept;

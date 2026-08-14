@@ -7,7 +7,7 @@
 
 namespace track_timer::settings {
 
-inline constexpr std::uint16_t kCurrentSettingsVersion = 3;
+inline constexpr std::uint16_t kCurrentSettingsVersion = 4;
 inline constexpr std::size_t kSettingsBlobCapacity = 128;
 inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 
@@ -29,6 +29,11 @@ enum class LowerDisplayMode : std::uint8_t {
     laps_remaining,
 };
 
+enum class LapBoundaryMode : std::uint8_t {
+    start,
+    finish,
+};
+
 struct DeviceSettings {
     std::uint16_t session_duration_minutes{20};
     std::uint16_t rest_duration_minutes{20};
@@ -42,6 +47,9 @@ struct DeviceSettings {
     LowerDisplayMode lower_display{LowerDisplayMode::elapsed};
     std::array<char, kTrackIdentifierCapacity> selected_track_id{};
     bool trackday_mode_enabled{false};
+    LapBoundaryMode lap_boundary{LapBoundaryMode::finish};
+    bool pit_exit_auto_start_enabled{false};
+    bool pit_entry_auto_stop_enabled{false};
 };
 
 struct LegacySettingsV1 {
@@ -74,6 +82,7 @@ enum class DecodeResult : std::uint8_t {
     current,
     migrated_v1,
     migrated_v2,
+    migrated_v3,
     corrupt,
     unsupported_version,
 };
@@ -82,6 +91,7 @@ enum class SettingsSource : std::uint8_t {
     current,
     migrated_v1,
     migrated_v2,
+    migrated_v3,
     defaults_missing,
     defaults_corrupt,
     defaults_unsupported,
@@ -131,6 +141,8 @@ struct FeatureAvailability {
 [[nodiscard]] SettingsBlob encode_legacy_settings_v1(
     const LegacySettingsV1& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v2(
+    const DeviceSettings& settings) noexcept;
+[[nodiscard]] SettingsBlob encode_legacy_settings_v3(
     const DeviceSettings& settings) noexcept;
 [[nodiscard]] DecodeResult decode_settings(const SettingsBlob& blob,
                                            DeviceSettings& settings) noexcept;

@@ -144,6 +144,28 @@ TransitionResult SessionController::confirm_stop(const std::int64_t now_ms) noex
     return TransitionResult::invalid_state;
 }
 
+TransitionResult SessionController::stop_from_pit_entry(
+    const std::int64_t now_ms) noexcept
+{
+    if (snapshot_.state != SessionState::running &&
+        snapshot_.state != SessionState::overtime) {
+        return TransitionResult::invalid_state;
+    }
+    if (!accept_time(now_ms)) {
+        return TransitionResult::non_monotonic_time;
+    }
+    update_for_time(now_ms);
+    if (snapshot_.state != SessionState::running &&
+        snapshot_.state != SessionState::overtime) {
+        return TransitionResult::invalid_state;
+    }
+    snapshot_.stop_confirmation_pending = false;
+    refresh_session_times(now_ms);
+    snapshot_.completion_reason = CompletionReason::pit_entry;
+    transition_to(SessionState::review, now_ms);
+    return TransitionResult::accepted;
+}
+
 TransitionResult SessionController::complete_review(const std::int64_t now_ms) noexcept
 {
     if (snapshot_.state != SessionState::review) {

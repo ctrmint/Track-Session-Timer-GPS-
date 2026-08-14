@@ -11,7 +11,8 @@ constexpr std::array<std::uint8_t, 4> kMagic{'T', 'S', 'T', 'G'};
 constexpr std::size_t kHeaderSize = 12;
 constexpr std::size_t kLegacyV1PayloadSize = 7;
 constexpr std::size_t kLegacyV2PayloadSize = 62;
-constexpr std::size_t kCurrentPayloadSize = 63;
+constexpr std::size_t kLegacyV3PayloadSize = 63;
+constexpr std::size_t kCurrentPayloadSize = 66;
 
 bool valid_brightness(const std::uint8_t percent) noexcept
 {
@@ -140,6 +141,7 @@ bool valid_settings(const DeviceSettings& settings) noexcept
            settings.lower_display <= LowerDisplayMode::laps_remaining &&
            (settings.average_lap_seconds > 0 ||
             settings.lower_display == LowerDisplayMode::elapsed) &&
+           settings.lap_boundary <= LapBoundaryMode::finish &&
            valid_track_identifier(settings.selected_track_id);
 }
 
@@ -155,7 +157,10 @@ bool settings_equal(const DeviceSettings& left, const DeviceSettings& right) noe
            left.auto_dim_enabled == right.auto_dim_enabled &&
            left.lower_display == right.lower_display &&
            left.selected_track_id == right.selected_track_id &&
-           left.trackday_mode_enabled == right.trackday_mode_enabled;
+           left.trackday_mode_enabled == right.trackday_mode_enabled &&
+           left.lap_boundary == right.lap_boundary &&
+           left.pit_exit_auto_start_enabled == right.pit_exit_auto_start_enabled &&
+           left.pit_entry_auto_stop_enabled == right.pit_entry_auto_stop_enabled;
 }
 
 SettingsBlob encode_legacy_settings_v2(const DeviceSettings& settings) noexcept
@@ -180,15 +185,29 @@ SettingsBlob encode_legacy_settings_v2(const DeviceSettings& settings) noexcept
     return make_blob(2, payload.data(), payload.size());
 }
 
-SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+SettingsBlob encode_legacy_settings_v3(const DeviceSettings& settings) noexcept
 {
     const auto legacy = encode_legacy_settings_v2(settings);
     if (legacy.size == 0) {
         return {};
     }
-    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::array<std::uint8_t, kLegacyV3PayloadSize> payload{};
     std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV2PayloadSize, payload.data());
     payload[62] = settings.trackday_mode_enabled ? 1U : 0U;
+    return make_blob(3, payload.data(), payload.size());
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    const auto legacy = encode_legacy_settings_v3(settings);
+    if (legacy.size == 0) {
+        return {};
+    }
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV3PayloadSize, payload.data());
+    payload[63] = static_cast<std::uint8_t>(settings.lap_boundary);
+    payload[64] = settings.pit_exit_auto_start_enabled ? 1U : 0U;
+    payload[65] = settings.pit_entry_auto_stop_enabled ? 1U : 0U;
     return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
 }
 
@@ -231,11 +250,12 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         settings = candidate;
         return DecodeResult::migrated_v1;
     }
-    if (version != 2 && version != kCurrentSettingsVersion) {
+    if (version != 2 && version != 3 && version != kCurrentSettingsVersion) {
         return DecodeResult::unsupported_version;
     }
     const auto expected_payload_size =
-        version == 2 ? kLegacyV2PayloadSize : kCurrentPayloadSize;
+        version == 2 ? kLegacyV2PayloadSize
+                     : version == 3 ? kLegacyV3PayloadSize : kCurrentPayloadSize;
     if (payload_size != expected_payload_size) {
         return DecodeResult::corrupt;
     }
@@ -252,16 +272,26 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     candidate.lower_display = static_cast<LowerDisplayMode>(payload[13]);
     std::memcpy(candidate.selected_track_id.data(), payload + 14,
                 candidate.selected_track_id.size());
-    if (version == kCurrentSettingsVersion) {
+    if (version >= 3) {
         candidate.trackday_mode_enabled = payload[62] != 0;
     }
+    if (version == kCurrentSettingsVersion) {
+        candidate.lap_boundary = static_cast<LapBoundaryMode>(payload[63]);
+        candidate.pit_exit_auto_start_enabled = payload[64] != 0;
+        candidate.pit_entry_auto_stop_enabled = payload[65] != 0;
+    }
     if (payload[12] > 1 ||
-        (version == kCurrentSettingsVersion && payload[62] > 1) ||
+        (version >= 3 && payload[62] > 1) ||
+        (version == kCurrentSettingsVersion &&
+         (payload[63] > static_cast<std::uint8_t>(LapBoundaryMode::finish) ||
+          payload[64] > 1 || payload[65] > 1)) ||
         !valid_settings(candidate)) {
         return DecodeResult::corrupt;
     }
     settings = candidate;
-    return version == 2 ? DecodeResult::migrated_v2 : DecodeResult::current;
+    return version == 2   ? DecodeResult::migrated_v2
+           : version == 3 ? DecodeResult::migrated_v3
+                          : DecodeResult::current;
 }
 
 FeatureAvailability evaluate_features(const SubsystemSnapshot& subsystems) noexcept
@@ -305,6 +335,9 @@ SettingsLoadReport SettingsManager::load() noexcept
     case DecodeResult::migrated_v2:
         current_ = decoded;
         return {SettingsSource::migrated_v2, persist(current_)};
+    case DecodeResult::migrated_v3:
+        current_ = decoded;
+        return {SettingsSource::migrated_v3, persist(current_)};
     case DecodeResult::corrupt:
         current_ = {};
         return {SettingsSource::defaults_corrupt, persist(current_)};

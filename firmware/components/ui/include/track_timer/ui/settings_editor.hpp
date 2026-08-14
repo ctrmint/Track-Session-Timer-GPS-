@@ -16,13 +16,16 @@ enum class SettingsField : std::uint8_t {
     night_brightness,
     operating_mode,
     trackday_mode,
+    lap_boundary,
+    pit_exit_auto_start,
+    pit_entry_auto_stop,
     orientation,
     auto_dim,
     average_lap,
     lower_display,
 };
 
-inline constexpr std::size_t kSettingsFieldCount = 11;
+inline constexpr std::size_t kSettingsFieldCount = 14;
 
 enum class SettingsEditorStatus : std::uint8_t {
     closed,

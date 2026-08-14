@@ -29,6 +29,8 @@
 - FR-025: Every lap event is reproducible from the stored session trace.
 - FR-026: User can enable or disable Trackday Mode as a persisted setting.
 - FR-027: Trackday Mode shows countdown and estimated laps during a session while hiding live lap results; GNSS-derived laps remain logged and are available after the session stops.
+- FR-028: User can persistently select Start or Finish as the repeating lap boundary.
+- FR-029: User can independently enable pit-exit session start and pit-entry session stop; manual controls remain available.
 
 ### Storage
 

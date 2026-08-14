@@ -204,6 +204,8 @@ const char* completion_reason_name(const session::CompletionReason reason) noexc
         return "NOT COMPLETE";
     case session::CompletionReason::driver_stop:
         return "DRIVER STOP";
+    case session::CompletionReason::pit_entry:
+        return "PIT ENTRY";
     }
     return "NOT COMPLETE";
 }

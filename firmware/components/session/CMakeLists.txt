@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "component.cpp"
+    SRCS "component.cpp" "gate_automation.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES domain timing
+    REQUIRES domain settings timing
 )

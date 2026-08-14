@@ -90,6 +90,7 @@ bool valid_completion_reason(const SessionCompletionReason value) noexcept
     case SessionCompletionReason::none:
     case SessionCompletionReason::driver_stop:
     case SessionCompletionReason::reset_recovery:
+    case SessionCompletionReason::pit_entry:
         return true;
     }
     return false;
@@ -124,6 +125,9 @@ bool valid_settings_record(const SessionSettingsV1& record) noexcept
     source.auto_dim_enabled = record.auto_dim_enabled;
     source.lower_display = record.lower_display;
     source.trackday_mode_enabled = record.trackday_mode_enabled;
+    source.lap_boundary = record.lap_boundary;
+    source.pit_exit_auto_start_enabled = record.pit_exit_auto_start_enabled;
+    source.pit_entry_auto_stop_enabled = record.pit_entry_auto_stop_enabled;
     source.selected_track_id = record.selected_track_id;
     return settings::valid_settings(source);
 }
@@ -144,6 +148,9 @@ SessionSettingsV1 make_session_settings(const settings::DeviceSettings& source) 
     result.auto_dim_enabled = source.auto_dim_enabled;
     result.lower_display = source.lower_display;
     result.trackday_mode_enabled = source.trackday_mode_enabled;
+    result.lap_boundary = source.lap_boundary;
+    result.pit_exit_auto_start_enabled = source.pit_exit_auto_start_enabled;
+    result.pit_entry_auto_stop_enabled = source.pit_entry_auto_stop_enabled;
     result.selected_track_id = source.selected_track_id;
     return result;
 }
