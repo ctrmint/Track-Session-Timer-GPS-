@@ -128,18 +128,32 @@ suggested, no-nearby-track, and unavailable-location states.
 
 ## 4. Unknown track capture
 
-Safe future workflow:
+`track_timer/track/capture.hpp` provides the shared allocation-free capture primitive.
+It accepts a timing-quality GPS fix only while speed is at most 0.5 m/s and no session
+is active. Position accuracy must be 5 m or better. The user supplies the expected
+travel heading because GNSS course-over-ground is not trustworthy while stationary;
+the primitive derives left/right endpoints perpendicular to that heading and returns
+a preview without modifying an earlier preview on failure.
 
-- configure/capture while stationary before entering the circuit where possible
-- allow the user to capture both endpoints of each required gate while stationary
-- show heading, length, and validation feedback before saving
-- after the session, allow refinement from logged traces on a host tool
+`tools/track_workbench.py` provides the corresponding host workflow. It can create a
+complete definition from four centre/heading/width captures, refine one gate while
+advancing the revision and provenance, validate a candidate, and atomically import or
+export a database file. Every import runs both JSON Schema and semantic geometry checks.
+For example:
 
-Do not require a driver to interact with configuration screens at speed.
+```bash
+python3 -B tools/track_workbench.py validate data/tracks/synthetic_test_loop.json
+python3 -B tools/track_workbench.py refine candidate.json finish \
+  --center-lat 52.0 --center-lon -1.0 --heading 90 --width-m 20 \
+  --verified-utc 2026-08-14T10:00:00Z --output candidate-r2.json
+python3 -B tools/track_workbench.py import candidate-r2.json \
+  --database-dir /path/to/device/tracks
+```
 
-The current selection screen links to this future workflow as information only; it
-does not capture or synthesize timing geometry. Implementation remains tracked by
-issue #37.
+Run `python3 -B tools/track_workbench.py new --help` for the four repeated `--gate`
+arguments used to create a definition without rebuilding firmware. Device menu wiring,
+four-gate progress, and persistent on-device storage remain in issue #108. No capture
+flow may require driver interaction at speed.
 
 ## 5. Loading, projection, and versioning
 
