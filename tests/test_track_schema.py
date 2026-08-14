@@ -3,7 +3,7 @@ from copy import deepcopy
 import unittest
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 from tools.validate_tracks import validate_track_geometry
 
@@ -44,6 +44,44 @@ class TrackSchemaTests(unittest.TestCase):
         errors = list(Draft202012Validator(self.schema).iter_errors(invalid))
         self.assertTrue(errors)
 
+    def test_unknown_root_property_is_rejected_at_root(self):
+        invalid = deepcopy(self.example)
+        invalid["provenence"] = invalid.pop("provenance")
+        errors = list(Draft202012Validator(self.schema).iter_errors(invalid))
+        self.assertTrue(any(list(error.absolute_path) == [] for error in errors))
+
+    def test_revision_and_provenance_are_structured(self):
+        invalid_revision = deepcopy(self.example)
+        invalid_revision["revision"] = 0
+        revision_paths = {
+            ".".join(str(part) for part in error.absolute_path)
+            for error in Draft202012Validator(
+                self.schema, format_checker=FormatChecker()
+            ).iter_errors(invalid_revision)
+        }
+        self.assertIn("revision", revision_paths)
+
+        invalid_provenance = deepcopy(self.example)
+        invalid_provenance["provenance"]["verified_utc"] = "not-a-timestamp-value"
+        provenance_paths = {
+            ".".join(str(part) for part in error.absolute_path)
+            for error in Draft202012Validator(
+                self.schema, format_checker=FormatChecker()
+            ).iter_errors(invalid_provenance)
+        }
+        self.assertIn("provenance.verified_utc", provenance_paths)
+
+    def test_sector_fields_and_unknown_properties_are_strict(self):
+        invalid = deepcopy(self.example)
+        invalid["sectors"][0]["sector_id"] = ""
+        invalid["sectors"][0]["gate"]["radius_m"] = 5
+        paths = {
+            ".".join(str(part) for part in error.absolute_path)
+            for error in Draft202012Validator(self.schema).iter_errors(invalid)
+        }
+        self.assertIn("sectors.0.sector_id", paths)
+        self.assertIn("sectors.0.gate", paths)
+
     def test_invalid_gate_limits_are_rejected(self):
         invalid = deepcopy(self.example)
         invalid["gates"]["pit_exit"]["minimum_crossing_speed_mps"] = 0
@@ -64,6 +102,22 @@ class TrackSchemaTests(unittest.TestCase):
         self.assertEqual(
             validate_track_geometry(invalid),
             ["gates.pit_entry: directed gate is shorter than 1 metre"],
+        )
+
+    def test_duplicate_sector_identifier_names_exact_field(self):
+        invalid = deepcopy(self.example)
+        invalid["sectors"].append(deepcopy(invalid["sectors"][0]))
+        self.assertEqual(
+            validate_track_geometry(invalid),
+            ["sectors.1.sector_id: duplicates sectors.0.sector_id"],
+        )
+
+    def test_geometry_outside_geofence_names_endpoint(self):
+        invalid = deepcopy(self.example)
+        invalid["geofence"]["radius_m"] = 10
+        failures = validate_track_geometry(invalid)
+        self.assertIn(
+            "sectors.0.gate.left: endpoint lies outside the geofence", failures
         )
 
 

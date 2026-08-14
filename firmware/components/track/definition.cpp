@@ -292,14 +292,19 @@ class JsonReader {
 
 struct ParseState {
     TrackDefinition definition{};
+    TrackDefinitionField error_field{TrackDefinitionField::root};
     bool capacity_error{false};
     bool schema{false};
+    bool revision{false};
     bool id{false};
     bool name{false};
+    bool country{false};
+    bool provenance{false};
     bool reference{false};
     bool geofence{false};
     bool gates{false};
     bool timing{false};
+    bool sectors{false};
 };
 
 bool valid_point(const GeographicPoint& point) noexcept
@@ -537,6 +542,99 @@ bool parse_timing(JsonReader& reader, double& minimum_lap_time_s) noexcept
     return reader.consume('}') && minimum_lap_time;
 }
 
+bool parse_provenance(JsonReader& reader, TrackProvenance& provenance,
+                      bool& capacity_error) noexcept
+{
+    if (!reader.consume('{')) {
+        return false;
+    }
+    bool source = false;
+    bool license = false;
+    bool verified = false;
+    while (reader.peek() != '}') {
+        std::array<char, 40> key{};
+        if (reader.string(key) == StringResult::invalid || !reader.consume(':')) {
+            return false;
+        }
+        StringResult result{StringResult::invalid};
+        if (std::strcmp(key.data(), "source") == 0 && !source) {
+            result = reader.string(provenance.source);
+            source = result == StringResult::ok && provenance.source[0] != '\0';
+        }
+        else if (std::strcmp(key.data(), "license") == 0 && !license) {
+            result = reader.string(provenance.license);
+            license = result == StringResult::ok && provenance.license[0] != '\0';
+        }
+        else if (std::strcmp(key.data(), "verified_utc") == 0 && !verified) {
+            result = reader.string(provenance.verified_utc);
+            verified = result == StringResult::ok && provenance.verified_utc[0] != '\0';
+        }
+        else {
+            return false;
+        }
+        capacity_error = capacity_error || result == StringResult::overflow;
+        if (result == StringResult::invalid) {
+            return false;
+        }
+        if (reader.peek() == '}') {
+            break;
+        }
+        if (!reader.consume(',')) {
+            return false;
+        }
+    }
+    return reader.consume('}') && source && license && verified;
+}
+
+bool parse_sector(JsonReader& reader, SectorDefinition& sector,
+                  bool& capacity_error) noexcept
+{
+    if (!reader.consume('{')) {
+        return false;
+    }
+    bool id = false;
+    bool name = false;
+    bool gate = false;
+    while (reader.peek() != '}') {
+        std::array<char, 40> key{};
+        if (reader.string(key) == StringResult::invalid || !reader.consume(':')) {
+            return false;
+        }
+        if (std::strcmp(key.data(), "sector_id") == 0 && !id) {
+            const auto result = reader.string(sector.sector_id);
+            capacity_error = capacity_error || result == StringResult::overflow;
+            id = result == StringResult::ok && sector.sector_id[0] != '\0';
+            if (result == StringResult::invalid) {
+                return false;
+            }
+        }
+        else if (std::strcmp(key.data(), "name") == 0 && !name) {
+            const auto result = reader.string(sector.name);
+            capacity_error = capacity_error || result == StringResult::overflow;
+            name = result == StringResult::ok && sector.name[0] != '\0';
+            if (result == StringResult::invalid) {
+                return false;
+            }
+        }
+        else if (std::strcmp(key.data(), "gate") == 0 && !gate) {
+            gate = parse_gate(reader, sector.gate);
+            if (!gate) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
+        if (reader.peek() == '}') {
+            break;
+        }
+        if (!reader.consume(',')) {
+            return false;
+        }
+    }
+    return reader.consume('}') && id && name && gate;
+}
+
 bool parse_sectors(JsonReader& reader, ParseState& state) noexcept
 {
     if (!reader.consume('[')) {
@@ -551,7 +649,8 @@ bool parse_sectors(JsonReader& reader, ParseState& state) noexcept
             state.capacity_error = true;
             return false;
         }
-        if (!reader.skip_value()) {
+        if (!parse_sector(reader, state.definition.sectors[count - 1],
+                          state.capacity_error)) {
             return false;
         }
         if (reader.consume(']')) {
@@ -576,15 +675,31 @@ bool parse_root(JsonReader& reader, ParseState& state) noexcept
             return false;
         }
         if (std::strcmp(key.data(), "schema_version") == 0) {
+            state.error_field = TrackDefinitionField::schema_version;
             double version = 0.0;
-            if (!reader.number(version) || version < 0.0 || version > 65'535.0 ||
+            if (state.schema || !reader.number(version) || version < 0.0 ||
+                version > 65'535.0 ||
                 std::floor(version) != version) {
                 return false;
             }
             state.definition.schema_version = static_cast<std::uint16_t>(version);
             state.schema = true;
         }
+        else if (std::strcmp(key.data(), "revision") == 0) {
+            state.error_field = TrackDefinitionField::revision;
+            double revision = 0.0;
+            if (state.revision || !reader.number(revision) || revision < 1.0 ||
+                revision > 4'294'967'295.0 || std::floor(revision) != revision) {
+                return false;
+            }
+            state.definition.revision = static_cast<std::uint32_t>(revision);
+            state.revision = true;
+        }
         else if (std::strcmp(key.data(), "track_id") == 0) {
+            state.error_field = TrackDefinitionField::track_id;
+            if (state.id) {
+                return false;
+            }
             const auto result = reader.string(state.definition.track_id);
             state.capacity_error = state.capacity_error || result == StringResult::overflow;
             state.id = result == StringResult::ok && state.definition.track_id[0] != '\0';
@@ -593,6 +708,10 @@ bool parse_root(JsonReader& reader, ParseState& state) noexcept
             }
         }
         else if (std::strcmp(key.data(), "name") == 0) {
+            state.error_field = TrackDefinitionField::name;
+            if (state.name) {
+                return false;
+            }
             const auto result = reader.string(state.definition.name);
             state.capacity_error = state.capacity_error || result == StringResult::overflow;
             state.name = result == StringResult::ok && state.definition.name[0] != '\0';
@@ -601,42 +720,80 @@ bool parse_root(JsonReader& reader, ParseState& state) noexcept
             }
         }
         else if (std::strcmp(key.data(), "country") == 0) {
+            state.error_field = TrackDefinitionField::country;
+            if (state.country) {
+                return false;
+            }
             const auto result = reader.string(state.definition.country);
             state.capacity_error = state.capacity_error || result == StringResult::overflow;
+            state.country = result == StringResult::ok && state.definition.country[0] != '\0';
             if (result == StringResult::invalid) {
                 return false;
             }
         }
+        else if (std::strcmp(key.data(), "provenance") == 0) {
+            state.error_field = TrackDefinitionField::provenance;
+            if (state.provenance) {
+                return false;
+            }
+            state.provenance = parse_provenance(reader, state.definition.provenance,
+                                                state.capacity_error);
+            if (!state.provenance) {
+                return false;
+            }
+        }
         else if (std::strcmp(key.data(), "reference") == 0) {
+            state.error_field = TrackDefinitionField::reference;
+            if (state.reference) {
+                return false;
+            }
             state.reference = parse_point(reader, state.definition.reference);
             if (!state.reference) {
                 return false;
             }
         }
         else if (std::strcmp(key.data(), "geofence") == 0) {
+            state.error_field = TrackDefinitionField::geofence;
+            if (state.geofence) {
+                return false;
+            }
             state.geofence = parse_geofence(reader, state.definition.geofence);
             if (!state.geofence) {
                 return false;
             }
         }
         else if (std::strcmp(key.data(), "gates") == 0) {
+            state.error_field = TrackDefinitionField::gates_start;
+            if (state.gates) {
+                return false;
+            }
             state.gates = parse_gates(reader, state.definition.gates);
             if (!state.gates) {
                 return false;
             }
         }
         else if (std::strcmp(key.data(), "timing") == 0) {
+            state.error_field = TrackDefinitionField::timing;
+            if (state.timing) {
+                return false;
+            }
             state.timing = parse_timing(reader, state.definition.minimum_lap_time_s);
             if (!state.timing) {
                 return false;
             }
         }
         else if (std::strcmp(key.data(), "sectors") == 0) {
+            state.error_field = TrackDefinitionField::sectors;
+            if (state.sectors) {
+                return false;
+            }
             if (!parse_sectors(reader, state)) {
                 return false;
             }
+            state.sectors = true;
         }
-        else if (!reader.skip_value()) {
+        else {
+            state.error_field = TrackDefinitionField::root;
             return false;
         }
         if (reader.peek() == '}') {
@@ -649,7 +806,8 @@ bool parse_root(JsonReader& reader, ParseState& state) noexcept
     return reader.consume('}') && reader.finished();
 }
 
-bool valid_identifier(const std::array<char, kTrackIdCapacity>& identifier) noexcept
+template <std::size_t Capacity>
+bool valid_identifier(const std::array<char, Capacity>& identifier) noexcept
 {
     for (std::size_t index = 0; index < identifier.size() && identifier[index] != '\0'; ++index) {
         const char value = identifier[index];
@@ -663,9 +821,83 @@ bool valid_identifier(const std::array<char, kTrackIdCapacity>& identifier) noex
     return identifier[0] != '\0';
 }
 
-TrackLoadReport report(const TrackLoadResult result, const JsonReader& reader) noexcept
+bool valid_country(const std::array<char, kCountryCapacity>& country) noexcept
 {
-    return {result, reader.position()};
+    const auto length = std::strlen(country.data());
+    if (length < 2 || length > 3) {
+        return false;
+    }
+    for (std::size_t index = 0; index < length; ++index) {
+        if (country[index] < 'A' || country[index] > 'Z') {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <std::size_t Capacity>
+bool has_non_whitespace(const std::array<char, Capacity>& value) noexcept
+{
+    for (const auto character : value) {
+        if (character == '\0') {
+            return false;
+        }
+        if (character != ' ' && character != '\t' && character != '\r' &&
+            character != '\n') {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool valid_verified_timestamp(
+    const std::array<char, kProvenanceTimestampCapacity>& value) noexcept
+{
+    const auto length = std::strlen(value.data());
+    return length >= 20 && value[4] == '-' && value[7] == '-' && value[10] == 'T' &&
+           value[13] == ':' && value[16] == ':' && value[length - 1] == 'Z';
+}
+
+TrackLoadReport report(const TrackLoadResult result, const JsonReader& reader,
+                       const TrackDefinitionField field =
+                           TrackDefinitionField::none) noexcept
+{
+    return {result, reader.position(), field};
+}
+
+TrackDefinitionField first_missing_field(const ParseState& state) noexcept
+{
+    if (!state.schema) {
+        return TrackDefinitionField::schema_version;
+    }
+    if (!state.revision) {
+        return TrackDefinitionField::revision;
+    }
+    if (!state.id) {
+        return TrackDefinitionField::track_id;
+    }
+    if (!state.name) {
+        return TrackDefinitionField::name;
+    }
+    if (!state.country) {
+        return TrackDefinitionField::country;
+    }
+    if (!state.provenance) {
+        return TrackDefinitionField::provenance;
+    }
+    if (!state.reference) {
+        return TrackDefinitionField::reference;
+    }
+    if (!state.geofence) {
+        return TrackDefinitionField::geofence;
+    }
+    if (!state.gates) {
+        return TrackDefinitionField::gates_start;
+    }
+    if (!state.timing) {
+        return TrackDefinitionField::timing;
+    }
+    return TrackDefinitionField::sectors;
 }
 
 }  // namespace
@@ -685,18 +917,22 @@ TrackLoadReport load_track_definition(const std::string_view json,
     if (!parse_root(reader, parsed)) {
         return report(parsed.capacity_error ? TrackLoadResult::capacity_exceeded
                                             : TrackLoadResult::invalid_json,
-                      reader);
+                      reader, parsed.error_field);
     }
     if (parsed.capacity_error) {
-        return report(TrackLoadResult::capacity_exceeded, reader);
+        return report(TrackLoadResult::capacity_exceeded, reader,
+                      parsed.error_field);
     }
     if (parsed.schema &&
         parsed.definition.schema_version != kCurrentTrackSchemaVersion) {
-        return report(TrackLoadResult::unsupported_version, reader);
+        return report(TrackLoadResult::unsupported_version, reader,
+                      TrackDefinitionField::schema_version);
     }
-    if (!parsed.schema || !parsed.id || !parsed.name || !parsed.reference ||
-        !parsed.geofence || !parsed.gates || !parsed.timing) {
-        return report(TrackLoadResult::missing_required_field, reader);
+    if (!parsed.schema || !parsed.revision || !parsed.id || !parsed.name ||
+        !parsed.country || !parsed.provenance || !parsed.reference ||
+        !parsed.geofence || !parsed.gates || !parsed.timing || !parsed.sectors) {
+        return report(TrackLoadResult::missing_required_field, reader,
+                      first_missing_field(parsed));
     }
 
     auto& definition = parsed.definition;
@@ -706,19 +942,63 @@ TrackLoadReport load_track_definition(const std::string_view json,
         &definition.gates.pit_entry,
         &definition.gates.pit_exit,
     };
-    if (!valid_identifier(definition.track_id) || !valid_point(definition.reference) ||
-        !valid_point(definition.geofence.center) ||
+    if (!valid_identifier(definition.track_id)) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::track_id);
+    }
+    if (!has_non_whitespace(definition.name)) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::name);
+    }
+    if (!valid_country(definition.country)) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::country);
+    }
+    if (definition.revision == 0) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::revision);
+    }
+    if (!has_non_whitespace(definition.provenance.source) ||
+        !has_non_whitespace(definition.provenance.license) ||
+        !valid_verified_timestamp(definition.provenance.verified_utc)) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::provenance);
+    }
+    if (!valid_point(definition.reference)) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::reference);
+    }
+    if (!valid_point(definition.geofence.center) ||
         !std::isfinite(definition.geofence.radius_m) ||
         definition.geofence.radius_m <= 0.0 ||
-        !std::isfinite(definition.minimum_lap_time_s) ||
-        definition.minimum_lap_time_s <= 0.0 || definition.minimum_lap_time_s > 3'600.0) {
-        return report(TrackLoadResult::invalid_value, reader);
+        definition.geofence.radius_m > kMaximumCircuitProjectionRadiusM) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::geofence);
+    }
+    if (!std::isfinite(definition.minimum_lap_time_s) ||
+        definition.minimum_lap_time_s <= 0.0 ||
+        definition.minimum_lap_time_s > 3'600.0) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::timing);
     }
 
     CircuitProjection projection{};
     if (configure_circuit_projection(definition.reference, projection) !=
         ProjectionResult::projected) {
-        return report(TrackLoadResult::invalid_value, reader);
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::reference);
+    }
+
+    LocalPoint geofence_center{};
+    if (project_to_circuit_local(projection, definition.geofence.center,
+                                 geofence_center) != ProjectionResult::projected) {
+        return report(TrackLoadResult::invalid_value, reader,
+                      TrackDefinitionField::geofence);
+    }
+    if (std::hypot(geofence_center.east_m, geofence_center.north_m) >
+        definition.geofence.radius_m) {
+        return report(TrackLoadResult::geometry_outside_geofence, reader,
+                      TrackDefinitionField::geofence);
     }
 
     constexpr std::array<TrackLoadResult, 4> degenerate_results{
@@ -726,6 +1006,12 @@ TrackLoadReport load_track_definition(const std::string_view json,
         TrackLoadResult::degenerate_finish_gate,
         TrackLoadResult::degenerate_pit_entry_gate,
         TrackLoadResult::degenerate_pit_exit_gate,
+    };
+    constexpr std::array<TrackDefinitionField, 4> gate_fields{
+        TrackDefinitionField::gates_start,
+        TrackDefinitionField::gates_finish,
+        TrackDefinitionField::gates_pit_entry,
+        TrackDefinitionField::gates_pit_exit,
     };
     for (std::size_t index = 0; index < gates.size(); ++index) {
         auto& gate = *gates[index];
@@ -739,18 +1025,106 @@ TrackLoadReport load_track_definition(const std::string_view json,
             gate.minimum_crossing_speed_mps > 150.0 ||
             !std::isfinite(gate.rearm_corridor_m) || gate.rearm_corridor_m <= 0.0 ||
             gate.rearm_corridor_m > 1'000.0) {
-            return report(TrackLoadResult::invalid_value, reader);
+            return report(TrackLoadResult::invalid_value, reader,
+                          gate_fields[index]);
         }
         if (project_to_circuit_local(projection, gate.left, gate.local_left) !=
                 ProjectionResult::projected ||
             project_to_circuit_local(projection, gate.right, gate.local_right) !=
                 ProjectionResult::projected) {
-            return report(TrackLoadResult::invalid_value, reader);
+            return report(TrackLoadResult::invalid_value, reader,
+                          gate_fields[index]);
         }
         const auto east = gate.local_right.east_m - gate.local_left.east_m;
         const auto north = gate.local_right.north_m - gate.local_left.north_m;
-        if (std::hypot(east, north) < 1.0) {
-            return report(degenerate_results[index], reader);
+        const auto gate_length_m = std::hypot(east, north);
+        if (gate_length_m < 1.0) {
+            return report(degenerate_results[index], reader,
+                          gate_fields[index]);
+        }
+        constexpr double kPi = 3.14159265358979323846;
+        const auto heading_rad = gate.direction_heading_deg * kPi / 180.0;
+        const auto crossing_sine =
+            std::abs(east * std::cos(heading_rad) -
+                     north * std::sin(heading_rad)) /
+            gate_length_m;
+        if (gate_length_m > 1'000.0 ||
+            crossing_sine < std::sin(10.0 * kPi / 180.0)) {
+            return report(TrackLoadResult::invalid_value, reader,
+                          gate_fields[index]);
+        }
+        const auto left_from_center =
+            std::hypot(gate.local_left.east_m - geofence_center.east_m,
+                       gate.local_left.north_m - geofence_center.north_m);
+        const auto right_from_center =
+            std::hypot(gate.local_right.east_m - geofence_center.east_m,
+                       gate.local_right.north_m - geofence_center.north_m);
+        if (left_from_center > definition.geofence.radius_m ||
+            right_from_center > definition.geofence.radius_m) {
+            return report(TrackLoadResult::geometry_outside_geofence, reader,
+                          gate_fields[index]);
+        }
+    }
+
+    for (std::size_t index = 0; index < definition.sector_count; ++index) {
+        auto& sector = definition.sectors[index];
+        if (!valid_identifier(sector.sector_id) || !has_non_whitespace(sector.name)) {
+            return report(TrackLoadResult::invalid_value, reader,
+                          TrackDefinitionField::sectors);
+        }
+        for (std::size_t earlier = 0; earlier < index; ++earlier) {
+            if (std::strcmp(sector.sector_id.data(),
+                            definition.sectors[earlier].sector_id.data()) == 0) {
+                return report(TrackLoadResult::duplicate_sector_id, reader,
+                              TrackDefinitionField::sectors);
+            }
+        }
+        auto& gate = sector.gate;
+        if (!valid_point(gate.left) || !valid_point(gate.right) ||
+            !std::isfinite(gate.direction_heading_deg) ||
+            gate.direction_heading_deg < 0.0 || gate.direction_heading_deg >= 360.0 ||
+            !std::isfinite(gate.heading_tolerance_deg) ||
+            gate.heading_tolerance_deg < 0.0 || gate.heading_tolerance_deg > 180.0 ||
+            !std::isfinite(gate.minimum_crossing_speed_mps) ||
+            gate.minimum_crossing_speed_mps <= 0.0 ||
+            gate.minimum_crossing_speed_mps > 150.0 ||
+            !std::isfinite(gate.rearm_corridor_m) || gate.rearm_corridor_m <= 0.0 ||
+            gate.rearm_corridor_m > 1'000.0 ||
+            project_to_circuit_local(projection, gate.left, gate.local_left) !=
+                ProjectionResult::projected ||
+            project_to_circuit_local(projection, gate.right, gate.local_right) !=
+                ProjectionResult::projected) {
+            return report(TrackLoadResult::invalid_value, reader,
+                          TrackDefinitionField::sectors);
+        }
+        const auto east = gate.local_right.east_m - gate.local_left.east_m;
+        const auto north = gate.local_right.north_m - gate.local_left.north_m;
+        const auto gate_length_m = std::hypot(east, north);
+        if (gate_length_m < 1.0) {
+            return report(TrackLoadResult::degenerate_sector_gate, reader,
+                          TrackDefinitionField::sectors);
+        }
+        constexpr double kPi = 3.14159265358979323846;
+        const auto heading_rad = gate.direction_heading_deg * kPi / 180.0;
+        const auto crossing_sine =
+            std::abs(east * std::cos(heading_rad) -
+                     north * std::sin(heading_rad)) /
+            gate_length_m;
+        if (gate_length_m > 1'000.0 ||
+            crossing_sine < std::sin(10.0 * kPi / 180.0)) {
+            return report(TrackLoadResult::invalid_value, reader,
+                          TrackDefinitionField::sectors);
+        }
+        const auto left_from_center =
+            std::hypot(gate.local_left.east_m - geofence_center.east_m,
+                       gate.local_left.north_m - geofence_center.north_m);
+        const auto right_from_center =
+            std::hypot(gate.local_right.east_m - geofence_center.east_m,
+                       gate.local_right.north_m - geofence_center.north_m);
+        if (left_from_center > definition.geofence.radius_m ||
+            right_from_center > definition.geofence.radius_m) {
+            return report(TrackLoadResult::geometry_outside_geofence, reader,
+                          TrackDefinitionField::sectors);
         }
     }
     definition.definition_hash = hash_track_definition(json);
@@ -802,8 +1176,53 @@ const char* track_load_result_name(const TrackLoadResult result) noexcept
         return "degenerate-pit-entry-gate";
     case TrackLoadResult::degenerate_pit_exit_gate:
         return "degenerate-pit-exit-gate";
+    case TrackLoadResult::degenerate_sector_gate:
+        return "degenerate-sector-gate";
+    case TrackLoadResult::duplicate_sector_id:
+        return "duplicate-sector-id";
+    case TrackLoadResult::geometry_outside_geofence:
+        return "geometry-outside-geofence";
     }
     return "invalid-json";
+}
+
+const char* track_definition_field_name(const TrackDefinitionField field) noexcept
+{
+    switch (field) {
+    case TrackDefinitionField::none:
+        return "none";
+    case TrackDefinitionField::root:
+        return "<root>";
+    case TrackDefinitionField::schema_version:
+        return "schema_version";
+    case TrackDefinitionField::revision:
+        return "revision";
+    case TrackDefinitionField::track_id:
+        return "track_id";
+    case TrackDefinitionField::name:
+        return "name";
+    case TrackDefinitionField::country:
+        return "country";
+    case TrackDefinitionField::provenance:
+        return "provenance";
+    case TrackDefinitionField::reference:
+        return "reference";
+    case TrackDefinitionField::geofence:
+        return "geofence";
+    case TrackDefinitionField::gates_start:
+        return "gates.start";
+    case TrackDefinitionField::gates_finish:
+        return "gates.finish";
+    case TrackDefinitionField::gates_pit_entry:
+        return "gates.pit_entry";
+    case TrackDefinitionField::gates_pit_exit:
+        return "gates.pit_exit";
+    case TrackDefinitionField::timing:
+        return "timing";
+    case TrackDefinitionField::sectors:
+        return "sectors";
+    }
+    return "<root>";
 }
 
 }  // namespace track_timer::track
