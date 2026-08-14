@@ -100,6 +100,10 @@ Required synthetic cases:
 9. invalid GNSS fix at one side of crossing
 10. consecutive valid crossings inside minimum lap time
 11. correct crossing after leaving rearm corridor
+12. start versus finish lap-boundary selection with identical typed gate events
+13. independent pit-entry and pit-exit rearm at slow pit-lane speed
+14. 20/25 Hz high-speed segments spanning a finite gate
+15. accepted and rejected typed gate records agree in host and embedded replay
 
 ## 4. Performance tests
 

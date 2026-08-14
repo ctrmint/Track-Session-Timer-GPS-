@@ -514,6 +514,31 @@ if(BUILD_TESTING)
     )
 
     add_executable(
+        track_timer_gate_event_engine_test
+        ../tests/cpp/test_gate_event_engine.cpp
+    )
+    target_link_libraries(
+        track_timer_gate_event_engine_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_gate_event_engine_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-four-gate-event-engine
+        COMMAND track_timer_gate_event_engine_test
+    )
+    set_tests_properties(
+        simulator-four-gate-event-engine
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Typed four-gate events, independent rearm, interpolation, and rejection replay passed"
+            TIMEOUT 20
+    )
+
+    add_executable(
         track_timer_track_definition_test
         ../tests/cpp/test_track_definition.cpp
     )
