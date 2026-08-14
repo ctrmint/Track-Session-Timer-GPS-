@@ -8,7 +8,7 @@
 
 namespace track_timer::track {
 
-inline constexpr std::uint16_t kCurrentTrackSchemaVersion = 1;
+inline constexpr std::uint16_t kCurrentTrackSchemaVersion = 2;
 inline constexpr std::size_t kMaximumTrackFileBytes = 4'096;
 inline constexpr std::size_t kTrackIdCapacity = 48;
 inline constexpr std::size_t kTrackNameCapacity = 64;
@@ -30,14 +30,22 @@ struct GeofenceDefinition {
     double radius_m{0.0};
 };
 
-struct StartFinishDefinition {
-    GeographicPoint a{};
-    GeographicPoint b{};
-    LocalPoint local_a{};
-    LocalPoint local_b{};
+struct DirectedGateDefinition {
+    GeographicPoint left{};
+    GeographicPoint right{};
+    LocalPoint local_left{};
+    LocalPoint local_right{};
     double direction_heading_deg{0.0};
     double heading_tolerance_deg{0.0};
-    double minimum_lap_time_s{0.0};
+    double minimum_crossing_speed_mps{0.0};
+    double rearm_corridor_m{0.0};
+};
+
+struct CircuitGateDefinitions {
+    DirectedGateDefinition start{};
+    DirectedGateDefinition finish{};
+    DirectedGateDefinition pit_entry{};
+    DirectedGateDefinition pit_exit{};
 };
 
 struct TrackDefinition {
@@ -47,7 +55,8 @@ struct TrackDefinition {
     std::array<char, kCountryCapacity> country{};
     GeographicPoint reference{};
     GeofenceDefinition geofence{};
-    StartFinishDefinition start_finish{};
+    CircuitGateDefinitions gates{};
+    double minimum_lap_time_s{0.0};
     std::uint64_t definition_hash{0};
     std::uint8_t sector_count{0};
 };
@@ -61,7 +70,10 @@ enum class TrackLoadResult : std::uint8_t {
     unsupported_version,
     invalid_value,
     capacity_exceeded,
-    degenerate_start_finish,
+    degenerate_start_gate,
+    degenerate_finish_gate,
+    degenerate_pit_entry_gate,
+    degenerate_pit_exit_gate,
 };
 
 struct TrackLoadReport {

@@ -8,28 +8,34 @@
     "name",
     "reference",
     "geofence",
-    "start_finish"
+    "gates",
+    "timing"
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "track_id": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "maxLength": 47,
+      "pattern": "^[A-Za-z0-9._-]+$"
     },
     "name": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "maxLength": 63
     },
     "country": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 3
     },
     "reference": {
       "$ref": "#/$defs/point"
     },
     "geofence": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "center_lat_deg",
         "center_lon_deg",
@@ -37,10 +43,14 @@
       ],
       "properties": {
         "center_lat_deg": {
-          "type": "number"
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
         },
         "center_lon_deg": {
-          "type": "number"
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
         },
         "radius_m": {
           "type": "number",
@@ -48,40 +58,47 @@
         }
       }
     },
-    "start_finish": {
+    "gates": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
-        "a",
-        "b",
-        "direction_heading_deg",
-        "heading_tolerance_deg",
+        "start",
+        "finish",
+        "pit_entry",
+        "pit_exit"
+      ],
+      "properties": {
+        "start": {
+          "$ref": "#/$defs/directed_gate"
+        },
+        "finish": {
+          "$ref": "#/$defs/directed_gate"
+        },
+        "pit_entry": {
+          "$ref": "#/$defs/directed_gate"
+        },
+        "pit_exit": {
+          "$ref": "#/$defs/directed_gate"
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
         "minimum_lap_time_s"
       ],
       "properties": {
-        "a": {
-          "$ref": "#/$defs/point"
-        },
-        "b": {
-          "$ref": "#/$defs/point"
-        },
-        "direction_heading_deg": {
-          "type": "number",
-          "minimum": 0,
-          "exclusiveMaximum": 360
-        },
-        "heading_tolerance_deg": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 180
-        },
         "minimum_lap_time_s": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "maximum": 3600
         }
       }
     },
     "sectors": {
       "type": "array",
+      "maxItems": 16,
       "items": {
         "type": "object"
       }
@@ -90,6 +107,7 @@
   "$defs": {
     "point": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "lat_deg",
         "lon_deg"
@@ -104,6 +122,46 @@
           "type": "number",
           "minimum": -180,
           "maximum": 180
+        }
+      }
+    },
+    "directed_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "left",
+        "right",
+        "direction_heading_deg",
+        "heading_tolerance_deg",
+        "minimum_crossing_speed_mps",
+        "rearm_corridor_m"
+      ],
+      "properties": {
+        "left": {
+          "$ref": "#/$defs/point"
+        },
+        "right": {
+          "$ref": "#/$defs/point"
+        },
+        "direction_heading_deg": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        },
+        "heading_tolerance_deg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180
+        },
+        "minimum_crossing_speed_mps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 150
+        },
+        "rearm_corridor_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000
         }
       }
     }

@@ -26,6 +26,17 @@ std::string replace_once(std::string value, const std::string& from,
     return value;
 }
 
+std::string replace_once_after(std::string value, const std::string& marker,
+                               const std::string& from, const std::string& to)
+{
+    const auto marker_position = value.find(marker);
+    assert(marker_position != std::string::npos);
+    const auto position = value.find(from, marker_position + marker.size());
+    assert(position != std::string::npos);
+    value.replace(position, from.size(), to);
+    return value;
+}
+
 void assert_failure_preserves_active(const std::string& json,
                                      const track_timer::track::TrackLoadResult expected)
 {
@@ -46,6 +57,7 @@ int main(const int argc, char** argv)
 
     assert(argc == 2);
     const auto valid_json = read_file(argv[1]);
+    assert(valid_json.size() <= kMaximumTrackFileBytes);
     TrackDefinition definition{};
     const auto loaded = load_track_definition(valid_json, definition);
     assert(loaded.result == TrackLoadResult::loaded);
@@ -55,12 +67,25 @@ int main(const int argc, char** argv)
     assert(std::strcmp(definition.name.data(), "Synthetic Test Loop") == 0);
     assert(std::strcmp(definition.country.data(), "XX") == 0);
     assert(definition.sector_count == 0);
-    assert(std::abs(definition.start_finish.local_a.north_m - 5.5597) < 0.1);
-    assert(std::abs(definition.start_finish.local_b.north_m + 5.5597) < 0.1);
-    assert(std::hypot(definition.start_finish.local_b.east_m -
-                          definition.start_finish.local_a.east_m,
-                      definition.start_finish.local_b.north_m -
-                          definition.start_finish.local_a.north_m) > 10.0);
+    assert(std::abs(definition.gates.start.local_left.north_m - 5.5597) < 0.1);
+    assert(std::abs(definition.gates.start.local_right.north_m + 5.5597) < 0.1);
+    assert(std::hypot(definition.gates.start.local_right.east_m -
+                          definition.gates.start.local_left.east_m,
+                      definition.gates.start.local_right.north_m -
+                          definition.gates.start.local_left.north_m) > 10.0);
+    assert(definition.gates.start.left.latitude_deg ==
+           definition.gates.finish.left.latitude_deg);
+    assert(definition.gates.start.right.longitude_deg ==
+           definition.gates.finish.right.longitude_deg);
+    assert(std::hypot(definition.gates.pit_entry.local_right.east_m -
+                          definition.gates.pit_entry.local_left.east_m,
+                      definition.gates.pit_entry.local_right.north_m -
+                          definition.gates.pit_entry.local_left.north_m) > 10.0);
+    assert(std::hypot(definition.gates.pit_exit.local_right.east_m -
+                          definition.gates.pit_exit.local_left.east_m,
+                      definition.gates.pit_exit.local_right.north_m -
+                          definition.gates.pit_exit.local_left.north_m) > 10.0);
+    assert(definition.minimum_lap_time_s == 20.0);
     assert(definition.definition_hash == hash_track_definition(valid_json));
     std::array<char, 17> hash_text{};
     format_definition_hash(definition.definition_hash, hash_text);
@@ -78,8 +103,8 @@ int main(const int argc, char** argv)
     assert_failure_preserves_active(std::string(kMaximumTrackFileBytes + 1, ' '),
                                     TrackLoadResult::file_too_large);
     assert_failure_preserves_active("{", TrackLoadResult::invalid_json);
-    assert_failure_preserves_active(replace_once(valid_json, "\"schema_version\": 1",
-                                                 "\"schema_version\": 2"),
+    assert_failure_preserves_active(replace_once(valid_json, "\"schema_version\": 2",
+                                                 "\"schema_version\": 1"),
                                     TrackLoadResult::unsupported_version);
     assert_failure_preserves_active(replace_once(valid_json, "\"name\": \"Synthetic Test Loop\",\n",
                                                  ""),
@@ -90,10 +115,41 @@ int main(const int argc, char** argv)
     assert_failure_preserves_active(replace_once(valid_json, "\"name\": \"Synthetic Test Loop\"",
                                                  "\"name\": \"" + std::string(80, 'A') + "\""),
                                     TrackLoadResult::capacity_exceeded);
-    assert_failure_preserves_active(replace_once(valid_json,
-                                                 "\"lat_deg\": 51.99995,\n      \"lon_deg\": -0.99998",
-                                                 "\"lat_deg\": 52.00005,\n      \"lon_deg\": -1.00002"),
-                                    TrackLoadResult::degenerate_start_finish);
+    assert_failure_preserves_active(
+        replace_once_after(valid_json, "\"start\"",
+                           "\"lat_deg\": 51.99995,\n        \"lon_deg\": -0.99998",
+                           "\"lat_deg\": 52.00005,\n        \"lon_deg\": -1.00002"),
+        TrackLoadResult::degenerate_start_gate);
+    assert_failure_preserves_active(
+        replace_once_after(valid_json, "\"finish\"",
+                           "\"lat_deg\": 51.99995,\n        \"lon_deg\": -0.99998",
+                           "\"lat_deg\": 52.00005,\n        \"lon_deg\": -1.00002"),
+        TrackLoadResult::degenerate_finish_gate);
+    assert_failure_preserves_active(
+        replace_once_after(valid_json, "\"pit_entry\"",
+                           "\"lat_deg\": 52.00005,\n        \"lon_deg\": -1.0",
+                           "\"lat_deg\": 52.00015,\n        \"lon_deg\": -1.00004"),
+        TrackLoadResult::degenerate_pit_entry_gate);
+    assert_failure_preserves_active(
+        replace_once_after(valid_json, "\"pit_exit\"",
+                           "\"lat_deg\": 51.99985,\n        \"lon_deg\": -0.99996",
+                           "\"lat_deg\": 51.99995,\n        \"lon_deg\": -1.0"),
+        TrackLoadResult::degenerate_pit_exit_gate);
+    assert_failure_preserves_active(
+        replace_once(valid_json, "\"minimum_crossing_speed_mps\": 2.0",
+                     "\"minimum_crossing_speed_mps\": 0.0"),
+        TrackLoadResult::invalid_value);
+    assert_failure_preserves_active(
+        replace_once(valid_json, "\"rearm_corridor_m\": 15.0",
+                     "\"rearm_corridor_m\": 1001.0"),
+        TrackLoadResult::invalid_value);
+    assert_failure_preserves_active(
+        replace_once_after(valid_json, "\"start\"", "\"left\": {",
+                           "\"left\": {\"unknown_geometry\": 1,"),
+        TrackLoadResult::invalid_json);
+    assert_failure_preserves_active(
+        replace_once(valid_json, "\"pit_exit\": {", "\"pit_entry\": {"),
+        TrackLoadResult::invalid_json);
 
     const std::string with_unknown = replace_once(
         valid_json, "\"country\": \"XX\",",
@@ -114,7 +170,10 @@ int main(const int argc, char** argv)
                               TrackLoadResult::unsupported_version,
                               TrackLoadResult::invalid_value,
                               TrackLoadResult::capacity_exceeded,
-                              TrackLoadResult::degenerate_start_finish}) {
+                              TrackLoadResult::degenerate_start_gate,
+                              TrackLoadResult::degenerate_finish_gate,
+                              TrackLoadResult::degenerate_pit_entry_gate,
+                              TrackLoadResult::degenerate_pit_exit_gate}) {
         assert(track_load_result_name(result)[0] != '\0');
     }
 
