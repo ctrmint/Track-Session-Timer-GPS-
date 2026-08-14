@@ -115,10 +115,24 @@ A robust 2D segment intersection method returns a movement fraction `u` where:
 
 ```text
 crossing_position = P0 + u * (P1 - P0)
-0 <= u <= 1
+0 < u <= 1
 ```
 
-If no valid segment intersection exists, no lap event is possible.
+Consecutive movement segments use the half-open interval `(P0, P1]`: the current
+segment owns a crossing at its ending fix, while the next segment does not own
+the same point at its starting fix. The timing line uses the closed interval
+`[A, B]`, so crossing either physical endpoint still counts. A
+before/on/after sequence therefore produces exactly one geometric candidate.
+
+Zero-length movement and timing-line segments are rejected with distinct
+diagnostics. Parallel segments do not cross, and collinear segments are
+reported as ambiguous rather than creating a timing event. The implementation
+normalises its parallel tolerance by both segment lengths and derives endpoint
+parameter tolerances from segment length, so decisions remain consistent at
+different circuit-local scales. Repeated fixes on the line are rejected as
+degenerate movement.
+
+If no owned, unique segment intersection exists, no lap event is possible.
 
 ## 7. Time interpolation
 

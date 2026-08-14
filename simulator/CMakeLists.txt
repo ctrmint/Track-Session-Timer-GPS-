@@ -48,6 +48,7 @@ add_library(
     ../firmware/components/track/definition.cpp
     ../firmware/components/track/matching.cpp
     ../firmware/components/track/projection.cpp
+    ../firmware/components/timing/intersection.cpp
     src/device_backends.cpp
     src/diagnostics_fixtures.cpp
     src/display_fixtures.cpp
@@ -69,6 +70,7 @@ target_include_directories(
         ../firmware/components/settings/include
         ../firmware/components/session/include
         ../firmware/components/track/include
+        ../firmware/components/timing/include
         ../firmware/components/ui/include
 )
 target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
@@ -379,6 +381,31 @@ if(BUILD_TESTING)
         simulator-circuit-local-projection
         PROPERTIES
             PASS_REGULAR_EXPRESSION "WGS84 circuit-local projection reference vectors passed"
+            TIMEOUT 20
+    )
+
+    add_executable(
+        track_timer_intersection_test
+        ../tests/cpp/test_intersection.cpp
+    )
+    target_link_libraries(
+        track_timer_intersection_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_intersection_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-segment-intersection
+        COMMAND track_timer_intersection_test
+    )
+    set_tests_properties(
+        simulator-segment-intersection
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Scale-aware half-open segment intersection vectors passed"
             TIMEOUT 20
     )
 
