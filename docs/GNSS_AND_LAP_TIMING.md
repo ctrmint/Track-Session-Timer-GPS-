@@ -54,20 +54,56 @@ Keep raw receiver status available for diagnostics even if the timing engine use
 
 Lap intersection calculations should not operate directly on latitude/longitude degrees.
 
-For a local circuit, convert positions and start-line endpoints to a local tangent plane in metres, for example East/North coordinates around a track reference origin.
+The production projection is `CircuitProjection`, a WGS84 ellipsoid local tangent
+linearisation anchored at the track file's `reference` point. It precomputes the WGS84
+prime-vertical and meridional radii at that latitude, then maps every accepted fix and
+all gate endpoints to:
 
-A simple equirectangular/local tangent approximation is adequate for small test geometry, but production code should use a well-tested local projection implementation with explicit numerical tests.
+```text
+east_m  = normalised_longitude_delta_rad * N(reference) * cos(reference_latitude)
+north_m = latitude_delta_rad             * M(reference)
+```
 
-## 5. Start/finish definition
+Longitude delta is normalised across the antimeridian. East is positive with increasing
+longitude and North is positive with increasing latitude. Inputs and scale factors use
+`double`; outputs are metres relative to the reference origin. The same allocation-free
+C++ implementation is compiled for host replay, the simulator, and ESP32-S3 firmware.
 
-A track file stores:
+The bounded circuit projection accepts reference latitudes from -85 to +85 degrees and
+points within 25 km of the origin. It is deliberately a local geometry projection, not
+a global distance service. Invalid, unconfigured, polar, non-finite, or out-of-area
+inputs are rejected without changing the caller's previous output.
 
-- endpoint A
-- endpoint B
+Reference vectors enforced to 1 mm by `test_projection.cpp` include:
+
+| Reference | Offset | East (m) | North (m) |
+|---|---|---:|---:|
+| 0°, 0° | +0.1° longitude | 11,131.949 | 0.000 |
+| 0°, 0° | +0.1° latitude | 0.000 | 11,057.428 |
+| 52°, -1° | +0.001° longitude, +0.001° latitude | 68.678 | 111.267 |
+| -33.9°, 151.2° | -0.001° longitude, +0.001° latitude | -92.493 | 110.921 |
+| 0°, 179.999° | longitude -179.999° | 222.639 | 0.000 |
+
+Projection configuration runs only when a track is loaded and performs the WGS84
+trigonometry and square root once. The per-fix path contains no trigonometry, square
+root, allocation, or I/O: it normalises longitude, performs fixed-scale arithmetic, and
+checks squared radius. This cost is bounded independently of catalog size and sampling
+rate. With the pinned ESP-IDF 6.0.2 ESP32-S3 toolchain, `projection.cpp.obj` measures
+1,416 bytes of text and zero bytes of data/BSS. End-to-end deadline measurement on the
+target timing task remains part of embedded parity issue #25.
+
+## 5. Circuit gate definitions
+
+A track file stores four directed gates (`start`, `finish`, `pit_entry`, and `pit_exit`).
+Each gate stores:
+
+- left endpoint
+- right endpoint
 - permitted crossing direction
-- optional line width metadata for display only
-- minimum plausible lap time
-- broad track geofence
+- minimum crossing speed
+- rearm corridor distance
+
+The track also stores a minimum plausible lap time and broad geofence.
 
 Direction can be represented as a unit normal vector or a heading range associated with the line.
 

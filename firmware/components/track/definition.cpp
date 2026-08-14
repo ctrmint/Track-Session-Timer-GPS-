@@ -1,4 +1,5 @@
 #include "track_timer/track/definition.hpp"
+#include "track_timer/track/projection.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -7,8 +8,6 @@
 namespace track_timer::track {
 namespace {
 
-constexpr double kEarthRadiusM = 6'371'000.0;
-constexpr double kDegreesToRadians = 3.14159265358979323846 / 180.0;
 constexpr std::size_t kMaximumJsonDepth = 12;
 
 enum class StringResult : std::uint8_t {
@@ -664,17 +663,6 @@ bool valid_identifier(const std::array<char, kTrackIdCapacity>& identifier) noex
     return identifier[0] != '\0';
 }
 
-LocalPoint project(const GeographicPoint& point, const GeographicPoint& reference) noexcept
-{
-    const auto latitude_delta = (point.latitude_deg - reference.latitude_deg) *
-                                kDegreesToRadians;
-    const auto longitude_delta = (point.longitude_deg - reference.longitude_deg) *
-                                 kDegreesToRadians;
-    return {longitude_delta * kEarthRadiusM *
-                std::cos(reference.latitude_deg * kDegreesToRadians),
-            latitude_delta * kEarthRadiusM};
-}
-
 TrackLoadReport report(const TrackLoadResult result, const JsonReader& reader) noexcept
 {
     return {result, reader.position()};
@@ -727,6 +715,12 @@ TrackLoadReport load_track_definition(const std::string_view json,
         return report(TrackLoadResult::invalid_value, reader);
     }
 
+    CircuitProjection projection{};
+    if (configure_circuit_projection(definition.reference, projection) !=
+        ProjectionResult::projected) {
+        return report(TrackLoadResult::invalid_value, reader);
+    }
+
     constexpr std::array<TrackLoadResult, 4> degenerate_results{
         TrackLoadResult::degenerate_start_gate,
         TrackLoadResult::degenerate_finish_gate,
@@ -747,8 +741,12 @@ TrackLoadReport load_track_definition(const std::string_view json,
             gate.rearm_corridor_m > 1'000.0) {
             return report(TrackLoadResult::invalid_value, reader);
         }
-        gate.local_left = project(gate.left, definition.reference);
-        gate.local_right = project(gate.right, definition.reference);
+        if (project_to_circuit_local(projection, gate.left, gate.local_left) !=
+                ProjectionResult::projected ||
+            project_to_circuit_local(projection, gate.right, gate.local_right) !=
+                ProjectionResult::projected) {
+            return report(TrackLoadResult::invalid_value, reader);
+        }
         const auto east = gate.local_right.east_m - gate.local_left.east_m;
         const auto north = gate.local_right.north_m - gate.local_left.north_m;
         if (std::hypot(east, north) < 1.0) {

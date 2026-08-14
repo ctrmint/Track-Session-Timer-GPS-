@@ -47,6 +47,7 @@ add_library(
     ../firmware/components/logger/formats.cpp
     ../firmware/components/track/definition.cpp
     ../firmware/components/track/matching.cpp
+    ../firmware/components/track/projection.cpp
     src/device_backends.cpp
     src/diagnostics_fixtures.cpp
     src/display_fixtures.cpp
@@ -353,6 +354,31 @@ if(BUILD_TESTING)
         simulator-track-geofence-matching
         PROPERTIES
             PASS_REGULAR_EXPRESSION "Offline track geofence suggestion and ambiguity decisions passed"
+            TIMEOUT 20
+    )
+
+    add_executable(
+        track_timer_projection_test
+        ../tests/cpp/test_projection.cpp
+    )
+    target_link_libraries(
+        track_timer_projection_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_projection_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-circuit-local-projection
+        COMMAND track_timer_projection_test
+    )
+    set_tests_properties(
+        simulator-circuit-local-projection
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "WGS84 circuit-local projection reference vectors passed"
             TIMEOUT 20
     )
 
