@@ -146,6 +146,7 @@ void ScenarioPlayer::reset(const ScenarioId id) noexcept
     id_ = id;
     elapsed_ms_ = 0;
     lap_emitted_ = false;
+    has_latest_fix_ = false;
     snapshot_ = initial_snapshot(id);
     device_.reset();
     logger_.reset();
@@ -212,6 +213,15 @@ DeviceDiagnostics ScenarioPlayer::diagnostics() const noexcept
 logger::LoggerMetrics ScenarioPlayer::logger_metrics() const noexcept
 {
     return logger_.metrics();
+}
+
+bool ScenarioPlayer::latest_fix(domain::GnssFix& output) const noexcept
+{
+    if (!has_latest_fix_) {
+        return false;
+    }
+    output = latest_fix_;
+    return true;
 }
 
 SimulatedDevice& ScenarioPlayer::device() noexcept
@@ -292,6 +302,8 @@ void ScenarioPlayer::consume_inputs() noexcept
 
     domain::GnssFix fix{};
     while (device_.gnss().try_read(fix)) {
+        latest_fix_ = fix;
+        has_latest_fix_ = true;
         if (fix.reject_reason == domain::FixRejectReason::stale) {
             snapshot_.gnss_health = domain::GnssHealth::stale;
         }

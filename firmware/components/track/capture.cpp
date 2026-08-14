@@ -111,6 +111,36 @@ GateCaptureResult capture_stationary_gate(const domain::GnssFix& fix,
     return GateCaptureResult::captured;
 }
 
+EndpointCaptureResult capture_stationary_endpoint(
+    const domain::GnssFix& fix, const std::int64_t evaluation_monotonic_us,
+    const bool session_active, GeographicPoint& output) noexcept
+{
+    if (session_active) {
+        return EndpointCaptureResult::active_session;
+    }
+    if (!fix.accepted_for_timing || fix.reject_reason != domain::FixRejectReason::none ||
+        !usable_fix_type(fix.fix_type) || !valid_fix_position(fix) ||
+        fix.measurement_time_ns == domain::kUnavailableTime ||
+        fix.arrival_monotonic_us == domain::kUnavailableTime ||
+        !std::isfinite(fix.speed_mps) || fix.speed_mps < 0.0F ||
+        !std::isfinite(fix.horizontal_accuracy_m)) {
+        return EndpointCaptureResult::unusable_fix;
+    }
+    if (evaluation_monotonic_us < fix.arrival_monotonic_us ||
+        evaluation_monotonic_us - fix.arrival_monotonic_us > kMaximumCaptureFixAgeUs) {
+        return EndpointCaptureResult::stale_fix;
+    }
+    if (fix.speed_mps > kMaximumCaptureSpeedMps) {
+        return EndpointCaptureResult::moving;
+    }
+    if (fix.horizontal_accuracy_m <= 0.0F ||
+        fix.horizontal_accuracy_m > kMaximumCaptureHorizontalAccuracyM) {
+        return EndpointCaptureResult::poor_accuracy;
+    }
+    output = {fix.latitude_deg, fix.longitude_deg};
+    return EndpointCaptureResult::captured;
+}
+
 const char* gate_capture_result_name(const GateCaptureResult result) noexcept
 {
     switch (result) {
@@ -130,6 +160,25 @@ const char* gate_capture_result_name(const GateCaptureResult result) noexcept
         return "projection-failed";
     }
     return "invalid-request";
+}
+
+const char* endpoint_capture_result_name(const EndpointCaptureResult result) noexcept
+{
+    switch (result) {
+    case EndpointCaptureResult::captured:
+        return "captured";
+    case EndpointCaptureResult::active_session:
+        return "active-session";
+    case EndpointCaptureResult::moving:
+        return "moving";
+    case EndpointCaptureResult::stale_fix:
+        return "stale-fix";
+    case EndpointCaptureResult::unusable_fix:
+        return "unusable-fix";
+    case EndpointCaptureResult::poor_accuracy:
+        return "poor-accuracy";
+    }
+    return "unusable-fix";
 }
 
 }  // namespace track_timer::track

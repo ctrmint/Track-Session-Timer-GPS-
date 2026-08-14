@@ -32,6 +32,7 @@ add_library(
     track_timer_simulator_model
     ../firmware/components/ui/active_session.cpp
     ../firmware/components/ui/foundation.cpp
+    ../firmware/components/ui/gate_capture.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/imu_meter.cpp
@@ -46,6 +47,7 @@ add_library(
     ../firmware/components/logger/async_logger.cpp
     ../firmware/components/logger/formats.cpp
     ../firmware/components/track/definition.cpp
+    ../firmware/components/track/capture.cpp
     ../firmware/components/track/matching.cpp
     ../firmware/components/track/projection.cpp
     ../firmware/components/timing/intersection.cpp
@@ -57,6 +59,7 @@ add_library(
     src/diagnostics_fixtures.cpp
     src/display_fixtures.cpp
     src/file_settings_store.cpp
+    src/file_track_definition_store.cpp
     src/fixed_cell_text.cpp
     src/imu_fixtures.cpp
     src/scenario.cpp
@@ -82,6 +85,7 @@ target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 add_library(
     track_timer_lvgl_ui
     ../firmware/components/ui/diagnostics_screen.cpp
+    ../firmware/components/ui/gate_capture_screen.cpp
     ../firmware/components/ui/g_meter_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     ../firmware/components/ui/ready_screen.cpp
@@ -138,6 +142,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_gate_capture_test
+        ../tests/cpp/test_gate_capture.cpp
+    )
+    target_link_libraries(
+        track_timer_gate_capture_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_gate_capture_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-gate-capture
+        COMMAND track_timer_gate_capture_test
+    )
+    set_tests_properties(
+        simulator-gate-capture
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Four-gate capture, safety rejection, atomic persistence, and recovery passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_rest_session_test
         ../tests/cpp/test_rest_session.cpp
@@ -835,6 +864,24 @@ if(BUILD_TESTING)
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
             PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*setup-page=menu"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-gate-capture-screen
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen gate-capture
+            --track-state suggested
+            --frames 4
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/gate-capture.ppm"
+    )
+    set_tests_properties(
+        simulator-gate-capture-screen
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "scenario=ready.*screen=setup.*setup-page=gate-capture.*gate-capture-state=editing"
             TIMEOUT 20
     )
 

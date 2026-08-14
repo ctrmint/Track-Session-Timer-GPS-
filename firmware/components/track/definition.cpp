@@ -2,6 +2,7 @@
 #include "track_timer/track/projection.hpp"
 
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include <cstring>
 
@@ -1130,6 +1131,165 @@ TrackLoadReport load_track_definition(const std::string_view json,
     definition.definition_hash = hash_track_definition(json);
     output = definition;
     return report(TrackLoadResult::loaded, reader);
+}
+
+namespace {
+
+class JsonWriter {
+  public:
+    explicit JsonWriter(TrackDefinitionBlob& output) noexcept : output_(output)
+    {
+        output_.bytes.fill('\0');
+        output_.size = 0;
+    }
+
+    bool text(const char* value) noexcept
+    {
+        return append(value, std::strlen(value));
+    }
+
+    bool quoted(const char* value) noexcept
+    {
+        if (!text("\"")) {
+            return false;
+        }
+        for (const auto* current = value; *current != '\0'; ++current) {
+            switch (*current) {
+            case '\"':
+                if (!text("\\\"")) {
+                    return false;
+                }
+                break;
+            case '\\':
+                if (!text("\\\\")) {
+                    return false;
+                }
+                break;
+            case '\n':
+                if (!text("\\n")) {
+                    return false;
+                }
+                break;
+            case '\r':
+                if (!text("\\r")) {
+                    return false;
+                }
+                break;
+            case '\t':
+                if (!text("\\t")) {
+                    return false;
+                }
+                break;
+            default:
+                if (static_cast<unsigned char>(*current) < 0x20U ||
+                    !append(current, 1)) {
+                    return false;
+                }
+            }
+        }
+        return text("\"");
+    }
+
+    bool format(const char* format, ...) noexcept
+    {
+        std::array<char, 256> formatted{};
+        va_list arguments;
+        va_start(arguments, format);
+        const auto length = std::vsnprintf(formatted.data(), formatted.size(), format,
+                                           arguments);
+        va_end(arguments);
+        return length >= 0 && static_cast<std::size_t>(length) < formatted.size() &&
+               append(formatted.data(), static_cast<std::size_t>(length));
+    }
+
+  private:
+    bool append(const char* value, const std::size_t length) noexcept
+    {
+        if (length > output_.bytes.size() - output_.size - 1) {
+            failed_ = true;
+            return false;
+        }
+        std::memcpy(output_.bytes.data() + output_.size, value, length);
+        output_.size += length;
+        output_.bytes[output_.size] = '\0';
+        return !failed_;
+    }
+
+    TrackDefinitionBlob& output_;
+    bool failed_{false};
+};
+
+bool write_point(JsonWriter& writer, const GeographicPoint& point) noexcept
+{
+    return writer.format("{\"lat_deg\":%.15g,\"lon_deg\":%.15g}",
+                         point.latitude_deg, point.longitude_deg);
+}
+
+bool write_gate(JsonWriter& writer, const DirectedGateDefinition& gate) noexcept
+{
+    return writer.text("{\"left\":") && write_point(writer, gate.left) &&
+           writer.text(",\"right\":") && write_point(writer, gate.right) &&
+           writer.format(",\"direction_heading_deg\":%.15g,"
+                         "\"heading_tolerance_deg\":%.15g,"
+                         "\"minimum_crossing_speed_mps\":%.15g,"
+                         "\"rearm_corridor_m\":%.15g}",
+                         gate.direction_heading_deg, gate.heading_tolerance_deg,
+                         gate.minimum_crossing_speed_mps, gate.rearm_corridor_m);
+}
+
+}  // namespace
+
+TrackSerializeResult serialize_track_definition(
+    const TrackDefinition& definition, TrackDefinitionBlob& output) noexcept
+{
+    TrackDefinitionBlob candidate{};
+    JsonWriter writer{candidate};
+    bool ok = writer.format("{\"schema_version\":%u,\"revision\":%u,\"track_id\":",
+                            static_cast<unsigned>(definition.schema_version),
+                            static_cast<unsigned>(definition.revision)) &&
+              writer.quoted(definition.track_id.data()) && writer.text(",\"name\":") &&
+              writer.quoted(definition.name.data()) && writer.text(",\"country\":") &&
+              writer.quoted(definition.country.data()) &&
+              writer.text(",\"provenance\":{\"source\":") &&
+              writer.quoted(definition.provenance.source.data()) &&
+              writer.text(",\"license\":") &&
+              writer.quoted(definition.provenance.license.data()) &&
+              writer.text(",\"verified_utc\":") &&
+              writer.quoted(definition.provenance.verified_utc.data()) &&
+              writer.text("},\"reference\":") && write_point(writer, definition.reference) &&
+              writer.format(",\"geofence\":{\"center_lat_deg\":%.15g,"
+                            "\"center_lon_deg\":%.15g,\"radius_m\":%.15g},"
+                            "\"gates\":{\"start\":",
+                            definition.geofence.center.latitude_deg,
+                            definition.geofence.center.longitude_deg,
+                            definition.geofence.radius_m) &&
+              write_gate(writer, definition.gates.start) &&
+              writer.text(",\"finish\":") && write_gate(writer, definition.gates.finish) &&
+              writer.text(",\"pit_entry\":") &&
+              write_gate(writer, definition.gates.pit_entry) &&
+              writer.text(",\"pit_exit\":") && write_gate(writer, definition.gates.pit_exit) &&
+              writer.format("},\"timing\":{\"minimum_lap_time_s\":%.15g},\"sectors\":[",
+                            definition.minimum_lap_time_s);
+    for (std::size_t index = 0; ok && index < definition.sector_count; ++index) {
+        const auto& sector = definition.sectors[index];
+        ok = (index == 0 || writer.text(",")) &&
+             writer.text("{\"sector_id\":") && writer.quoted(sector.sector_id.data()) &&
+             writer.text(",\"name\":") && writer.quoted(sector.name.data()) &&
+             writer.text(",\"gate\":") && write_gate(writer, sector.gate) &&
+             writer.text("}");
+    }
+    ok = ok && writer.text("]}");
+    if (!ok) {
+        return TrackSerializeResult::capacity_exceeded;
+    }
+    TrackDefinition round_trip{};
+    if (load_track_definition(
+            {candidate.bytes.data(), candidate.size}, round_trip).result !=
+        TrackLoadResult::loaded) {
+        return TrackSerializeResult::invalid_definition;
+    }
+    output = candidate;
+    return TrackSerializeResult::serialized;
 }
 
 std::uint64_t hash_track_definition(const std::string_view bytes) noexcept

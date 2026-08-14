@@ -3,6 +3,7 @@
 #include "track_timer/settings/settings.hpp"
 #include "track_timer/session/controller.hpp"
 #include "track_timer/simulator/file_settings_store.hpp"
+#include "track_timer/simulator/file_track_definition_store.hpp"
 #include "track_timer/simulator/diagnostics_fixtures.hpp"
 #include "track_timer/simulator/display_fixtures.hpp"
 #include "track_timer/simulator/imu_fixtures.hpp"
@@ -184,10 +185,11 @@ Options parse_options(const int argc, char** argv)
             options.initial_screen = require_value(argc, argv, index);
             if (options.initial_screen != "ready" && options.initial_screen != "setup" &&
                 options.initial_screen != "settings" && options.initial_screen != "tracks" &&
+                options.initial_screen != "gate-capture" &&
                 options.initial_screen != "g-meter" && options.initial_screen != "review" &&
                 options.initial_screen != "diagnostics") {
                 throw std::invalid_argument(
-                    "--screen must be ready, setup, settings, tracks, g-meter, review, or diagnostics");
+                    "--screen must be ready, setup, settings, tracks, gate-capture, g-meter, review, or diagnostics");
             }
         }
         else if (argument == "--imu-state") {
@@ -246,7 +248,7 @@ Options parse_options(const int argc, char** argv)
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|g-meter|review|diagnostics] "
+                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|gate-capture|g-meter|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
                          "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] [--workflow-state STATE] [--trackday-mode saved|enabled|disabled] "
                          "[--snapshot FILE]\n"
@@ -503,6 +505,11 @@ void update_screen(ApplicationContext& context)
     else {
         diagnostics.imu = track_timer::diagnostics::SubsystemState::ready;
     }
+    track_timer::domain::GnssFix latest_fix{};
+    if (context.player.latest_fix(latest_fix)) {
+        context.screen->update_capture_fix(
+            latest_fix, context.player.device().clock().now_us());
+    }
     context.screen->update(
         track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.display_fixture.input,
@@ -571,6 +578,9 @@ int run(const Options& options)
     track_timer::simulator::FileSettingsStore settings_store{settings_path};
     track_timer::settings::SettingsManager settings_manager{settings_store};
     (void)settings_manager.load();
+    const auto track_store_path = std::filesystem::temp_directory_path() /
+                                  "track-session-timer-simulator" / "tracks";
+    track_timer::simulator::FileTrackDefinitionStore track_store{track_store_path};
 
     auto track_fixture = track_timer::simulator::make_track_fixture(options.track_fixture);
     if (options.track_fixture_explicit) {
@@ -594,7 +604,7 @@ int run(const Options& options)
 
     track_timer::simulator::ApplicationScreen screen{lv_screen_active(), settings_manager,
                                                       track_fixture.catalog(), initial_match,
-                                                      &summary_provider};
+                                                      &summary_provider, nullptr, &track_store};
     screen.add_controls_to_group(input_group);
     if (options.initial_screen != "ready") {
         if (options.initial_screen == "review") {
@@ -610,6 +620,13 @@ int run(const Options& options)
             }
             else if (options.initial_screen == "tracks") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::track_selection);
+            }
+            else if (options.initial_screen == "gate-capture") {
+                screen.open_setup_page(track_timer::simulator::SetupPage::track_selection);
+                (void)lv_obj_send_event(
+                    screen.track_selection_screen().button_for(
+                        track_timer::ui::TrackSelectionAction::capture_information),
+                    LV_EVENT_CLICKED, nullptr);
             }
             else if (options.initial_screen == "g-meter") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::g_meter);
@@ -690,6 +707,8 @@ int run(const Options& options)
               << " setup-page=" << track_timer::simulator::setup_page_name(screen.setup_page())
               << " track-state="
               << track_timer::track::track_match_state_name(final_track_match.state)
+              << " gate-capture-state="
+              << track_timer::ui::gate_capture_status_name(screen.gate_capture().status())
               << " review-state="
               << track_timer::ui::session_review_status_name(
                      screen.session_review().view_model().status)

@@ -27,6 +27,14 @@ track::TrackDefinition make_definition(const char* id, const char* name,
     std::snprintf(definition.track_id.data(), definition.track_id.size(), "%s", id);
     std::snprintf(definition.name.data(), definition.name.size(), "%s", name);
     std::snprintf(definition.country.data(), definition.country.size(), "XX");
+    definition.revision = 1;
+    std::snprintf(definition.provenance.source.data(),
+                  definition.provenance.source.size(), "Simulator fixture");
+    std::snprintf(definition.provenance.license.data(),
+                  definition.provenance.license.size(), "CC0-1.0");
+    std::snprintf(definition.provenance.verified_utc.data(),
+                  definition.provenance.verified_utc.size(),
+                  "2026-08-14T00:00:00Z");
     definition.reference = {latitude, longitude};
     definition.geofence = {{latitude, longitude}, radius_m};
     definition.gates.start = make_gate(latitude, longitude, 0.00005);

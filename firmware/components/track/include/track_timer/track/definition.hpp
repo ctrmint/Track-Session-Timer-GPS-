@@ -81,6 +81,17 @@ struct TrackDefinition {
     std::uint8_t sector_count{0};
 };
 
+struct TrackDefinitionBlob {
+    std::array<char, kMaximumTrackFileBytes> bytes{};
+    std::size_t size{0};
+};
+
+enum class TrackSerializeResult : std::uint8_t {
+    serialized,
+    invalid_definition,
+    capacity_exceeded,
+};
+
 enum class TrackLoadResult : std::uint8_t {
     loaded,
     empty,
@@ -126,6 +137,8 @@ struct TrackLoadReport {
 
 [[nodiscard]] TrackLoadReport load_track_definition(std::string_view json,
                                                     TrackDefinition& output) noexcept;
+[[nodiscard]] TrackSerializeResult serialize_track_definition(
+    const TrackDefinition& definition, TrackDefinitionBlob& output) noexcept;
 [[nodiscard]] std::uint64_t hash_track_definition(std::string_view bytes) noexcept;
 void format_definition_hash(std::uint64_t hash, std::array<char, 17>& output) noexcept;
 [[nodiscard]] const char* track_load_result_name(TrackLoadResult result) noexcept;
@@ -133,6 +146,7 @@ void format_definition_hash(std::uint64_t hash, std::array<char, 17>& output) no
     TrackDefinitionField field) noexcept;
 
 static_assert(std::is_trivially_copyable_v<TrackDefinition>);
+static_assert(std::is_trivially_copyable_v<TrackDefinitionBlob>);
 static_assert(std::is_trivially_copyable_v<TrackLoadReport>);
 
 }  // namespace track_timer::track

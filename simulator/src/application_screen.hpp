@@ -12,6 +12,8 @@
 #include "track_timer/ui/diagnostics_screen.hpp"
 #include "track_timer/ui/display_policy.hpp"
 #include "track_timer/ui/g_meter_screen.hpp"
+#include "track_timer/ui/gate_capture.hpp"
+#include "track_timer/ui/gate_capture_screen.hpp"
 #include "track_timer/ui/imu_meter.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
@@ -31,6 +33,7 @@ enum class SetupPage : std::uint8_t {
     menu,
     device_settings,
     track_selection,
+    gate_capture,
     g_meter,
 };
 
@@ -40,7 +43,8 @@ class ApplicationScreen {
                       track::TrackCatalogView track_catalog,
                       const track::TrackMatchResult& track_match,
                       logger::SessionSummaryProvider* summary_provider,
-                      board::DisplayOutput* display_output = nullptr) noexcept;
+                      board::DisplayOutput* display_output = nullptr,
+                      track::TrackDefinitionStore* track_store = nullptr) noexcept;
 
     void update(const ui::ReadyViewModel& ready, const domain::UiSnapshot& active,
                 const diagnostics::DiagnosticsSnapshot& diagnostics,
@@ -54,6 +58,8 @@ class ApplicationScreen {
     void synchronize_workflow(const session::SessionSnapshot& snapshot,
                               std::uint64_t now_ms) noexcept;
     void update_track_match(const track::TrackMatchResult& match) noexcept;
+    void update_capture_fix(const domain::GnssFix& fix,
+                            std::int64_t evaluation_monotonic_us) noexcept;
     void open_setup_page(SetupPage page) noexcept;
     [[nodiscard]] bool consume_start_request() noexcept;
     [[nodiscard]] bool consume_stop_request() noexcept;
@@ -69,6 +75,8 @@ class ApplicationScreen {
     [[nodiscard]] const ui::SettingsEditor& settings_editor() const noexcept;
     [[nodiscard]] ui::TrackSelectionScreen& track_selection_screen() noexcept;
     [[nodiscard]] const ui::TrackSelectionController& track_selection() const noexcept;
+    [[nodiscard]] ui::GateCaptureScreen& gate_capture_screen() noexcept;
+    [[nodiscard]] const ui::GateCaptureController& gate_capture() const noexcept;
     [[nodiscard]] ui::SessionReviewScreen& session_review_screen() noexcept;
     [[nodiscard]] const ui::SessionReviewController& session_review() const noexcept;
     [[nodiscard]] ui::DiagnosticsScreen& diagnostics_screen() noexcept;
@@ -91,6 +99,7 @@ class ApplicationScreen {
     static void setup_action(ui::SetupMenuAction action, void* context) noexcept;
     static void settings_action(ui::SettingsScreenAction action, void* context) noexcept;
     static void track_action(ui::TrackSelectionAction action, void* context) noexcept;
+    static void gate_capture_action(ui::GateCaptureAction action, void* context) noexcept;
     static void review_action(ui::SessionReviewAction action, void* context) noexcept;
     static void diagnostics_action(ui::DiagnosticsAction action, void* context) noexcept;
     static void g_meter_action(ui::GmeterAction action, void* context) noexcept;
@@ -100,6 +109,7 @@ class ApplicationScreen {
     void show_destination() noexcept;
     void refresh_settings() noexcept;
     void refresh_track_selection() noexcept;
+    void refresh_gate_capture() noexcept;
     void refresh_session_review() noexcept;
     void refresh_diagnostics() noexcept;
     void apply_display_policy(const board::DisplayCommand& command) noexcept;
@@ -110,6 +120,7 @@ class ApplicationScreen {
     diagnostics::DiagnosticsSnapshot diagnostics_snapshot_{};
     logger::SessionSummaryProvider* summary_provider_{nullptr};
     board::DisplayOutput* display_output_{nullptr};
+    track::TrackDefinitionStore* track_store_{nullptr};
     ui::NavigationController navigation_{};
     SetupPage setup_page_{SetupPage::menu};
     bool start_requested_{false};
@@ -124,6 +135,7 @@ class ApplicationScreen {
     lv_obj_t* setup_menu_root_{nullptr};
     lv_obj_t* settings_root_{nullptr};
     lv_obj_t* track_selection_root_{nullptr};
+    lv_obj_t* gate_capture_root_{nullptr};
     lv_obj_t* session_review_root_{nullptr};
     lv_obj_t* diagnostics_root_{nullptr};
     lv_obj_t* g_meter_root_{nullptr};
@@ -138,6 +150,8 @@ class ApplicationScreen {
     ui::SettingsScreen settings_screen_;
     ui::TrackSelectionController track_selection_{};
     ui::TrackSelectionScreen track_selection_screen_;
+    ui::GateCaptureController gate_capture_{};
+    ui::GateCaptureScreen gate_capture_screen_;
     ui::SessionReviewController session_review_{};
     ui::SessionReviewScreen session_review_screen_;
     ui::DiagnosticsController diagnostics_{};

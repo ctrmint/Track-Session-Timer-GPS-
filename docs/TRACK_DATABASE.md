@@ -151,9 +151,24 @@ python3 -B tools/track_workbench.py import candidate-r2.json \
 ```
 
 Run `python3 -B tools/track_workbench.py new --help` for the four repeated `--gate`
-arguments used to create a definition without rebuilding firmware. Device menu wiring,
-four-gate progress, and persistent on-device storage remain in issue #108. No capture
-flow may require driver interaction at speed.
+arguments used to create a definition without rebuilding firmware.
+
+On the device, open **Setup > Track Selection**, browse to a validated layout, then
+choose **Capture Info**. The capture screen walks through the left and right endpoints
+of Start, Finish, Pit Entry, and Pit Exit, showing the current coordinate, horizontal
+accuracy, fix age, 8-point completion count, and a line-length/heading preview. The
+vehicle must be stationary, the session must be stopped, the fix must be no more than
+two seconds old, and horizontal accuracy must be 5 m or better. Save stays disabled
+until all eight endpoints are captured and the complete definition passes the same
+semantic validation as a prebuilt file.
+
+Each layout is written as its own versioned JSON file through the
+`TrackDefinitionStore` interface. The simulator adapter uses a temporary file and a
+last-known-good backup, validates before promotion, restores an interrupted write, and
+requires explicit confirmation before overwriting an existing layout. Cancel and every
+capture/save rejection leave the previous valid file untouched. Host-created JSON can
+still be imported, selected, refined on the device, and reloaded without rebuilding
+firmware. No capture flow permits driver interaction at speed.
 
 ## 5. Loading, projection, and versioning
 
