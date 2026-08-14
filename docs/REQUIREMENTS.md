@@ -38,6 +38,7 @@
 - FR-031: Device logs GNSS fixes at the configured high rate.
 - FR-032: Storage failure does not stop active timing.
 - FR-033: Logs contain firmware version, hardware profile and track definition identifier.
+- FR-034: Offline track packages retain machine-readable provenance, blockers, and geometry-validation status; provisional geometry cannot enable lap timing.
 
 ### IMU
 
@@ -62,6 +63,7 @@
 - NFR-007: No cloud service or phone is required at the circuit.
 - NFR-008: Firmware update and configuration actions cannot interrupt an active session accidentally.
 - NFR-009: The design must expose enough diagnostics to distinguish GNSS quality problems from software timing problems.
+- NFR-010: Build tooling validates and deterministically packages every deployable track definition without requiring network access in CI.
 
 ## Performance targets
 

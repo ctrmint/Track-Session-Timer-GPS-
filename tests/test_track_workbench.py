@@ -63,7 +63,23 @@ class TrackWorkbenchTests(unittest.TestCase):
         self.assertEqual(revised["revision"], 2)
         self.assertEqual(revised["gates"]["finish"]["direction_heading_deg"], 95.0)
         self.assertEqual(revised["provenance"]["source"], "host-refined logged trace")
+        self.assertEqual(revised["provenance"]["geometry_status"], "device_captured")
         self.assertEqual(validate_definition(revised), [])
+
+        provisional = self.definition()
+        provisional["provenance"]["geometry_status"] = "provisional"
+        still_provisional = refine_gate(
+            provisional,
+            "finish",
+            52.0001,
+            -1.0,
+            95.0,
+            22.0,
+            "2026-08-14T11:30:00Z",
+        )
+        self.assertEqual(
+            still_provisional["provenance"]["geometry_status"], "provisional"
+        )
 
     def test_import_export_are_validated_and_atomic(self):
         with tempfile.TemporaryDirectory() as temporary:

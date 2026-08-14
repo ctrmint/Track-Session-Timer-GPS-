@@ -71,6 +71,14 @@ class TrackSchemaTests(unittest.TestCase):
         }
         self.assertIn("provenance.verified_utc", provenance_paths)
 
+        invalid_status = deepcopy(self.example)
+        invalid_status["provenance"]["geometry_status"] = "timing_ready"
+        status_paths = {
+            ".".join(str(part) for part in error.absolute_path)
+            for error in Draft202012Validator(self.schema).iter_errors(invalid_status)
+        }
+        self.assertIn("provenance.geometry_status", status_paths)
+
     def test_sector_fields_and_unknown_properties_are_strict(self):
         invalid = deepcopy(self.example)
         invalid["sectors"][0]["sector_id"] = ""

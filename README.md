@@ -141,6 +141,7 @@ firmware/                 ESP-IDF firmware project
 simulator/                600 x 450 LVGL/SDL desktop device simulator
 hardware/                 BOM, wiring and enclosure notes
 data/tracks/              Track file schema and synthetic example
+data/track-packs/         Provenance-gated offline pack source manifests
 planning/                 Export of the live milestone/issue backlog
 tests/                    Host-side algorithm tests
 tools/                    Development and replay utilities
@@ -177,6 +178,10 @@ idf.py -p /dev/ttyACM0 flash monitor
 Without a native IDF installation, run `make firmware-container-build` from the
 repository root. See [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) for the
 pinned Python environment, clean-clone checks, and flashing notes.
+
+Build the deterministic UK offline track archive from the repository root with
+`make uk-track-pack`. The resulting file is written under `build/track-pack/`; it is
+ignored by Git and all public-map geometry remains timer-only until validated.
 
 The bootstrap application only proves that the ESP32-S3 toolchain and board connection work. Display, touch and GNSS support are later milestones.
 

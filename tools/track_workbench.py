@@ -22,6 +22,12 @@ except ModuleNotFoundError:  # Direct `python tools/track_workbench.py` executio
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA_PATH = REPO_ROOT / "data" / "tracks" / "schema.json"
 GATE_NAMES = ("start", "finish", "pit_entry", "pit_exit")
+GEOMETRY_STATUSES = (
+    "provisional",
+    "device_captured",
+    "independently_validated",
+    "physically_validated",
+)
 WGS84_SEMI_MAJOR_AXIS_M = 6_378_137.0
 WGS84_FLATTENING = 1.0 / 298.257223563
 WGS84_ECCENTRICITY_SQUARED = WGS84_FLATTENING * (2.0 - WGS84_FLATTENING)
@@ -176,6 +182,7 @@ def create_definition(
     geofence_radius_m: float,
     gate_specs: dict[str, tuple[float, float, float, float]],
     minimum_lap_time_s: float,
+    geometry_status: str = "device_captured",
 ) -> dict:
     if set(gate_specs) != set(GATE_NAMES):
         missing = sorted(set(GATE_NAMES) - set(gate_specs))
@@ -194,7 +201,7 @@ def create_definition(
             rearm_corridor_m=10.0 if is_pit_gate else 15.0,
         )
     instance = {
-        "schema_version": 2,
+        "schema_version": 3,
         "revision": 1,
         "track_id": track_id,
         "name": name,
@@ -203,6 +210,7 @@ def create_definition(
             "source": source,
             "license": license_name,
             "verified_utc": verified_utc,
+            "geometry_status": geometry_status,
         },
         "reference": {
             "lat_deg": reference_lat_deg,
@@ -232,6 +240,7 @@ def refine_gate(
     *,
     source: str | None = None,
     license_name: str | None = None,
+    geometry_status: str | None = None,
 ) -> dict:
     if gate_name not in GATE_NAMES:
         raise TrackWorkbenchError(f"unknown gate {gate_name!r}")
@@ -249,6 +258,8 @@ def refine_gate(
     )
     revised["revision"] += 1
     revised["provenance"]["verified_utc"] = verified_utc
+    if geometry_status is not None:
+        revised["provenance"]["geometry_status"] = geometry_status
     if source is not None:
         revised["provenance"]["source"] = source
     if license_name is not None:
@@ -304,6 +315,9 @@ def _build_parser() -> argparse.ArgumentParser:
     new.add_argument("--source", required=True)
     new.add_argument("--license", dest="license_name", required=True)
     new.add_argument("--verified-utc", required=True)
+    new.add_argument(
+        "--geometry-status", choices=GEOMETRY_STATUSES, default="device_captured"
+    )
     new.add_argument("--reference-lat", type=float, required=True)
     new.add_argument("--reference-lon", type=float, required=True)
     new.add_argument("--geofence-radius-m", type=float, default=5_000.0)
@@ -321,6 +335,7 @@ def _build_parser() -> argparse.ArgumentParser:
     refine.add_argument("--verified-utc", required=True)
     refine.add_argument("--source")
     refine.add_argument("--license", dest="license_name")
+    refine.add_argument("--geometry-status", choices=GEOMETRY_STATUSES)
     refine.add_argument("--output", type=Path, required=True)
 
     import_parser = commands.add_parser("import", help="validate and install in a database")
@@ -357,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
                 geofence_radius_m=args.geofence_radius_m,
                 gate_specs=gate_specs,
                 minimum_lap_time_s=args.minimum_lap_time_s,
+                geometry_status=args.geometry_status,
             )
             write_definition(args.output, definition)
             print(f"Created revision 1: {args.output}")
@@ -372,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.verified_utc,
                 source=args.source,
                 license_name=args.license_name,
+                geometry_status=args.geometry_status,
             )
             write_definition(args.output, revised)
             print(f"Created revision {revised['revision']}: {args.output}")

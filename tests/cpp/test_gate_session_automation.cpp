@@ -36,6 +36,12 @@ int main()
     assert(timing_config.lap_boundary == timing::LapBoundary::start);
     assert(timing_config.gates.pit_entry.left.latitude_deg ==
            tracks.definitions[0].gates.pit_entry.left.latitude_deg);
+    auto provisional_track = tracks.definitions[0];
+    provisional_track.provenance.geometry_status =
+        track::TrackGeometryStatus::provisional;
+    const auto blocked_config =
+        timing::make_timing_engine_config(provisional_track, settings);
+    assert(blocked_config.minimum_lap_time_s == 0.0);
 
     session::SessionController controller{};
     auto rejected = event(timing::TimingGate::pit_exit);

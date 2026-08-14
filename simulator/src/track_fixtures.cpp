@@ -35,6 +35,8 @@ track::TrackDefinition make_definition(const char* id, const char* name,
     std::snprintf(definition.provenance.verified_utc.data(),
                   definition.provenance.verified_utc.size(),
                   "2026-08-14T00:00:00Z");
+    definition.provenance.geometry_status =
+        track::TrackGeometryStatus::physically_validated;
     definition.reference = {latitude, longitude};
     definition.geofence = {{latitude, longitude}, radius_m};
     definition.gates.start = make_gate(latitude, longitude, 0.00005);

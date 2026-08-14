@@ -10,7 +10,7 @@
 
 namespace track_timer::track {
 
-inline constexpr std::size_t kMaximumCatalogTracks = 16;
+inline constexpr std::size_t kMaximumCatalogTracks = 32;
 inline constexpr std::size_t kNoTrackIndex = kMaximumCatalogTracks;
 
 struct TrackCatalogView {

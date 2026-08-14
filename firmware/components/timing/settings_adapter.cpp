@@ -7,6 +7,9 @@ TimingEngineConfig make_timing_engine_config(
     const settings::DeviceSettings& settings) noexcept
 {
     TimingEngineConfig config{};
+    if (!track::track_timing_ready(definition)) {
+        return config;
+    }
     config.reference = definition.reference;
     config.gates = definition.gates;
     config.lap_boundary = settings.lap_boundary == settings::LapBoundaryMode::start
