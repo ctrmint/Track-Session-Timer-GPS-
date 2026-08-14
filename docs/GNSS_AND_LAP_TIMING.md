@@ -239,7 +239,18 @@ LAP_COMPLETE
 REARM_WAIT
 ```
 
-The actual implementation can be simpler, but state transitions must be explicit and unit tested.
+The timing component implements explicit `no-track`, `waiting-for-fix`, `armed`,
+`lap-running`, `lap-complete`, and `rearm-wait` states. A valid fix must first be
+outside the configured gate corridor before the engine arms. The first accepted
+crossing starts Lap 1; subsequent crossings complete the current lap and start
+the next one at the same receiver timestamp.
+
+After every crossing candidate, including a candidate rejected by the minimum
+lap-time guard, the engine requires another corridor exit. This makes spatial
+hysteresis the primary duplicate suppression mechanism rather than relying on a
+time delay alone. A below-minimum candidate marks the current lap suspect for
+replay, and suspect completed laps are retained but excluded from the best-lap
+calculation.
 
 ## 13. Start behaviour
 

@@ -51,6 +51,7 @@ add_library(
     ../firmware/components/timing/intersection.cpp
     ../firmware/components/timing/crossing_validation.cpp
     ../firmware/components/timing/crossing_time.cpp
+    ../firmware/components/timing/lap_state_machine.cpp
     src/device_backends.cpp
     src/diagnostics_fixtures.cpp
     src/display_fixtures.cpp
@@ -458,6 +459,31 @@ if(BUILD_TESTING)
         simulator-crossing-time
         PROPERTIES
             PASS_REGULAR_EXPRESSION "Receiver-time rollover, ordering, and crossing interpolation passed"
+            TIMEOUT 20
+    )
+
+    add_executable(
+        track_timer_lap_state_machine_test
+        ../tests/cpp/test_lap_state_machine.cpp
+    )
+    target_link_libraries(
+        track_timer_lap_state_machine_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_lap_state_machine_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-lap-state-machine
+        COMMAND track_timer_lap_state_machine_test
+    )
+    set_tests_properties(
+        simulator-lap-state-machine
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Deterministic lap lifecycle, rearm, and minimum-time rules passed"
             TIMEOUT 20
     )
 
