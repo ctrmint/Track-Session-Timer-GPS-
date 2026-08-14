@@ -20,6 +20,7 @@ TIMING_ENGINE_TEST_BINARY := build/host/timing_engine_test
 GATE_EVENT_ENGINE_TEST_BINARY := build/host/gate_event_engine_test
 TRACK_MATCHING_TEST_BINARY := build/host/track_matching_test
 TRACK_SELECTION_TEST_BINARY := build/host/track_selection_test
+SIMULATOR_TRACK_CATALOG_TEST_BINARY := build/host/simulator_track_catalog_test
 LOG_FORMAT_TEST_BINARY := build/host/log_format_test
 ASYNC_LOGGER_TEST_BINARY := build/host/async_logger_test
 SESSION_REVIEW_TEST_BINARY := build/host/session_review_test
@@ -32,9 +33,9 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate track-pack-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
+check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -53,6 +54,19 @@ track-pack-test: uk-track-pack
 		firmware/components/track/projection.cpp \
 		tests/cpp/test_track_pack.cpp -o $(TRACK_PACK_TEST_BINARY)
 	$(TRACK_PACK_TEST_BINARY) build/track-pack/uk
+
+simulator-track-catalog-test: uk-track-pack
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/track/include \
+		-Isimulator/include \
+		firmware/components/track/definition.cpp \
+		firmware/components/track/projection.cpp \
+		simulator/src/track_catalog_loader.cpp \
+		simulator/src/track_fixtures.cpp \
+		tests/cpp/test_simulator_track_catalog.cpp \
+		-o $(SIMULATOR_TRACK_CATALOG_TEST_BINARY)
+	$(SIMULATOR_TRACK_CATALOG_TEST_BINARY) build/track-pack/uk/definitions
 
 simulator-fixture-validate:
 	$(PYTHON) -B tools/validate_simulator_fixtures.py

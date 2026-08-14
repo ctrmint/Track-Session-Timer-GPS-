@@ -20,7 +20,7 @@ enum class TrackFixtureId : std::uint8_t {
 };
 
 struct TrackFixture {
-    std::array<track::TrackDefinition, 3> definitions{};
+    std::array<track::TrackDefinition, track::kMaximumCatalogTracks> definitions{};
     std::size_t count{0};
     track::TrackMatchRequest request{};
 

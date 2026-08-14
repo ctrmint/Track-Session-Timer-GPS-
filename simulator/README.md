@@ -93,6 +93,15 @@ selects a deterministic track fixture and deliberately replaces the persisted tr
 selection for that run. Omit `--track-state` during normal interactive use so a track
 chosen on screen remains selected after restarting the simulator.
 
+Normal interactive builds generate the UK track pack inside the ignored simulator build
+directory and append its 24 loadable definitions to the two synthetic tracks. Open
+`Setup` > `Tracks`, then use the left/right track buttons to browse the 26-entry catalog.
+UK entries show `PROVISIONAL - TIMER ONLY` and cannot drive live lap timing until their
+four gates have been captured or independently/physically validated. The 11 layouts
+with unresolved geometry remain documented blockers and are not presented as usable
+definitions. Passing `--track-state` intentionally isolates the named synthetic fixture
+and does not load the UK pack.
+
 Review data is deterministic and never touches the checkout or an SD card:
 
 ```bash

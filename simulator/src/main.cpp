@@ -9,6 +9,7 @@
 #include "track_timer/simulator/imu_fixtures.hpp"
 #include "track_timer/simulator/scenario.hpp"
 #include "track_timer/simulator/summary_fixtures.hpp"
+#include "track_timer/simulator/track_catalog_loader.hpp"
 #include "track_timer/simulator/track_fixtures.hpp"
 #include "track_timer/track/matching.hpp"
 #include "track_timer/ui/foundation.hpp"
@@ -583,6 +584,14 @@ int run(const Options& options)
     track_timer::simulator::FileTrackDefinitionStore track_store{track_store_path};
 
     auto track_fixture = track_timer::simulator::make_track_fixture(options.track_fixture);
+    if (!options.track_fixture_explicit) {
+        std::string catalog_error;
+        if (!track_timer::simulator::append_track_catalog_directory(
+                TRACK_TIMER_UK_TRACK_PACK_DIR, track_fixture, catalog_error)) {
+            throw std::invalid_argument("cannot load UK simulator track catalog: " +
+                                        catalog_error);
+        }
+    }
     if (options.track_fixture_explicit) {
         auto fixture_settings = settings_manager.current();
         fixture_settings.selected_track_id.fill('\0');
@@ -705,6 +714,7 @@ int run(const Options& options)
               << " logger-p95-us=" << logger_metrics.latency.p95_upper_bound_us
               << " screen=" << track_timer::ui::destination_name(screen.destination())
               << " setup-page=" << track_timer::simulator::setup_page_name(screen.setup_page())
+              << " track-catalog-count=" << track_fixture.count
               << " track-state="
               << track_timer::track::track_match_state_name(final_track_match.state)
               << " gate-capture-state="
