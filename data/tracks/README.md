@@ -14,4 +14,6 @@ local projection; start and finish may intentionally contain identical geometry.
 Schema version 1 is intentionally unsupported: build-time data must be migrated by
 supplying the three additional gates and the new gate safety parameters. Do not commit
 private location traces here. Real public circuit definitions require the provenance
-and validation process tracked by issue #109.
+and controlled review process in
+[`docs/TRACK_CONTRIBUTIONS.md`](../../docs/TRACK_CONTRIBUTIONS.md). The UK circuit pack
+remains tracked by issue #109.

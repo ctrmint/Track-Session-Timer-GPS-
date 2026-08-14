@@ -13,6 +13,7 @@ Start here if you are joining the project.
 | [MIGRATION_FROM_TRACKSESSIONTIMER.md](MIGRATION_FROM_TRACKSESSIONTIMER.md) | Behaviour to port from the existing project |
 | [UI_UX.md](UI_UX.md) | Driver-facing screen and interaction rules |
 | [TRACK_DATABASE.md](TRACK_DATABASE.md) | Local track definition format and selection |
+| [TRACK_CONTRIBUTIONS.md](TRACK_CONTRIBUTIONS.md) | Controlled public track-pack contribution process |
 | [DATA_LOGGING.md](DATA_LOGGING.md) | Session logging and replay requirements |
 | [TEST_PLAN.md](TEST_PLAN.md) | Host, bench and track validation |
 | [DEVELOPMENT_SETUP.md](DEVELOPMENT_SETUP.md) | Toolchain and first build |

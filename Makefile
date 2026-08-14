@@ -9,6 +9,7 @@ UI_FOUNDATION_TEST_BINARY := build/host/ui_foundation_test
 NAVIGATION_TEST_BINARY := build/host/navigation_test
 SETTINGS_EDITOR_TEST_BINARY := build/host/settings_editor_test
 TRACK_DEFINITION_TEST_BINARY := build/host/track_definition_test
+TRACK_CAPTURE_TEST_BINARY := build/host/track_capture_test
 PROJECTION_TEST_BINARY := build/host/projection_test
 INTERSECTION_TEST_BINARY := build/host/intersection_test
 CROSSING_VALIDATION_TEST_BINARY := build/host/crossing_validation_test
@@ -29,9 +30,9 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
 
-check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test track-definition-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
+check: test track-validate simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -165,6 +166,16 @@ track-definition-test:
 		firmware/components/track/projection.cpp \
 		tests/cpp/test_track_definition.cpp -o $(TRACK_DEFINITION_TEST_BINARY)
 	$(TRACK_DEFINITION_TEST_BINARY) data/tracks/synthetic_test_loop.json
+
+track-capture-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/track/include \
+		firmware/components/track/capture.cpp \
+		firmware/components/track/projection.cpp \
+		tests/cpp/test_track_capture.cpp -o $(TRACK_CAPTURE_TEST_BINARY)
+	$(TRACK_CAPTURE_TEST_BINARY)
 
 track-matching-test:
 	mkdir -p build/host
