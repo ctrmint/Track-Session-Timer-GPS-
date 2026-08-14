@@ -120,6 +120,20 @@ void format_value(const SettingsField field, const settings::DeviceSettings& set
         std::snprintf(output.data(), output.size(), "%s",
                       settings.trackday_mode_enabled ? "ENABLED" : "DISABLED");
         break;
+    case SettingsField::lap_boundary:
+        std::snprintf(output.data(), output.size(), "%s",
+                      settings.lap_boundary == settings::LapBoundaryMode::start
+                          ? "START LINE"
+                          : "FINISH LINE");
+        break;
+    case SettingsField::pit_exit_auto_start:
+        std::snprintf(output.data(), output.size(), "%s",
+                      settings.pit_exit_auto_start_enabled ? "ENABLED" : "DISABLED");
+        break;
+    case SettingsField::pit_entry_auto_stop:
+        std::snprintf(output.data(), output.size(), "%s",
+                      settings.pit_entry_auto_stop_enabled ? "ENABLED" : "DISABLED");
+        break;
     case SettingsField::orientation: {
         constexpr std::array<const char*, 5> names{"0 DEG", "90 DEG", "180 DEG", "270 DEG",
                                                    "AUTO"};
@@ -319,6 +333,20 @@ bool SettingsEditor::adjust(const bool forward) noexcept
         draft_.trackday_mode_enabled = !draft_.trackday_mode_enabled;
         adjusted = true;
         break;
+    case SettingsField::lap_boundary:
+        draft_.lap_boundary = draft_.lap_boundary == settings::LapBoundaryMode::start
+                                  ? settings::LapBoundaryMode::finish
+                                  : settings::LapBoundaryMode::start;
+        adjusted = true;
+        break;
+    case SettingsField::pit_exit_auto_start:
+        draft_.pit_exit_auto_start_enabled = !draft_.pit_exit_auto_start_enabled;
+        adjusted = true;
+        break;
+    case SettingsField::pit_entry_auto_stop:
+        draft_.pit_entry_auto_stop_enabled = !draft_.pit_entry_auto_stop_enabled;
+        adjusted = true;
+        break;
     case SettingsField::orientation:
         adjusted = step_enum(draft_.orientation, 4, forward);
         break;
@@ -361,8 +389,9 @@ const char* settings_field_name(const SettingsField field) noexcept
 {
     constexpr std::array<const char*, kSettingsFieldCount> names{
         "TRACK SESSION", "PIT REST",    "LAUNCH SENSITIVITY", "DAY BRIGHTNESS",
-        "NIGHT BRIGHTNESS", "MODE",    "TRACKDAY MODE",      "ORIENTATION",
-        "AUTO-DIM",         "AVERAGE LAP", "LOWER DISPLAY",
+        "NIGHT BRIGHTNESS", "MODE",    "TRACKDAY MODE",      "LAP LINE",
+        "PIT EXIT START",   "PIT ENTRY STOP", "ORIENTATION", "AUTO-DIM",
+        "AVERAGE LAP",      "LOWER DISPLAY",
     };
     return names[static_cast<std::size_t>(field)];
 }

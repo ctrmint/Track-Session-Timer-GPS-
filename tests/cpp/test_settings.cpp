@@ -56,6 +56,9 @@ DeviceSettings customized_settings()
     settings.auto_dim_enabled = true;
     settings.lower_display = LowerDisplayMode::laps_remaining;
     settings.trackday_mode_enabled = true;
+    settings.lap_boundary = LapBoundaryMode::start;
+    settings.pit_exit_auto_start_enabled = true;
+    settings.pit_entry_auto_stop_enabled = true;
     std::strcpy(settings.selected_track_id.data(), "synthetic-test-loop");
     return settings;
 }
@@ -78,6 +81,9 @@ void test_validation_and_codec()
     assert(!valid_settings(invalid));
     invalid = settings;
     invalid.average_lap_seconds = 0;
+    assert(!valid_settings(invalid));
+    invalid = settings;
+    invalid.lap_boundary = static_cast<LapBoundaryMode>(255);
     assert(!valid_settings(invalid));
     assert(encode_settings(invalid).size == 0);
 }
@@ -124,6 +130,9 @@ void test_migration_corruption_and_storage_errors()
     assert(migrated.current().night_brightness_percent == 50);
     assert(migrated.current().orientation == OrientationMode::fixed_90);
     assert(!migrated.current().trackday_mode_enabled);
+    assert(migrated.current().lap_boundary == LapBoundaryMode::finish);
+    assert(!migrated.current().pit_exit_auto_start_enabled);
+    assert(!migrated.current().pit_entry_auto_stop_enabled);
 
     MemorySettingsStore version_two_store;
     version_two_store.found = true;
@@ -137,6 +146,19 @@ void test_migration_corruption_and_storage_errors()
     DeviceSettings migrated_v2{};
     assert(decode_settings(version_two_store.blob, migrated_v2) == DecodeResult::current);
     assert(!migrated_v2.trackday_mode_enabled);
+    assert(migrated_v2.lap_boundary == LapBoundaryMode::finish);
+
+    MemorySettingsStore version_three_store;
+    version_three_store.found = true;
+    version_three_store.blob = encode_legacy_settings_v3(customized_settings());
+    SettingsManager version_three{version_three_store};
+    const auto version_three_migration = version_three.load();
+    assert(version_three_migration.source == SettingsSource::migrated_v3);
+    assert(version_three_migration.current_format_persisted);
+    assert(version_three.current().trackday_mode_enabled);
+    assert(version_three.current().lap_boundary == LapBoundaryMode::finish);
+    assert(!version_three.current().pit_exit_auto_start_enabled);
+    assert(!version_three.current().pit_entry_auto_stop_enabled);
 
     MemorySettingsStore corrupt_store;
     corrupt_store.found = true;

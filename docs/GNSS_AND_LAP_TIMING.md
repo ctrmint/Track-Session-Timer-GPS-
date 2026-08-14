@@ -213,6 +213,11 @@ the gate type, two source sequence numbers, intersection fraction, interpolated
 receiver time, and rejection stage. Start, finish, pit entry, and pit exit use the
 same validation and interpolation path with independent corridor rearm. Selecting
 start or finish changes only which typed event feeds the repeating lap state machine.
+The persisted Lap Line setting is converted into `TimingEngineConfig` when the selected
+track is loaded. Independently enabled pit automation consumes only accepted typed
+events outside the timing task: pit exit may start a Ready session, while pit entry may
+stop a Running or Overtime session. Wrong-state, disabled, rejected, and duplicate
+records never transition the session, and manual controls remain separate.
 Together with the raw GNSS rows, applied quality thresholds, and fingerprinted track
 definition, the bounded records make every acceptance or rejection reproducible
 during offline replay.

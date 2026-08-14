@@ -130,6 +130,25 @@ int main()
     assert(editor.decrement());
     assert(!editor.draft().trackday_mode_enabled);
 
+    select_field(editor, ui::SettingsField::lap_boundary);
+    assert(editor.draft().lap_boundary == settings::LapBoundaryMode::finish);
+    assert(editor.increment());
+    assert(editor.draft().lap_boundary == settings::LapBoundaryMode::start);
+    assert(editor.decrement());
+    assert(editor.draft().lap_boundary == settings::LapBoundaryMode::finish);
+
+    select_field(editor, ui::SettingsField::pit_exit_auto_start);
+    assert(editor.increment());
+    assert(editor.draft().pit_exit_auto_start_enabled);
+    assert(editor.decrement());
+    assert(!editor.draft().pit_exit_auto_start_enabled);
+
+    select_field(editor, ui::SettingsField::pit_entry_auto_stop);
+    assert(editor.increment());
+    assert(editor.draft().pit_entry_auto_stop_enabled);
+    assert(editor.decrement());
+    assert(!editor.draft().pit_entry_auto_stop_enabled);
+
     select_field(editor, ui::SettingsField::orientation);
     for (std::uint8_t expected = 1; expected <= 4; ++expected) {
         assert(editor.increment());

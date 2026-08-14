@@ -60,6 +60,7 @@ enum class SessionCompletionReason : std::uint8_t {
     none,
     driver_stop,
     reset_recovery,
+    pit_entry,
 };
 
 enum class SummaryIntegrity : std::uint8_t {
@@ -89,6 +90,9 @@ struct SessionSettingsV1 {
     bool auto_dim_enabled{false};
     settings::LowerDisplayMode lower_display{settings::LowerDisplayMode::elapsed};
     bool trackday_mode_enabled{false};
+    settings::LapBoundaryMode lap_boundary{settings::LapBoundaryMode::finish};
+    bool pit_exit_auto_start_enabled{false};
+    bool pit_entry_auto_stop_enabled{false};
     std::array<char, settings::kTrackIdentifierCapacity> selected_track_id{};
 };
 

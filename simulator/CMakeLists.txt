@@ -44,6 +44,7 @@ add_library(
     ../firmware/components/ui/track_selection.cpp
     ../firmware/components/settings/component.cpp
     ../firmware/components/session/component.cpp
+    ../firmware/components/session/gate_automation.cpp
     ../firmware/components/logger/async_logger.cpp
     ../firmware/components/logger/formats.cpp
     ../firmware/components/track/definition.cpp
@@ -55,6 +56,7 @@ add_library(
     ../firmware/components/timing/crossing_time.cpp
     ../firmware/components/timing/engine.cpp
     ../firmware/components/timing/lap_state_machine.cpp
+    ../firmware/components/timing/settings_adapter.cpp
     src/device_backends.cpp
     src/diagnostics_fixtures.cpp
     src/display_fixtures.cpp
@@ -142,6 +144,31 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
 endif()
 
 if(BUILD_TESTING)
+    add_executable(
+        track_timer_gate_session_automation_test
+        ../tests/cpp/test_gate_session_automation.cpp
+    )
+    target_link_libraries(
+        track_timer_gate_session_automation_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_gate_session_automation_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-gate-session-automation
+        COMMAND track_timer_gate_session_automation_test
+    )
+    set_tests_properties(
+        simulator-gate-session-automation
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Lap-gate settings and independent pit session automation passed"
+            TIMEOUT 20
+    )
+
     add_executable(
         track_timer_gate_capture_test
         ../tests/cpp/test_gate_capture.cpp
