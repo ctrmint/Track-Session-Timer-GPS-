@@ -12,6 +12,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(SDL2 CONFIG REQUIRED)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(TRACK_TIMER_UK_TRACK_PACK_ROOT "${CMAKE_BINARY_DIR}/uk-track-pack")
+set(TRACK_TIMER_UK_TRACK_PACK_DEFINITIONS "${TRACK_TIMER_UK_TRACK_PACK_ROOT}/definitions")
+add_custom_command(
+    OUTPUT "${TRACK_TIMER_UK_TRACK_PACK_ROOT}/pack-manifest.json"
+    COMMAND
+        "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_uk_track_pack.py"
+        --manifest "${CMAKE_CURRENT_SOURCE_DIR}/../data/track-packs/uk/manifest.json"
+        --output "${TRACK_TIMER_UK_TRACK_PACK_ROOT}"
+    DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/../data/track-packs/uk/manifest.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_uk_track_pack.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/track_workbench.py"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    COMMENT "Generating provenance-gated UK simulator track catalog"
+    VERBATIM
+)
+add_custom_target(
+    track_timer_uk_track_pack
+    DEPENDS "${TRACK_TIMER_UK_TRACK_PACK_ROOT}/pack-manifest.json"
+)
 
 set(LV_BUILD_CONF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lv_conf.h" CACHE PATH "" FORCE)
 set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "" FORCE)
@@ -66,6 +89,7 @@ add_library(
     src/imu_fixtures.cpp
     src/scenario.cpp
     src/summary_fixtures.cpp
+    src/track_catalog_loader.cpp
     src/track_fixtures.cpp
 )
 target_include_directories(
@@ -127,6 +151,11 @@ target_link_libraries(
         lvgl::lvgl
         SDL2::SDL2
 )
+target_compile_definitions(
+    track_timer_simulator
+    PRIVATE TRACK_TIMER_UK_TRACK_PACK_DIR="${TRACK_TIMER_UK_TRACK_PACK_DEFINITIONS}"
+)
+add_dependencies(track_timer_simulator track_timer_uk_track_pack)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(
@@ -617,6 +646,36 @@ if(BUILD_TESTING)
         simulator-versioned-track-definition
         PROPERTIES
             PASS_REGULAR_EXPRESSION "Versioned track loading, projection, hashing, and failure isolation passed"
+            TIMEOUT 20
+    )
+
+    add_executable(
+        track_timer_simulator_track_catalog_test
+        ../tests/cpp/test_simulator_track_catalog.cpp
+    )
+    target_link_libraries(
+        track_timer_simulator_track_catalog_test
+        PRIVATE track_timer_simulator_model
+    )
+    add_dependencies(
+        track_timer_simulator_track_catalog_test
+        track_timer_uk_track_pack
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_simulator_track_catalog_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-uk-track-runtime-catalog
+        COMMAND track_timer_simulator_track_catalog_test
+            "${TRACK_TIMER_UK_TRACK_PACK_DEFINITIONS}"
+    )
+    set_tests_properties(
+        simulator-uk-track-runtime-catalog
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Simulator loaded 24 deterministic provisional UK tracks safely"
             TIMEOUT 20
     )
 
