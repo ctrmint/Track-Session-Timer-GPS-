@@ -5,6 +5,19 @@
 namespace track_timer::simulator {
 namespace {
 
+track::DirectedGateDefinition make_gate(const double latitude, const double longitude,
+                                        const double latitude_offset) noexcept
+{
+    track::DirectedGateDefinition gate{};
+    gate.left = {latitude + latitude_offset, longitude - 0.00002};
+    gate.right = {latitude - latitude_offset, longitude + 0.00002};
+    gate.direction_heading_deg = 90.0;
+    gate.heading_tolerance_deg = 60.0;
+    gate.minimum_crossing_speed_mps = 2.0;
+    gate.rearm_corridor_m = 15.0;
+    return gate;
+}
+
 track::TrackDefinition make_definition(const char* id, const char* name,
                                        const double latitude, const double longitude,
                                        const double radius_m, const std::uint64_t hash) noexcept
@@ -16,11 +29,11 @@ track::TrackDefinition make_definition(const char* id, const char* name,
     std::snprintf(definition.country.data(), definition.country.size(), "XX");
     definition.reference = {latitude, longitude};
     definition.geofence = {{latitude, longitude}, radius_m};
-    definition.start_finish.a = {latitude + 0.00005, longitude - 0.00002};
-    definition.start_finish.b = {latitude - 0.00005, longitude + 0.00002};
-    definition.start_finish.direction_heading_deg = 90.0;
-    definition.start_finish.heading_tolerance_deg = 60.0;
-    definition.start_finish.minimum_lap_time_s = 20.0;
+    definition.gates.start = make_gate(latitude, longitude, 0.00005);
+    definition.gates.finish = definition.gates.start;
+    definition.gates.pit_entry = make_gate(latitude + 0.0002, longitude, 0.00005);
+    definition.gates.pit_exit = make_gate(latitude - 0.0002, longitude, 0.00005);
+    definition.minimum_lap_time_s = 20.0;
     definition.definition_hash = hash;
     return definition;
 }

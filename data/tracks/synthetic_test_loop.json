@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "track_id": "synthetic_test_loop",
   "name": "Synthetic Test Loop",
   "country": "XX",
@@ -12,17 +12,65 @@
     "center_lon_deg": -1.0,
     "radius_m": 2000
   },
-  "start_finish": {
-    "a": {
-      "lat_deg": 52.00005,
-      "lon_deg": -1.00002
+  "gates": {
+    "start": {
+      "left": {
+        "lat_deg": 52.00005,
+        "lon_deg": -1.00002
+      },
+      "right": {
+        "lat_deg": 51.99995,
+        "lon_deg": -0.99998
+      },
+      "direction_heading_deg": 90.0,
+      "heading_tolerance_deg": 60.0,
+      "minimum_crossing_speed_mps": 2.0,
+      "rearm_corridor_m": 15.0
     },
-    "b": {
-      "lat_deg": 51.99995,
-      "lon_deg": -0.99998
+    "finish": {
+      "left": {
+        "lat_deg": 52.00005,
+        "lon_deg": -1.00002
+      },
+      "right": {
+        "lat_deg": 51.99995,
+        "lon_deg": -0.99998
+      },
+      "direction_heading_deg": 90.0,
+      "heading_tolerance_deg": 60.0,
+      "minimum_crossing_speed_mps": 2.0,
+      "rearm_corridor_m": 15.0
     },
-    "direction_heading_deg": 90.0,
-    "heading_tolerance_deg": 60.0,
+    "pit_entry": {
+      "left": {
+        "lat_deg": 52.00015,
+        "lon_deg": -1.00004
+      },
+      "right": {
+        "lat_deg": 52.00005,
+        "lon_deg": -1.0
+      },
+      "direction_heading_deg": 90.0,
+      "heading_tolerance_deg": 60.0,
+      "minimum_crossing_speed_mps": 1.0,
+      "rearm_corridor_m": 10.0
+    },
+    "pit_exit": {
+      "left": {
+        "lat_deg": 51.99995,
+        "lon_deg": -1.0
+      },
+      "right": {
+        "lat_deg": 51.99985,
+        "lon_deg": -0.99996
+      },
+      "direction_heading_deg": 90.0,
+      "heading_tolerance_deg": 60.0,
+      "minimum_crossing_speed_mps": 1.0,
+      "rearm_corridor_m": 10.0
+    }
+  },
+  "timing": {
     "minimum_lap_time_s": 20.0
   },
   "sectors": []
