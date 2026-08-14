@@ -51,17 +51,25 @@ class TrackSchemaTests(unittest.TestCase):
         self.assertTrue(any(list(error.absolute_path) == [] for error in errors))
 
     def test_revision_and_provenance_are_structured(self):
-        invalid = deepcopy(self.example)
-        invalid["revision"] = 0
-        invalid["provenance"]["verified_utc"] = "2026-08-14 00:00:00Z"
-        paths = {
+        invalid_revision = deepcopy(self.example)
+        invalid_revision["revision"] = 0
+        revision_paths = {
             ".".join(str(part) for part in error.absolute_path)
             for error in Draft202012Validator(
                 self.schema, format_checker=FormatChecker()
-            ).iter_errors(invalid)
+            ).iter_errors(invalid_revision)
         }
-        self.assertIn("revision", paths)
-        self.assertIn("provenance.verified_utc", paths)
+        self.assertIn("revision", revision_paths)
+
+        invalid_provenance = deepcopy(self.example)
+        invalid_provenance["provenance"]["verified_utc"] = "not-a-timestamp-value"
+        provenance_paths = {
+            ".".join(str(part) for part in error.absolute_path)
+            for error in Draft202012Validator(
+                self.schema, format_checker=FormatChecker()
+            ).iter_errors(invalid_provenance)
+        }
+        self.assertIn("provenance.verified_utc", provenance_paths)
 
     def test_sector_fields_and_unknown_properties_are_strict(self):
         invalid = deepcopy(self.example)
