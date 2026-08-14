@@ -144,6 +144,21 @@ Tcross = T0 + u * (T1 - T0)
 
 At 25 Hz, adjacent nominal fixes are 40 ms apart. Interpolation removes update-grid quantisation, but does not eliminate position noise or path curvature between fixes.
 
+Internally, measurement time is a continuous signed 64-bit count of receiver
+nanoseconds; `-1` means unavailable. A receiver's modulo-week time is normalised
+before a fix enters the timing engine. A backward jump of more than half a GPS
+week is the only transition treated as a forward rollover. Equal/small backward
+jumps and forward jumps over half a period are explicit discontinuities and do
+not mutate normaliser state.
+
+The default pair policy accepts a maximum 500 ms measurement gap and a current
+fix no more than 500 ms old. It also requires increasing fix sequences,
+measurement timestamps, and monotonic arrival timestamps. Interpolation rounds
+to the nearest nanosecond after scaling the small pair interval, avoiding the
+precision loss of converting a full epoch-sized timestamp to floating point.
+Every failure has a stable name and records source sequences, fraction, interval,
+age, and the applied policy for deterministic replay.
+
 ## 8. Direction check
 
 A geometric intersection is accepted only when movement crosses the line in the configured direction.
@@ -206,7 +221,7 @@ Avoid over-filtering positions in a way that adds variable time lag to line cros
 
 UART arrival time includes receiver processing and serial transport delay. It can vary as message load changes.
 
-Use the receiver's measurement timestamp for lap crossing. Store MCU arrival time separately to detect latency and queueing problems.
+Use the receiver's measurement timestamp for lap crossing. Store MCU arrival time separately to detect latency and queueing problems. Arrival time participates only in ordering and staleness checks; changing UART latency within those limits cannot change the calculated crossing timestamp.
 
 PPS/timepulse can be used to characterise the relationship between GNSS time and the ESP32 monotonic clock, but the MVP does not require PPS to calculate relative lap durations when both crossings use GNSS measurement time.
 

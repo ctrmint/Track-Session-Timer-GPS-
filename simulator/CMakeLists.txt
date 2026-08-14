@@ -50,6 +50,7 @@ add_library(
     ../firmware/components/track/projection.cpp
     ../firmware/components/timing/intersection.cpp
     ../firmware/components/timing/crossing_validation.cpp
+    ../firmware/components/timing/crossing_time.cpp
     src/device_backends.cpp
     src/diagnostics_fixtures.cpp
     src/display_fixtures.cpp
@@ -432,6 +433,31 @@ if(BUILD_TESTING)
         simulator-crossing-validation
         PROPERTIES
             PASS_REGULAR_EXPRESSION "Directed crossing speed, heading, and GNSS-quality validation passed"
+            TIMEOUT 20
+    )
+
+    add_executable(
+        track_timer_crossing_time_test
+        ../tests/cpp/test_crossing_time.cpp
+    )
+    target_link_libraries(
+        track_timer_crossing_time_test
+        PRIVATE track_timer_simulator_model
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(
+            track_timer_crossing_time_test
+            PRIVATE -Wall -Wextra -Werror -pedantic
+        )
+    endif()
+    add_test(
+        NAME simulator-crossing-time
+        COMMAND track_timer_crossing_time_test
+    )
+    set_tests_properties(
+        simulator-crossing-time
+        PROPERTIES
+            PASS_REGULAR_EXPRESSION "Receiver-time rollover, ordering, and crossing interpolation passed"
             TIMEOUT 20
     )
 
