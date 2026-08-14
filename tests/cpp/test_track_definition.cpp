@@ -81,6 +81,9 @@ int main(const int argc, char** argv)
     assert(std::strcmp(definition.country.data(), "XX") == 0);
     assert(definition.revision == 1);
     assert(std::strcmp(definition.provenance.license.data(), "CC0-1.0") == 0);
+    assert(definition.provenance.geometry_status ==
+           TrackGeometryStatus::physically_validated);
+    assert(track_timing_ready(definition));
     assert(definition.sector_count == 1);
     assert(std::strcmp(definition.sectors[0].sector_id.data(), "sector_1") == 0);
     assert(std::strcmp(definition.sectors[0].name.data(), "Synthetic Sector 1") == 0);
@@ -120,9 +123,13 @@ int main(const int argc, char** argv)
     assert_failure_preserves_active(std::string(kMaximumTrackFileBytes + 1, ' '),
                                     TrackLoadResult::file_too_large);
     assert_failure_preserves_active("{", TrackLoadResult::invalid_json);
-    assert_failure_preserves_active(replace_once(valid_json, "\"schema_version\": 2",
+    assert_failure_preserves_active(replace_once(valid_json, "\"schema_version\": 3",
                                                  "\"schema_version\": 1"),
                                     TrackLoadResult::unsupported_version);
+    assert_failure_preserves_active(
+        replace_once(valid_json, "\"geometry_status\": \"physically_validated\"",
+                     "\"geometry_status\": \"unknown\""),
+        TrackLoadResult::invalid_json, TrackDefinitionField::provenance);
     assert_failure_preserves_active(replace_once(valid_json, "\"name\": \"Synthetic Test Loop\",\n",
                                                  ""),
                                     TrackLoadResult::missing_required_field,

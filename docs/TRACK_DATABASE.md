@@ -11,11 +11,11 @@ accepts at most 16384 bytes, 16 sector records, a 47-byte identifier, a 63-byte 
 name, and a three-character country value plus its terminator. A later packed database
 can be added if measured loading time requires it.
 
-Schema version 2 fields:
+Schema version 3 fields:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "revision": 1,
   "track_id": "example_circuit",
   "name": "Example Circuit",
@@ -23,7 +23,8 @@ Schema version 2 fields:
   "provenance": {
     "source": "survey or authoritative public source",
     "license": "source licence identifier",
-    "verified_utc": "2026-08-14T00:00:00Z"
+    "verified_utc": "2026-08-14T00:00:00Z",
+    "geometry_status": "physically_validated"
   },
   "reference": {
     "lat_deg": 52.000000,
@@ -93,6 +94,12 @@ Left and right are viewed in the configured travel direction. Gates are finite l
 segments: a crossing detector may use the corridor only to rearm after a crossing, not
 as a timing box. Start and finish may be identical when a layout has one shared line.
 
+`provenance.geometry_status` is mandatory and machine-readable. `provisional` files may
+be browsed and refined but cannot be selected for lap timing. `device_captured`,
+`independently_validated`, and `physically_validated` are timing-ready. The timing
+configuration adapter independently rejects provisional definitions, so an old saved
+identifier cannot bypass the selection-screen guard.
+
 ## 3. Track matching
 
 Automatic suggestion should use only a broad geofence. It must never create a lap event from the geofence.
@@ -106,7 +113,7 @@ Flow:
 5. the selected lap gate still uses exact line geometry
 
 `match_track_geofences` is a fixed-capacity decision service over a caller-owned catalog
-of at most 16 validated definitions. It uses great-circle distance and reports these
+of at most 32 validated definitions. It uses great-circle distance and reports these
 states explicitly: location unavailable, no match, one suggestion, ambiguity, persisted
 manual selection, selected definition missing, or invalid catalog. A selected track is
 usable offline and is never replaced automatically merely because another geofence is
@@ -124,7 +131,9 @@ track identifier is persisted through `SettingsManager`; the UI has no direct st
 path. Selecting Timer Only clears the identifier. Both actions are rejected after a
 session becomes active, including a race between opening the screen and pressing the
 action. Deterministic simulator fixtures cover selected, missing, invalid, ambiguous,
-suggested, no-nearby-track, and unavailable-location states.
+suggested, no-nearby-track, and unavailable-location states. Provisional definitions
+remain visible as capture candidates, are labelled `PROVISIONAL - TIMER ONLY`, and
+cannot be persisted as the active timing track.
 
 ## 4. Unknown track capture
 
@@ -170,9 +179,29 @@ capture/save rejection leave the previous valid file untouched. Host-created JSO
 still be imported, selected, refined on the device, and reloaded without rebuilding
 firmware. No capture flow permits driver interaction at speed.
 
-## 5. Loading, projection, and versioning
+Saving all eight stationary endpoints promotes the saved revision to
+`device_captured`. Refining only one gate in the host workbench preserves the prior
+validation status unless a reviewer explicitly supplies `--geometry-status`.
 
-Every track file includes `schema_version`; the current loader accepts exactly version 2.
+## 5. UK offline track pack
+
+`data/track-packs/uk/manifest.json` defines the reviewed major-circuit scope: 35
+standard layouts at 18 venues across England, Scotland, Wales, and Northern Ireland.
+Official venue pages establish layout identity. Raceway context is derived from
+OpenStreetMap under ODbL 1.0 with the required attribution retained in both source and
+package manifests.
+
+Run `make uk-track-pack` to create `build/track-pack/uk-track-pack-v1.zip`. The archive
+contains 24 schema-valid provisional definitions, a hash for every definition, and 11
+explicit blockers where public four-gate geometry could not be identified safely. No
+blocked layout receives invented coordinates. All generated definitions have
+`timing_ready: false`; independent or physical validation must create a later revision
+before use for lap timing. The package is deterministic and is rebuilt and validated by
+`make check` in CI.
+
+## 6. Loading, projection, and versioning
+
+Every track file includes `schema_version`; the current loader accepts exactly version 3.
 Unsupported versions, malformed JSON, missing fields, out-of-range geometry, capacity
 overflow, unknown members, duplicate sector identifiers, gates outside the geofence,
 and implausible gate length/direction are rejected. Reports include a stable field path,
@@ -185,10 +214,10 @@ record the schema version, track identifier, and 16-character fingerprint so the
 source definition can be recovered; whitespace-only file edits deliberately produce a
 new fingerprint.
 
-Version 1 files are not inferred or silently upgraded because they contain only one
-line and cannot safely invent pit entry/exit geometry. A build-time migration must add
-all four gates, per-gate safety parameters, and the track-level minimum lap time before
-the file can be deployed.
+Versions 1 and 2 are not inferred or silently upgraded. Version 1 contains only one line
+and cannot safely invent pit entry/exit geometry; version 2 has no geometry-validation
+status and therefore cannot prove timing readiness. A reviewed migration must supply all
+four gates, safety parameters, minimum lap time, and an explicit validation status.
 
 The firmware-facing contract is `track_timer/track/definition.hpp`. File-system and
 NVS/SD-card adapters remain outside the parser, so malformed storage input cannot gain

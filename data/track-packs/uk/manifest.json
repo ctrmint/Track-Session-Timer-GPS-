@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "pack_id": "uk-major-circuits",
+  "revision": 1,
+  "researched_utc": "2026-08-14T12:30:00Z",
+  "attribution": "Contains information from OpenStreetMap, available under ODbL 1.0: https://www.openstreetmap.org/copyright",
+  "data_license": "ODbL-1.0",
+  "policy": "Every generated definition is provisional and timer-only until all four gates are independently or physically validated.",
+  "scope_exclusions": [
+    {"venue": "Lydden Hill", "reason": "The standard competition layout is mixed-surface rallycross, not a permanent paved car-circuit layout."},
+    {"venue": "Blyton Park", "reason": "Track-day and test venue outside the agreed major race-circuit scope."},
+    {"venue": "Aintree Motor Racing Circuit", "reason": "The historic full circuit is inactive; the current sprint course has no standard four-gate pit configuration."},
+    {"venue": "Rockingham Motor Speedway", "reason": "Closed to circuit motorsport."},
+    {"venue": "Kart, hill-climb, street, and temporary airfield venues", "reason": "Excluded by issue #109 scope."}
+  ],
+  "venues": [
+    {
+      "venue_id": "anglesey",
+      "venue_name": "Anglesey Circuit",
+      "nation": "Wales",
+      "reference": [53.1904852, -4.4981294],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/264840724",
+      "official_source": "https://www.angleseycircuit.com/",
+      "gate_profiles": {},
+      "layouts": [
+        {"track_id": "gb_anglesey_international_gp", "name": "Anglesey International GP", "minimum_lap_time_s": 35, "blocker": "No redistributable public four-gate geometry with an identifiable pit lane was found; physical capture is required."},
+        {"track_id": "gb_anglesey_coastal", "name": "Anglesey Coastal", "minimum_lap_time_s": 25, "blocker": "No redistributable public four-gate geometry with an identifiable pit lane was found; physical capture is required."},
+        {"track_id": "gb_anglesey_national", "name": "Anglesey National", "minimum_lap_time_s": 20, "blocker": "No redistributable public four-gate geometry with an identifiable pit lane was found; physical capture is required."}
+      ]
+    },
+    {
+      "venue_id": "bedford_autodrome",
+      "venue_name": "Bedford Autodrome",
+      "nation": "England",
+      "reference": [52.2340844, -0.4718732],
+      "geofence_radius_m": 5000,
+      "osm_venue": "https://www.openstreetmap.org/way/449597558",
+      "official_source": "https://www.bedfordautodrome.co.uk/about/circuit-layouts",
+      "gate_profiles": {},
+      "layouts": [
+        {"track_id": "gb_bedford_gt", "name": "Bedford Autodrome GT", "minimum_lap_time_s": 50, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."},
+        {"track_id": "gb_bedford_sen", "name": "Bedford Autodrome SEN", "minimum_lap_time_s": 35, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."},
+        {"track_id": "gb_bedford_sw", "name": "Bedford Autodrome SW", "minimum_lap_time_s": 40, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."},
+        {"track_id": "gb_bedford_west", "name": "Bedford Autodrome West", "minimum_lap_time_s": 30, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."}
+      ]
+    },
+    {
+      "venue_id": "brands_hatch",
+      "venue_name": "Brands Hatch",
+      "nation": "England",
+      "reference": [51.3574884, 0.2600065],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/770743966",
+      "official_source": "https://www.brandshatch.co.uk/",
+      "gate_profiles": {
+        "default": {"source_way_ids": [25805012, 4906930], "start": [51.3597752, 0.2585922, 61.346, 20], "finish": [51.3597752, 0.2585922, 61.346, 20], "pit_entry": [51.3580132, 0.2563892, 20.779, 12], "pit_exit": [51.3608626, 0.2625725, 69.517, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_brands_hatch_gp", "name": "Brands Hatch GP", "minimum_lap_time_s": 45, "gate_profile": "default"},
+        {"track_id": "gb_brands_hatch_indy", "name": "Brands Hatch Indy", "minimum_lap_time_s": 25, "gate_profile": "default"}
+      ]
+    },
+    {
+      "venue_id": "bishopscourt",
+      "venue_name": "Bishopscourt Racing Circuit",
+      "nation": "Northern Ireland",
+      "reference": [54.3055017, -5.5805284],
+      "geofence_radius_m": 3500,
+      "osm_venue": "https://www.openstreetmap.org/way/197724424",
+      "official_source": "https://www.motorsportni.org/links/",
+      "gate_profiles": {},
+      "layouts": [
+        {"track_id": "gb_bishopscourt_international", "name": "Bishopscourt International", "minimum_lap_time_s": 40, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."},
+        {"track_id": "gb_bishopscourt_national", "name": "Bishopscourt National", "minimum_lap_time_s": 30, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."}
+      ]
+    },
+    {
+      "venue_id": "cadwell_park",
+      "venue_name": "Cadwell Park",
+      "nation": "England",
+      "reference": [53.3112032, -0.0608402],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/search?query=Cadwell%20Park%20Circuit",
+      "official_source": "https://www.cadwellpark.co.uk/about/circuit-layouts",
+      "gate_profiles": {
+        "car": {"source_way_ids": [396423020, 117976650], "start": [53.3107407, -0.0590716, 206.012, 20], "finish": [53.3107407, -0.0590716, 206.012, 20], "pit_entry": [53.3115369, -0.0583758, 223.313, 12], "pit_exit": [53.3093935, -0.0600911, 191.183, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_cadwell_park_car", "name": "Cadwell Park Car Circuit", "minimum_lap_time_s": 45, "gate_profile": "car"}
+      ]
+    },
+    {
+      "venue_id": "castle_combe",
+      "venue_name": "Castle Combe Circuit",
+      "nation": "England",
+      "reference": [51.4896961, -2.2115794],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/166854263",
+      "official_source": "https://castlecombecircuit.co.uk/",
+      "gate_profiles": {},
+      "layouts": [
+        {"track_id": "gb_castle_combe_full", "name": "Castle Combe Full", "minimum_lap_time_s": 40, "blocker": "The public OSM raceway snapshot could not be retrieved reproducibly; physical capture is required."}
+      ]
+    },
+    {
+      "venue_id": "croft",
+      "venue_name": "Croft Circuit",
+      "nation": "England",
+      "reference": [54.4560466, -1.5588314],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/108148280",
+      "official_source": "https://www.croftcircuit.co.uk/",
+      "gate_profiles": {
+        "full": {"source_way_ids": [108510895, 108510889], "start": [54.4548114, -1.5551838, 42.970, 20], "finish": [54.4548114, -1.5551838, 42.970, 20], "pit_entry": [54.4537362, -1.5563133, 359.691, 12], "pit_exit": [54.4569957, -1.5548089, 17.677, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_croft_full", "name": "Croft Full", "minimum_lap_time_s": 45, "gate_profile": "full"}
+      ]
+    },
+    {
+      "venue_id": "donington_park",
+      "venue_name": "Donington Park",
+      "nation": "England",
+      "reference": [52.8296064, -1.3901421],
+      "geofence_radius_m": 3000,
+      "osm_venue": "https://www.openstreetmap.org/search?query=Donington%20Park%20Circuit",
+      "official_source": "https://www.donington-park.co.uk/about/circuit-map",
+      "gate_profiles": {
+        "default": {"source_way_ids": [841515325, 90102737], "start": [52.8289464, -1.3782791, 82.418, 20], "finish": [52.8289464, -1.3782791, 82.418, 20], "pit_entry": [52.8295427, -1.3769056, 275.267, 12], "pit_exit": [52.8303222, -1.3838430, 287.314, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_donington_gp", "name": "Donington Park GP", "minimum_lap_time_s": 45, "gate_profile": "default"},
+        {"track_id": "gb_donington_national", "name": "Donington Park National", "minimum_lap_time_s": 35, "gate_profile": "default"}
+      ]
+    },
+    {
+      "venue_id": "goodwood",
+      "venue_name": "Goodwood Motor Circuit",
+      "nation": "England",
+      "reference": [50.8591352, -0.7533116],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/node/287627104",
+      "official_source": "https://www.goodwood.com/motorsport/motor-circuit/",
+      "gate_profiles": {
+        "full": {"source_way_ids": [171558334, 344562248], "start": [50.8592223, -0.7528623, 174.634, 20], "finish": [50.8592223, -0.7528623, 174.634, 20], "pit_entry": [50.8597195, -0.7529090, 189.253, 12], "pit_exit": [50.8578512, -0.7526299, 168.863, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_goodwood_full", "name": "Goodwood Motor Circuit", "minimum_lap_time_s": 45, "gate_profile": "full"}
+      ]
+    },
+    {
+      "venue_id": "kirkistown",
+      "venue_name": "Kirkistown Circuit",
+      "nation": "Northern Ireland",
+      "reference": [54.4569446, -5.4748346],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/33650796",
+      "official_source": "https://www.motorsportni.org/links/",
+      "gate_profiles": {},
+      "layouts": [
+        {"track_id": "gb_kirkistown_full", "name": "Kirkistown Full", "minimum_lap_time_s": 30, "blocker": "The public OSM snapshot has no clearly identified pit lane; physical capture is required."}
+      ]
+    },
+    {
+      "venue_id": "knockhill",
+      "venue_name": "Knockhill Racing Circuit",
+      "nation": "Scotland",
+      "reference": [56.1283006, -3.5057847],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/654603367",
+      "official_source": "https://www.knockhill.com/Visit/Circuit-Map",
+      "gate_profiles": {
+        "clockwise": {"source_way_ids": [170005851, 5064300], "start": [56.1309217, -3.5068770, 95.280, 20], "finish": [56.1309217, -3.5068770, 95.280, 20], "pit_entry": [56.1310537, -3.5095813, 85.850, 12], "pit_exit": [56.1306580, -3.5033300, 102.862, 12]},
+        "anti_clockwise": {"source_way_ids": [170005851, 5064300], "start": [56.1309217, -3.5068770, 275.280, 20], "finish": [56.1309217, -3.5068770, 275.280, 20], "pit_entry": [56.1306580, -3.5033300, 282.862, 12], "pit_exit": [56.1310537, -3.5095813, 265.850, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_knockhill_international_cw", "name": "Knockhill International Clockwise", "minimum_lap_time_s": 20, "gate_profile": "clockwise"},
+        {"track_id": "gb_knockhill_international_acw", "name": "Knockhill International Anti-Clockwise", "minimum_lap_time_s": 20, "gate_profile": "anti_clockwise"},
+        {"track_id": "gb_knockhill_national", "name": "Knockhill National", "minimum_lap_time_s": 15, "gate_profile": "clockwise"}
+      ]
+    },
+    {
+      "venue_id": "llandow",
+      "venue_name": "Llandow Circuit",
+      "nation": "Wales",
+      "reference": [51.4318768, -3.4979064],
+      "geofence_radius_m": 1800,
+      "osm_venue": "https://www.openstreetmap.org/way/1209363912",
+      "official_source": "https://www.llandow.com/",
+      "gate_profiles": {
+        "full": {"source_way_ids": [893164369, 893164371], "start": [51.4324616, -3.4977578, 89.494, 20], "finish": [51.4324616, -3.4977578, 89.494, 20], "pit_entry": [51.4324616, -3.4977578, 36.977, 12], "pit_exit": [51.4327333, -3.4950303, 95.934, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_llandow_full", "name": "Llandow Full", "minimum_lap_time_s": 15, "gate_profile": "full"}
+      ]
+    },
+    {
+      "venue_id": "mallory_park",
+      "venue_name": "Mallory Park",
+      "nation": "England",
+      "reference": [52.5980634, -1.3363435],
+      "geofence_radius_m": 2000,
+      "osm_venue": "https://www.openstreetmap.org/way/215650815",
+      "official_source": "https://www.malloryparkcircuit.com/",
+      "gate_profiles": {
+        "full": {"source_way_ids": [215336385, 215499132], "start": [52.5976900, -1.3369314, 178.476, 20], "finish": [52.5976900, -1.3369314, 178.476, 20], "pit_entry": [52.5984766, -1.3369659, 189.050, 12], "pit_exit": [52.5963928, -1.3368746, 173.576, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_mallory_park_full", "name": "Mallory Park Full", "minimum_lap_time_s": 20, "gate_profile": "full"}
+      ]
+    },
+    {
+      "venue_id": "oulton_park",
+      "venue_name": "Oulton Park",
+      "nation": "England",
+      "reference": [53.1765498, -2.6179277],
+      "geofence_radius_m": 3000,
+      "osm_venue": "https://www.openstreetmap.org/way/108809509",
+      "official_source": "https://www.oultonpark.co.uk/about/circuit-map",
+      "gate_profiles": {
+        "default": {"source_way_ids": [820427227, 721714385], "start": [53.1790171, -2.6124325, 165.415, 20], "finish": [53.1790171, -2.6124325, 165.415, 20], "pit_entry": [53.1813678, -2.6130318, 192.458, 12], "pit_exit": [53.1769784, -2.6134167, 223.746, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_oulton_park_international", "name": "Oulton Park International", "minimum_lap_time_s": 45, "gate_profile": "default"},
+        {"track_id": "gb_oulton_park_island", "name": "Oulton Park Island", "minimum_lap_time_s": 35, "gate_profile": "default"},
+        {"track_id": "gb_oulton_park_fosters", "name": "Oulton Park Fosters", "minimum_lap_time_s": 25, "gate_profile": "default"}
+      ]
+    },
+    {
+      "venue_id": "pembrey",
+      "venue_name": "Pembrey Circuit",
+      "nation": "Wales",
+      "reference": [51.7055818, -4.3204467],
+      "geofence_radius_m": 2500,
+      "osm_venue": "https://www.openstreetmap.org/way/198340508",
+      "official_source": "https://pembreycircuit.co.uk/facilities",
+      "gate_profiles": {
+        "default": {"source_way_ids": [893412421, 893412424], "start": [51.7047709, -4.3248971, 28.010, 20], "finish": [51.7047709, -4.3248971, 28.010, 20], "pit_entry": [51.7030618, -4.3231733, 318.475, 12], "pit_exit": [51.7070317, -4.3228469, 10.290, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_pembrey_national", "name": "Pembrey National", "minimum_lap_time_s": 25, "gate_profile": "default"},
+        {"track_id": "gb_pembrey_clubmans", "name": "Pembrey Clubmans", "minimum_lap_time_s": 20, "gate_profile": "default"}
+      ]
+    },
+    {
+      "venue_id": "silverstone",
+      "venue_name": "Silverstone Circuit",
+      "nation": "England",
+      "reference": [52.0718116, -1.0142991],
+      "geofence_radius_m": 4000,
+      "osm_venue": "https://www.openstreetmap.org/way/156355633",
+      "official_source": "https://www.silverstone.co.uk/",
+      "gate_profiles": {
+        "international_pits": {"source_way_ids": [169851260, 227902927], "start": [52.0684768, -1.0200311, 243.649, 20], "finish": [52.0684768, -1.0200311, 243.649, 20], "pit_entry": [52.0648411, -1.0196927, 329.277, 12], "pit_exit": [52.0714672, -1.0157059, 45.231, 12]},
+        "national_pits": {"source_way_ids": [169730588, 3571477], "start": [52.0786532, -1.0178209, 83.285, 20], "finish": [52.0786532, -1.0178209, 83.285, 20], "pit_entry": [52.0786532, -1.0178209, 84.499, 12], "pit_exit": [52.0789308, -1.0127209, 85.028, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_silverstone_gp", "name": "Silverstone Grand Prix", "minimum_lap_time_s": 50, "gate_profile": "international_pits"},
+        {"track_id": "gb_silverstone_international", "name": "Silverstone International", "minimum_lap_time_s": 30, "gate_profile": "international_pits"},
+        {"track_id": "gb_silverstone_national", "name": "Silverstone National", "minimum_lap_time_s": 25, "gate_profile": "national_pits"}
+      ]
+    },
+    {
+      "venue_id": "snetterton",
+      "venue_name": "Snetterton",
+      "nation": "England",
+      "reference": [52.4653968, 0.9475707],
+      "geofence_radius_m": 3000,
+      "osm_venue": "https://www.openstreetmap.org/way/145755930",
+      "official_source": "https://www.snetterton.co.uk/about",
+      "gate_profiles": {
+        "default": {"source_way_ids": [159636496, 145755934], "start": [52.4635275, 0.9473904, 265.045, 20], "finish": [52.4635275, 0.9473904, 265.045, 20], "pit_entry": [52.4638053, 0.9497182, 263.823, 12], "pit_exit": [52.4631623, 0.9400147, 262.945, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_snetterton_300", "name": "Snetterton 300", "minimum_lap_time_s": 45, "gate_profile": "default"},
+        {"track_id": "gb_snetterton_200", "name": "Snetterton 200", "minimum_lap_time_s": 30, "gate_profile": "default"},
+        {"track_id": "gb_snetterton_100", "name": "Snetterton 100", "minimum_lap_time_s": 15, "gate_profile": "default"}
+      ]
+    },
+    {
+      "venue_id": "thruxton",
+      "venue_name": "Thruxton Circuit",
+      "nation": "England",
+      "reference": [51.2071910, -1.6085264],
+      "geofence_radius_m": 3000,
+      "osm_venue": "https://www.openstreetmap.org/way/892471200",
+      "official_source": "https://thruxtonracing.co.uk/",
+      "gate_profiles": {
+        "full": {"source_way_ids": [892471200, 168899566], "start": [51.2083011, -1.6094029, 343.482, 20], "finish": [51.2083011, -1.6094029, 343.482, 20], "pit_entry": [51.2064456, -1.6075329, 327.493, 12], "pit_exit": [51.2100543, -1.6084646, 32.583, 12]}
+      },
+      "layouts": [
+        {"track_id": "gb_thruxton_full", "name": "Thruxton Full", "minimum_lap_time_s": 45, "gate_profile": "full"}
+      ]
+    }
+  ]
+}

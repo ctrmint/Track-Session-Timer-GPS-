@@ -10,7 +10,9 @@ safety-relevant data, not accepted as unverified convenience presets.
 2. Use a stable layout-specific `track_id`; separate circuit layouts need separate files.
 3. Set `provenance.source` to a public source or a clear description of an original
    measurement, record a compatible licence, and set `verified_utc` to the verification
-   time. Do not submit private raw location traces, account identifiers, or telemetry.
+   time. Set `geometry_status` to `provisional` for public-map research; promotion
+   requires all four gates to be independently or physically validated. Do not submit
+   private raw location traces, account identifiers, or telemetry.
 4. Start at revision 1. Every geometry or timing change increments the revision and
    updates provenance. Git retains the complete review history.
 5. Run the workbench before copying a candidate into `data/tracks/`:
@@ -29,7 +31,8 @@ safety-relevant data, not accepted as unverified convenience presets.
 - A maintainer must review endpoint placement, direction, pit-gate meaning, geofence,
   minimum lap time, and revision progression before merge.
 - Validation success proves format and geometry consistency; it does not prove physical
-  placement. Mark definitions as unverified until compared with authoritative mapping or
-  a controlled circuit test.
+  placement. Public research remains `provisional` until compared with independent
+  evidence or a controlled circuit test. Provisional definitions cannot be selected or
+  configured for timing.
 - Corrections advance the existing revision. Do not silently replace a published file or
   reuse its identifier for a different layout.

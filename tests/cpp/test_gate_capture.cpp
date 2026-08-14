@@ -138,6 +138,9 @@ int main()
     controller.save(false);
     assert(controller.status() == ui::GateCaptureStatus::saved);
     assert(controller.draft().revision == source.revision + 1);
+    assert(controller.draft().provenance.geometry_status ==
+           track::TrackGeometryStatus::device_captured);
+    assert(track::track_timing_ready(controller.draft()));
 
     controller.begin(source, &store, false);
     assert(controller.draft().revision == source.revision + 1);

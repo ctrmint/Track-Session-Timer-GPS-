@@ -33,6 +33,8 @@ const char* status_text(const TrackSelectionStatus status) noexcept
         return "TRACK CLEARED - SESSION TIMER ONLY";
     case TrackSelectionStatus::storage_error:
         return "SAVE FAILED - PREVIOUS TRACK SELECTION IS UNCHANGED";
+    case TrackSelectionStatus::provisional:
+        return "PROVISIONAL GATES - CAPTURE OR VALIDATE BEFORE LAP TIMING";
     case TrackSelectionStatus::locked_active:
         return "TRACK CHANGES LOCKED WHILE A SESSION IS ACTIVE";
     case TrackSelectionStatus::capture_information:
@@ -91,6 +93,10 @@ settings::SettingsApplyResult TrackSelectionController::select(
     }
     if (!catalog_usable()) {
         status_ = TrackSelectionStatus::invalid_catalog;
+        return settings::SettingsApplyResult::invalid_settings;
+    }
+    if (!track::track_timing_ready(catalog_.definitions[browse_index_])) {
+        status_ = TrackSelectionStatus::provisional;
         return settings::SettingsApplyResult::invalid_settings;
     }
     auto updated = manager.current();
@@ -160,7 +166,10 @@ TrackSelectionViewModel TrackSelectionController::view_model() const noexcept
         std::array<char, 17> hash{};
         track::format_definition_hash(definition.definition_hash, hash);
         std::snprintf(model.definition.data(), model.definition.size(),
-                      "START/FINISH READY | SCHEMA v%u | %.8s",
+                      "%s | SCHEMA v%u | %.8s",
+                      track::track_timing_ready(definition)
+                          ? "START/FINISH READY"
+                          : "PROVISIONAL - TIMER ONLY",
                       static_cast<unsigned>(definition.schema_version), hash.data());
     }
     else {
@@ -177,11 +186,13 @@ TrackSelectionViewModel TrackSelectionController::view_model() const noexcept
                              : status_ == TrackSelectionStatus::invalid_catalog ||
                                        status_ == TrackSelectionStatus::selected_track_missing ||
                                        status_ == TrackSelectionStatus::storage_error ||
+                                       status_ == TrackSelectionStatus::provisional ||
                                        status_ == TrackSelectionStatus::locked_active
                                  ? color::critical_bright
                                  : color::caution_bright;
     model.can_browse = usable && status_ != TrackSelectionStatus::locked_active;
-    model.can_select = model.can_browse;
+    model.can_select = model.can_browse &&
+                       track::track_timing_ready(catalog_.definitions[browse_index_]);
     model.can_use_timer_only = status_ != TrackSelectionStatus::locked_active;
     return model;
 }

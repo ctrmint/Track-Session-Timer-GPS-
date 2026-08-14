@@ -104,6 +104,21 @@ int main()
         assert(controller.status() == expected.status);
     }
 
+    auto provisional = suggested;
+    provisional.definitions[0].provenance.geometry_status =
+        track::TrackGeometryStatus::provisional;
+    auto timer_only_settings = manager.current();
+    timer_only_settings.selected_track_id.fill('\0');
+    controller.begin(provisional.catalog(),
+                     match_fixture(provisional, timer_only_settings),
+                     timer_only_settings, false);
+    view = controller.view_model();
+    assert(view.can_browse && !view.can_select);
+    assert(std::strstr(view.definition.data(), "PROVISIONAL - TIMER ONLY") != nullptr);
+    assert(controller.select(manager, false) ==
+           settings::SettingsApplyResult::invalid_settings);
+    assert(controller.status() == ui::TrackSelectionStatus::provisional);
+
     auto selected_settings = manager.current();
     std::strcpy(selected_settings.selected_track_id.data(), "synthetic_test_loop");
     assert(manager.apply(selected_settings, false) == settings::SettingsApplyResult::applied);

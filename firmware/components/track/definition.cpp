@@ -552,6 +552,7 @@ bool parse_provenance(JsonReader& reader, TrackProvenance& provenance,
     bool source = false;
     bool license = false;
     bool verified = false;
+    bool geometry_status = false;
     while (reader.peek() != '}') {
         std::array<char, 40> key{};
         if (reader.string(key) == StringResult::invalid || !reader.consume(':')) {
@@ -570,6 +571,30 @@ bool parse_provenance(JsonReader& reader, TrackProvenance& provenance,
             result = reader.string(provenance.verified_utc);
             verified = result == StringResult::ok && provenance.verified_utc[0] != '\0';
         }
+        else if (std::strcmp(key.data(), "geometry_status") == 0 &&
+                 !geometry_status) {
+            std::array<char, 32> value{};
+            result = reader.string(value);
+            if (result == StringResult::ok) {
+                if (std::strcmp(value.data(), "provisional") == 0) {
+                    provenance.geometry_status = TrackGeometryStatus::provisional;
+                }
+                else if (std::strcmp(value.data(), "device_captured") == 0) {
+                    provenance.geometry_status = TrackGeometryStatus::device_captured;
+                }
+                else if (std::strcmp(value.data(), "independently_validated") == 0) {
+                    provenance.geometry_status =
+                        TrackGeometryStatus::independently_validated;
+                }
+                else if (std::strcmp(value.data(), "physically_validated") == 0) {
+                    provenance.geometry_status = TrackGeometryStatus::physically_validated;
+                }
+                else {
+                    return false;
+                }
+                geometry_status = true;
+            }
+        }
         else {
             return false;
         }
@@ -584,7 +609,7 @@ bool parse_provenance(JsonReader& reader, TrackProvenance& provenance,
             return false;
         }
     }
-    return reader.consume('}') && source && license && verified;
+    return reader.consume('}') && source && license && verified && geometry_status;
 }
 
 bool parse_sector(JsonReader& reader, SectorDefinition& sector,
@@ -961,7 +986,9 @@ TrackLoadReport load_track_definition(const std::string_view json,
     }
     if (!has_non_whitespace(definition.provenance.source) ||
         !has_non_whitespace(definition.provenance.license) ||
-        !valid_verified_timestamp(definition.provenance.verified_utc)) {
+        !valid_verified_timestamp(definition.provenance.verified_utc) ||
+        definition.provenance.geometry_status >
+            TrackGeometryStatus::physically_validated) {
         return report(TrackLoadResult::invalid_value, reader,
                       TrackDefinitionField::provenance);
     }
@@ -1256,6 +1283,9 @@ TrackSerializeResult serialize_track_definition(
               writer.quoted(definition.provenance.license.data()) &&
               writer.text(",\"verified_utc\":") &&
               writer.quoted(definition.provenance.verified_utc.data()) &&
+              writer.text(",\"geometry_status\":") &&
+              writer.quoted(track_geometry_status_name(
+                  definition.provenance.geometry_status)) &&
               writer.text("},\"reference\":") && write_point(writer, definition.reference) &&
               writer.format(",\"geofence\":{\"center_lat_deg\":%.15g,"
                             "\"center_lon_deg\":%.15g,\"radius_m\":%.15g},"
@@ -1307,6 +1337,37 @@ void format_definition_hash(const std::uint64_t hash,
 {
     std::snprintf(output.data(), output.size(), "%016llx",
                   static_cast<unsigned long long>(hash));
+}
+
+bool track_timing_ready(const TrackDefinition& definition) noexcept
+{
+    if (definition.schema_version != kCurrentTrackSchemaVersion) {
+        return false;
+    }
+    switch (definition.provenance.geometry_status) {
+    case TrackGeometryStatus::device_captured:
+    case TrackGeometryStatus::independently_validated:
+    case TrackGeometryStatus::physically_validated:
+        return true;
+    case TrackGeometryStatus::provisional:
+        return false;
+    }
+    return false;
+}
+
+const char* track_geometry_status_name(const TrackGeometryStatus status) noexcept
+{
+    switch (status) {
+    case TrackGeometryStatus::provisional:
+        return "provisional";
+    case TrackGeometryStatus::device_captured:
+        return "device_captured";
+    case TrackGeometryStatus::independently_validated:
+        return "independently_validated";
+    case TrackGeometryStatus::physically_validated:
+        return "physically_validated";
+    }
+    return "provisional";
 }
 
 const char* track_load_result_name(const TrackLoadResult result) noexcept

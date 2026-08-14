@@ -169,6 +169,8 @@ void GateCaptureController::save(const bool confirm_overwrite) noexcept
     if (candidate.revision < UINT32_MAX) {
         ++candidate.revision;
     }
+    candidate.provenance.geometry_status =
+        track::TrackGeometryStatus::device_captured;
     track::TrackDefinitionBlob blob{};
     if (track::serialize_track_definition(candidate, blob) !=
         track::TrackSerializeResult::serialized) {

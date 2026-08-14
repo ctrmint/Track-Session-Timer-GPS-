@@ -8,7 +8,7 @@
 
 namespace track_timer::track {
 
-inline constexpr std::uint16_t kCurrentTrackSchemaVersion = 2;
+inline constexpr std::uint16_t kCurrentTrackSchemaVersion = 3;
 inline constexpr std::size_t kMaximumTrackFileBytes = 16'384;
 inline constexpr std::size_t kTrackIdCapacity = 48;
 inline constexpr std::size_t kTrackNameCapacity = 64;
@@ -59,10 +59,18 @@ struct SectorDefinition {
     DirectedGateDefinition gate{};
 };
 
+enum class TrackGeometryStatus : std::uint8_t {
+    provisional,
+    device_captured,
+    independently_validated,
+    physically_validated,
+};
+
 struct TrackProvenance {
     std::array<char, kProvenanceSourceCapacity> source{};
     std::array<char, kProvenanceLicenseCapacity> license{};
     std::array<char, kProvenanceTimestampCapacity> verified_utc{};
+    TrackGeometryStatus geometry_status{TrackGeometryStatus::provisional};
 };
 
 struct TrackDefinition {
@@ -141,6 +149,9 @@ struct TrackLoadReport {
     const TrackDefinition& definition, TrackDefinitionBlob& output) noexcept;
 [[nodiscard]] std::uint64_t hash_track_definition(std::string_view bytes) noexcept;
 void format_definition_hash(std::uint64_t hash, std::array<char, 17>& output) noexcept;
+[[nodiscard]] bool track_timing_ready(const TrackDefinition& definition) noexcept;
+[[nodiscard]] const char* track_geometry_status_name(
+    TrackGeometryStatus status) noexcept;
 [[nodiscard]] const char* track_load_result_name(TrackLoadResult result) noexcept;
 [[nodiscard]] const char* track_definition_field_name(
     TrackDefinitionField field) noexcept;

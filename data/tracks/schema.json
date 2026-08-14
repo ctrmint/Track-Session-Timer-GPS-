@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 2
+      "const": 3
     },
     "revision": {
       "type": "integer",
@@ -128,7 +128,8 @@
       "required": [
         "source",
         "license",
-        "verified_utc"
+        "verified_utc",
+        "geometry_status"
       ],
       "properties": {
         "source": {
@@ -148,6 +149,15 @@
           "minLength": 20,
           "maxLength": 31,
           "format": "date-time"
+        },
+        "geometry_status": {
+          "type": "string",
+          "enum": [
+            "provisional",
+            "device_captured",
+            "independently_validated",
+            "physically_validated"
+          ]
         }
       }
     },

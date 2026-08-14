@@ -21,6 +21,7 @@ enum class TrackSelectionStatus : std::uint8_t {
     saved,
     timer_only,
     storage_error,
+    provisional,
     locked_active,
     capture_information,
 };

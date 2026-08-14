@@ -19,6 +19,7 @@ Fast, deterministic tests for:
 - fixed-cell countdown and overrun presentation
 - Trackday Mode settings migration, estimate boundaries, and live lap-data suppression
 - unchanged lap-event capture and post-session Review while Trackday Mode is enabled
+- deterministic UK pack generation, per-definition hashes, all-nation coverage, explicit blockers, and provisional timing lockout
 
 ### Host replay tests
 
@@ -104,6 +105,7 @@ Required synthetic cases:
 13. independent pit-entry and pit-exit rearm at slow pit-lane speed
 14. 20/25 Hz high-speed segments spanning a finite gate
 15. accepted and rejected typed gate records agree in host and embedded replay
+16. provisional definitions cannot be selected or converted to a valid timing-engine configuration
 
 ## 4. Performance tests
 
