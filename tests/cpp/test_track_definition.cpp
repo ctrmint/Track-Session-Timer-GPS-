@@ -112,6 +112,9 @@ int main(const int argc, char** argv)
     assert_failure_preserves_active(replace_once(valid_json, "\"lat_deg\": 52.0",
                                                  "\"lat_deg\": 92.0"),
                                     TrackLoadResult::invalid_value);
+    assert_failure_preserves_active(replace_once(valid_json, "\"lat_deg\": 52.0",
+                                                 "\"lat_deg\": 86.0"),
+                                    TrackLoadResult::invalid_value);
     assert_failure_preserves_active(replace_once(valid_json, "\"name\": \"Synthetic Test Loop\"",
                                                  "\"name\": \"" + std::string(80, 'A') + "\""),
                                     TrackLoadResult::capacity_exceeded);
