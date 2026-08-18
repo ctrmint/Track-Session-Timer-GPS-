@@ -18,7 +18,9 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - FT6336 touch input registered as an LVGL pointer device
 - on-device screen routing for the ready, setup, review and diagnostics screens
 - microSD mount, inspection and opt-in format support
-- press-and-hold gated menu with swipe carousels for Setup, Review and Diagnostics
+- top-level Mode selection: Track Day, Race and G-Only
+- one-press direct value selection for device settings, replacing increment stepping
+- press-and-hold gated menu with swipe carousels for Mode, Setup, Review and Diagnostics
 - abstract touch input contract decoupling screens from LVGL and the touch driver
 - microSD-backed track catalog: packs are read from the card at boot
 - track loader that applies a selected definition to the timing engine

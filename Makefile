@@ -38,13 +38,14 @@ IMU_METER_TEST_BINARY := build/host/imu_meter_test
 REST_SESSION_TEST_BINARY := build/host/rest_session_test
 TRACK_CATALOG_TEST_BINARY := build/host/track_catalog_test
 SHELL_NAVIGATION_TEST_BINARY := build/host/shell_navigation_test
+DEVICE_MODE_TEST_BINARY := build/host/device_mode_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
+.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
 
-check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test ui-foundation-test navigation-test
+check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -373,6 +374,18 @@ track-catalog-test:
 		simulator/src/file_track_definition_store.cpp \
 		tests/cpp/test_track_catalog.cpp -o $(TRACK_CATALOG_TEST_BINARY)
 	$(TRACK_CATALOG_TEST_BINARY) data/tracks/synthetic_test_loop.json
+
+device-mode-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
+		-Ifirmware/components/ui/include \
+		firmware/components/settings/component.cpp \
+		firmware/components/ui/device_mode.cpp \
+		firmware/components/ui/value_picker.cpp \
+		tests/cpp/test_device_mode.cpp -o $(DEVICE_MODE_TEST_BINARY)
+	$(DEVICE_MODE_TEST_BINARY)
 
 shell-navigation-test:
 	mkdir -p build/host
