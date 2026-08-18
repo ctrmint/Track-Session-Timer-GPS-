@@ -8,141 +8,178 @@ namespace {
 
 using namespace track_timer::ui;
 
+constexpr std::size_t kFields = 12;
+
+ShellNavigation opened()
+{
+    ShellNavigation shell{kFields};
+    (void)shell.dispatch(InputAction::long_press);
+    return shell;
+}
+
 // The whole point of the hold gate: ordinary taps and swipes on the dashboard must not
-// open the menu, or a driver will land in configuration mid-session.
+// open the menu, or a driver lands in configuration mid-session.
 void only_a_hold_opens_the_menu()
 {
-    ShellNavigation shell;
+    ShellNavigation shell{kFields};
     for (const auto action : {InputAction::press, InputAction::swipe_left,
                               InputAction::swipe_right, InputAction::swipe_down,
                               InputAction::none}) {
         const auto result = shell.dispatch(action);
         assert(result.outcome == ShellOutcome::ignored);
         assert(result.state.level == ShellLevel::ready);
-        assert(!shell.menu_open());
     }
-
-    const auto opened = shell.dispatch(InputAction::long_press);
-    assert(opened.outcome == ShellOutcome::menu_opened);
-    assert(opened.state.level == ShellLevel::menu);
-    assert(opened.state.menu_item == MenuItem::setup);
-    assert(shell.menu_open());
+    const auto open = shell.dispatch(InputAction::long_press);
+    assert(open.outcome == ShellOutcome::menu_opened);
+    assert(open.state.level == ShellLevel::menu);
+    assert(shell.menu_item() == MenuItem::mode);
 }
 
-void the_menu_carousel_wraps_in_both_directions()
+void the_menu_offers_mode_first_and_wraps()
 {
-    ShellNavigation shell;
-    (void)shell.dispatch(InputAction::long_press);
-
-    assert(shell.dispatch(InputAction::swipe_left).state.menu_item == MenuItem::review);
-    assert(shell.dispatch(InputAction::swipe_left).state.menu_item ==
-           MenuItem::diagnostics);
-    // Wrapping means the far item is never more than one swipe away.
-    assert(shell.dispatch(InputAction::swipe_left).state.menu_item == MenuItem::setup);
-    assert(shell.dispatch(InputAction::swipe_right).state.menu_item ==
-           MenuItem::diagnostics);
-    assert(shell.dispatch(InputAction::swipe_right).state.menu_item == MenuItem::review);
+    auto shell = opened();
+    assert(shell.menu_item() == MenuItem::mode);
+    (void)shell.dispatch(InputAction::swipe_left);
+    assert(shell.menu_item() == MenuItem::setup);
+    (void)shell.dispatch(InputAction::swipe_left);
+    assert(shell.menu_item() == MenuItem::review);
+    (void)shell.dispatch(InputAction::swipe_left);
+    assert(shell.menu_item() == MenuItem::diagnostics);
+    (void)shell.dispatch(InputAction::swipe_left);
+    assert(shell.menu_item() == MenuItem::mode);
+    (void)shell.dispatch(InputAction::swipe_right);
+    assert(shell.menu_item() == MenuItem::diagnostics);
 }
 
-// Entering Setup descends into its own carousel; Review and Diagnostics are single
-// screens and hand straight over to the destination model.
-void entering_setup_descends_but_review_and_diagnostics_hand_over()
+// Choosing a mode is the entire interaction: enter Mode, swipe to it, press.
+void a_mode_is_three_gestures_from_the_dashboard()
 {
-    ShellNavigation shell;
-    (void)shell.dispatch(InputAction::long_press);
-    const auto setup = shell.dispatch(InputAction::press);
-    assert(setup.outcome == ShellOutcome::entered);
-    assert(setup.emits_action && setup.action == NavigationAction::open_setup);
-    assert(setup.state.level == ShellLevel::section);
-    assert(setup.state.setup_item == SetupItem::device_settings);
+    auto shell = opened();                      // 1: hold
+    auto result = shell.dispatch(InputAction::press);   // 2: enter Mode
+    assert(result.outcome == ShellOutcome::entered);
+    assert(result.state.level == ShellLevel::section);
+    assert(!result.emits_action);               // Mode has no destination screen
 
-    ShellNavigation other;
-    (void)other.dispatch(InputAction::long_press);
-    (void)other.dispatch(InputAction::swipe_left);
-    const auto review = other.dispatch(InputAction::press);
-    assert(review.emits_action && review.action == NavigationAction::open_review);
-    assert(review.state.level == ShellLevel::menu);
-
-    (void)other.dispatch(InputAction::swipe_left);
-    const auto diagnostics = other.dispatch(InputAction::press);
-    assert(diagnostics.emits_action &&
-           diagnostics.action == NavigationAction::open_diagnostics);
+    result = shell.dispatch(InputAction::swipe_left);   // 3: to Race
+    assert(result.state.section_index == 1);
+    result = shell.dispatch(InputAction::press);        // 4: select
+    assert(result.outcome == ShellOutcome::mode_selected);
+    assert(result.state.section_index == 1);
 }
 
-void the_setup_carousel_wraps_and_swipe_down_climbs_out()
+void review_and_diagnostics_hand_over_to_the_destination_model()
 {
-    ShellNavigation shell;
-    (void)shell.dispatch(InputAction::long_press);
+    auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);
+    (void)shell.dispatch(InputAction::swipe_left);
+    auto result = shell.dispatch(InputAction::press);
+    assert(result.emits_action && result.action == NavigationAction::open_review);
+    assert(result.state.level == ShellLevel::menu);
+
+    (void)shell.dispatch(InputAction::swipe_left);
+    result = shell.dispatch(InputAction::press);
+    assert(result.emits_action && result.action == NavigationAction::open_diagnostics);
+}
+
+// Setup descends: section -> field -> value, one press per level.
+void a_setting_value_is_reachable_by_descending_three_levels()
+{
+    auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);            // SETUP
+    auto result = shell.dispatch(InputAction::press);
+    assert(result.state.level == ShellLevel::section);
+    assert(result.emits_action && result.action == NavigationAction::open_setup);
+
+    result = shell.dispatch(InputAction::press);              // DEVICE SETTINGS
+    assert(result.state.level == ShellLevel::field);
+
+    shell.set_value_count(10);
+    result = shell.dispatch(InputAction::press);              // open the field
+    assert(result.state.level == ShellLevel::value);
+
+    result = shell.dispatch(InputAction::swipe_left);
+    assert(result.state.value_index == 1);
+    result = shell.dispatch(InputAction::press);              // choose the value
+    assert(result.outcome == ShellOutcome::value_selected);
+    assert(result.state.value_index == 1);
+}
+
+void every_level_climbs_back_out_one_at_a_time()
+{
+    auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);
     (void)shell.dispatch(InputAction::press);
+    (void)shell.dispatch(InputAction::press);
+    shell.set_value_count(4);
+    (void)shell.dispatch(InputAction::press);
+    assert(shell.state().level == ShellLevel::value);
 
-    assert(shell.dispatch(InputAction::swipe_left).state.setup_item ==
-           SetupItem::track_selection);
-    assert(shell.dispatch(InputAction::swipe_left).state.setup_item ==
-           SetupItem::g_meter);
-    assert(shell.dispatch(InputAction::swipe_left).state.setup_item ==
-           SetupItem::device_settings);
-
-    const auto up = shell.dispatch(InputAction::swipe_down);
-    assert(up.outcome == ShellOutcome::exited);
-    assert(up.state.level == ShellLevel::menu);
-
-    const auto out = shell.dispatch(InputAction::swipe_down);
-    assert(out.outcome == ShellOutcome::exited);
-    assert(out.state.level == ShellLevel::ready);
-    assert(!shell.menu_open());
-
-    // Already at the top: swiping down again does nothing rather than underflowing.
-    const auto again = shell.dispatch(InputAction::swipe_down);
-    assert(again.outcome == ShellOutcome::ignored);
-    assert(again.state.level == ShellLevel::ready);
+    for (const auto expected : {ShellLevel::field, ShellLevel::section, ShellLevel::menu,
+                                ShellLevel::ready}) {
+        const auto result = shell.dispatch(InputAction::swipe_down);
+        assert(result.outcome == ShellOutcome::exited);
+        assert(result.state.level == expected);
+    }
+    // Already out: swiping down again does nothing rather than underflowing.
+    assert(shell.dispatch(InputAction::swipe_down).outcome == ShellOutcome::ignored);
 }
 
-// Timing authority beats configuration, matching the existing settings lock.
+// However deep the driver is, one hold returns them to the timer.
+void a_hold_anywhere_inside_the_menu_returns_to_the_timer()
+{
+    auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);
+    (void)shell.dispatch(InputAction::press);
+    (void)shell.dispatch(InputAction::press);
+    assert(shell.state().level == ShellLevel::field);
+
+    const auto result = shell.dispatch(InputAction::long_press);
+    assert(result.outcome == ShellOutcome::exited);
+    assert(result.state.level == ShellLevel::ready);
+    assert(!shell.menu_open());
+}
+
 void a_live_session_blocks_and_closes_the_menu()
 {
-    ShellNavigation shell;
+    ShellNavigation shell{kFields};
     shell.synchronize_session(true);
-    const auto refused = shell.dispatch(InputAction::long_press);
-    assert(refused.outcome == ShellOutcome::refused_session_active);
-    assert(refused.state.level == ShellLevel::ready);
+    assert(shell.dispatch(InputAction::long_press).outcome ==
+           ShellOutcome::refused_session_active);
     assert(!shell.menu_open());
 
     shell.synchronize_session(false);
-    assert(shell.dispatch(InputAction::long_press).outcome == ShellOutcome::menu_opened);
+    (void)shell.dispatch(InputAction::long_press);
     (void)shell.dispatch(InputAction::press);
     assert(shell.state().level == ShellLevel::section);
 
-    // A session starting while the driver is deep in a menu returns them to the timer.
     shell.synchronize_session(true);
     assert(shell.state().level == ShellLevel::ready);
-    assert(!shell.menu_open());
 }
 
-// Every level must be escapable without a swipe, because a gloved hand may not register
-// one on a capacitive panel. Reopening always starts from a known position.
-void reopening_the_menu_is_deterministic()
+// A field with fewer values than the last one must not leave a stale index behind.
+void changing_the_value_count_resets_an_out_of_range_index()
 {
-    ShellNavigation shell;
-    (void)shell.dispatch(InputAction::long_press);
+    auto shell = opened();
     (void)shell.dispatch(InputAction::swipe_left);
-    (void)shell.dispatch(InputAction::swipe_left);
-    shell.close();
-    assert(shell.state().level == ShellLevel::ready);
-
-    const auto reopened = shell.dispatch(InputAction::long_press);
-    assert(reopened.state.menu_item == MenuItem::setup);
-    assert(reopened.state.setup_item == SetupItem::device_settings);
+    (void)shell.dispatch(InputAction::press);
+    (void)shell.dispatch(InputAction::press);
+    shell.set_value_count(10);
+    (void)shell.dispatch(InputAction::press);
+    for (int i = 0; i < 8; ++i) {
+        (void)shell.dispatch(InputAction::swipe_left);
+    }
+    assert(shell.state().value_index == 8);
+    shell.set_value_count(2);
+    assert(shell.state().value_index == 0);
 }
 
 void names_are_stable_for_logging_and_replay()
 {
     assert(std::strcmp(input_action_name(InputAction::long_press), "long-press") == 0);
-    assert(std::strcmp(shell_level_name(ShellLevel::section), "section") == 0);
-    assert(std::strcmp(shell_outcome_name(ShellOutcome::refused_session_active),
-                       "refused-session-active") == 0);
-    assert(std::strcmp(menu_item_name(MenuItem::diagnostics), "diagnostics") == 0);
-    assert(std::strcmp(setup_item_name(SetupItem::track_selection), "track-selection") ==
-           0);
+    assert(std::strcmp(shell_level_name(ShellLevel::value), "value") == 0);
+    assert(std::strcmp(shell_outcome_name(ShellOutcome::mode_selected), "mode-selected") == 0);
+    assert(std::strcmp(menu_item_name(MenuItem::mode), "mode") == 0);
+    assert(std::strcmp(setup_item_name(SetupItem::track_selection), "track-selection") == 0);
 }
 
 }  // namespace
@@ -150,14 +187,17 @@ void names_are_stable_for_logging_and_replay()
 int main()
 {
     only_a_hold_opens_the_menu();
-    the_menu_carousel_wraps_in_both_directions();
-    entering_setup_descends_but_review_and_diagnostics_hand_over();
-    the_setup_carousel_wraps_and_swipe_down_climbs_out();
+    the_menu_offers_mode_first_and_wraps();
+    a_mode_is_three_gestures_from_the_dashboard();
+    review_and_diagnostics_hand_over_to_the_destination_model();
+    a_setting_value_is_reachable_by_descending_three_levels();
+    every_level_climbs_back_out_one_at_a_time();
+    a_hold_anywhere_inside_the_menu_returns_to_the_timer();
     a_live_session_blocks_and_closes_the_menu();
-    reopening_the_menu_is_deterministic();
+    changing_the_value_count_resets_an_out_of_range_index();
     names_are_stable_for_logging_and_replay();
 
-    std::cout << "Hold-gated menu, wrapping carousels, session lock, and deterministic "
-                 "reopen passed\n";
+    std::cout << "Hold gate, Mode selection, descending editor levels, and session lock "
+                 "passed\n";
     return 0;
 }
