@@ -1,6 +1,13 @@
 PYTHON ?= python3
 CXX ?= c++
 IDF_IMAGE ?= espressif/idf:v6.0.2
+FIRMWARE_PORT ?= /dev/ttyACM0
+FIRMWARE_BAUD ?= 921600
+# The port is root:dialout and the container runs as the invoking user so that build
+# artefacts stay user-owned, so the container needs dialout added explicitly.
+DIALOUT_GID := $(shell getent group dialout | cut -d: -f3)
+IDF_DOCKER := docker run --rm -u "$$(id -u):$$(id -g)" -e HOME=/tmp -e IDF_GIT_SAFE_DIR=/work -v "$$(pwd):/work" -w /work/firmware
+IDF_DOCKER_TTY := $(IDF_DOCKER) --group-add $(DIALOUT_GID) --device=$(FIRMWARE_PORT)
 HOST_TEST_BINARY := build/host/domain_contracts_test
 SIMULATOR_MODEL_TEST_BINARY := build/host/simulator_model_test
 SESSION_STATE_TEST_BINARY := build/host/session_state_test
@@ -33,7 +40,7 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-clean issue-preview label-preview
+.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
 
 check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
 
@@ -387,7 +394,24 @@ firmware-build:
 	cd firmware && idf.py set-target esp32s3 && idf.py build
 
 firmware-container-build:
-	docker run --rm -u "$$(id -u):$$(id -g)" -e HOME=/tmp -e IDF_GIT_SAFE_DIR=/work -v "$$(pwd):/work" -w /work/firmware $(IDF_IMAGE) bash -lc "idf.py set-target esp32s3 && idf.py build"
+	$(IDF_DOCKER) $(IDF_IMAGE) bash -lc "idf.py set-target esp32s3 && idf.py build"
+
+# Read-only identification. Resets the chip but writes nothing.
+firmware-device-info:
+	$(IDF_DOCKER_TTY) $(IDF_IMAGE) bash -lc "esptool --port $(FIRMWARE_PORT) --chip esp32s3 chip-id && esptool --port $(FIRMWARE_PORT) --chip esp32s3 flash-id"
+
+firmware-container-flash: firmware-container-build
+	$(IDF_DOCKER_TTY) $(IDF_IMAGE) bash -lc "idf.py -p $(FIRMWARE_PORT) -b $(FIRMWARE_BAUD) flash"
+
+firmware-container-monitor:
+	$(IDF_DOCKER_TTY) -it $(IDF_IMAGE) bash -lc "idf.py -p $(FIRMWARE_PORT) monitor"
+
+firmware-container-flash-monitor: firmware-container-build
+	$(IDF_DOCKER_TTY) -it $(IDF_IMAGE) bash -lc "idf.py -p $(FIRMWARE_PORT) -b $(FIRMWARE_BAUD) flash monitor"
+
+# Destructive: wipes the whole 16 MB part, including NVS-stored settings.
+firmware-container-erase:
+	$(IDF_DOCKER_TTY) $(IDF_IMAGE) bash -lc "idf.py -p $(FIRMWARE_PORT) erase-flash"
 
 firmware-clean:
 	cd firmware && idf.py fullclean
