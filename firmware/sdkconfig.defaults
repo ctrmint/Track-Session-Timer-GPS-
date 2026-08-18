@@ -23,6 +23,13 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
 # fit comfortably in the 1 MB single-app default.
 CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 
+# app_main brings up the panel, touch, the card and the track catalog. Parsing a track
+# is the expensive part: load_track_definition holds a full TrackDefinition (3.6 KB) in
+# its parse state, so the catalog build chain needs about 10 KB. Measured by decoding a
+# stack-overflow backtrace at 8 KB. The main task stack is freed when app_main returns,
+# so the headroom costs nothing at steady state.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
+
 CONFIG_LV_BUILD_EXAMPLES=n
 CONFIG_LV_BUILD_DEMOS=n
 CONFIG_LV_FONT_MONTSERRAT_14=y

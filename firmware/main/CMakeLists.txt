@@ -2,7 +2,7 @@ idf_component_register(
     SRCS "app_main.cpp" "screen_router.cpp"
     INCLUDE_DIRS "."
     REQUIRES domain board gnss timing track session logger ui diagnostics display
-             esp_app_format esp_system esp_timer heap lvgl storage
+             esp_app_format esp_system esp_timer heap lvgl storage catalog timing
 )
 
 # One-shot microSD format, opt-in through the build environment only. Never enabled by

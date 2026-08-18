@@ -29,6 +29,8 @@ constexpr gpio_num_t kPinReset = GPIO_NUM_21;
 
 constexpr int kBitsPerPixel = 16;
 constexpr std::uint32_t kLvglTickPeriodMs = 2;
+// NOTE: raise this before track selection is wired to catalog::apply_track. Parsing a
+// definition needs roughly 10 KB of stack on top of whatever LVGL is using.
 constexpr std::uint32_t kLvglTaskStackBytes = 8 * 1024;
 constexpr UBaseType_t kLvglTaskPriority = 2;
 constexpr std::uint32_t kLvglMaxDelayMs = 500;
