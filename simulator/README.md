@@ -1,5 +1,15 @@
 # Hardware-independent device simulator
 
+> **Frozen. No longer developed.**
+>
+> This simulator lags the device and cannot exercise the gesture-driven interaction
+> model the firmware now uses, so it no longer reflects how the product behaves. It is
+> kept in CI as a regression guard over the shared firmware components it compiles, and
+> nothing here should constrain device UI decisions.
+>
+> Fixtures and file-backed stores under `simulator/src/` that the host test suite depends
+> on remain maintained. New tests belong in `make check` as host targets.
+
 The desktop simulator renders the driver-facing UI at the selected Waveshare panel's
 native 600 x 450 logical resolution. It uses the same immutable `UiSnapshot` presenter
 as the firmware and deterministic host backends for the physical device interfaces.

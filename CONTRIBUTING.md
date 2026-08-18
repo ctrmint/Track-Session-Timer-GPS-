@@ -56,8 +56,12 @@ python -m pip install -r requirements-dev.txt
 make check
 ```
 
-This runs Python tests, track-schema validation, Markdown/repository hygiene checks,
-and the host C++ domain-contract test.
+This runs the Python tests, track-schema validation, Markdown and repository hygiene
+checks, and the host C++ suites.
+
+**New tests belong in `make check`, as host targets.** Anything that does not genuinely
+need LVGL should build and run without it, so its coverage does not depend on the
+simulator.
 
 Build the firmware with native ESP-IDF v6.0.2 or the pinned container:
 
@@ -65,5 +69,24 @@ Build the firmware with native ESP-IDF v6.0.2 or the pinned container:
 make firmware-container-build
 ```
 
-Pull requests must pass the host and firmware CI jobs. If a hardware/manual check
-cannot run, state why and identify the issue that will provide the missing evidence.
+Pull requests must pass the host, simulator and firmware CI jobs. If a hardware/manual
+check cannot run, state why and identify the issue that will provide the missing evidence.
+
+## The simulator is frozen
+
+The desktop simulator is **no longer developed**. It lags the device and cannot exercise
+the gesture-driven interaction model the firmware now uses, so time spent on it does not
+buy confidence in the product.
+
+It stays in CI as a regression guard: it compiles a large part of the firmware's shared
+components, so a break there still surfaces. Do not add features or screens to it, and do
+not let it constrain device UI decisions.
+
+Note that `simulator/src/` also holds fixtures and file-backed stores that the **host**
+suite depends on, such as `track_fixtures.cpp` and `file_track_definition_store.cpp`.
+Those are host-test support that happens to live under `simulator/`, and they remain
+maintained.
+
+Device behaviour is confirmed on hardware. Every UI defect found during the gesture
+rework - an off-centre icon, overlapping text, and corrupt partial redraws on the
+RM690B0 - was found on the panel while the simulator suite passed.
