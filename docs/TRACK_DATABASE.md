@@ -199,7 +199,60 @@ blocked layout receives invented coordinates. All generated definitions have
 before use for lap timing. The package is deterministic and is rebuilt and validated by
 `make check` in CI.
 
-## 6. Loading, projection, and versioning
+## 6. On-card layout and device loading
+
+Track geometry lives on the microSD card. Nothing is built into the firmware, and
+adding a track needs no firmware rebuild.
+
+```text
+/sdcard/track-packs/<pack_id>/definitions/<track_id>.json
+```
+
+This is exactly what `tools/build_uk_track_pack.py` emits, so a pack can be copied to
+the card unchanged. Several packs may coexist; `device-captured` is reserved for
+geometry captured on the device itself, so wiping a distributed pack never deletes a
+capture. Packs are only recognised at that path: a directory is scanned only if it
+contains a `definitions` subdirectory.
+
+At boot `SdTrackStore` enumerates every pack and `catalog::TrackCatalog` parses each
+definition into a caller-owned array. Two allocations dominate and both are placed in
+PSRAM rather than internal RAM or a task stack:
+
+| Allocation | Size | Why |
+|---|---:|---|
+| Catalog array | `TrackDefinition` is 3.6 KB, so 32 entries is ~115 KB | Feeds `TrackCatalogView` directly, reusing the tested matching logic |
+| Load scratch | `TrackDefinitionBlob` is 16 KB plus one 3.6 KB definition | A file blob must never sit on a task stack |
+
+Parsing is also stack-hungry: `load_track_definition` holds a full `TrackDefinition` in
+its parse state, so any task that loads a track needs roughly 10 KB of stack headroom.
+
+### Selecting a track
+
+`catalog::apply_track` performs the sequence, and its ordering is deliberate:
+
+```text
+read from card -> parse -> check timing readiness -> make_timing_engine_config -> configure
+```
+
+The definition is read, parsed and checked **before** the timing engine is touched, so a
+missing card, an unreadable file or corrupt geometry leaves a previously loaded track
+running untouched. `TimingEngine::configure()` resets on every failure path, so the
+engine is never left partially configured. Provisional geometry is refused outright and
+stays timer-only.
+
+### Degradation
+
+No card, an unreadable card, or no pack directory degrades to timer-only operation and
+the session countdown is unaffected, satisfying the rule that SD failure must not stop
+timing. Once a track is loaded its geometry is resident in device memory, so removing
+the card mid-session does not disturb timing.
+
+A corrupt definition is counted as rejected and skipped rather than aborting the build,
+so one bad file cannot hide an entire card of valid tracks. If a card holds more
+definitions than the catalog can accommodate, the overflow is reported rather than
+silently truncated.
+
+## 7. Loading, projection, and versioning
 
 Every track file includes `schema_version`; the current loader accepts exactly version 3.
 Unsupported versions, malformed JSON, missing fields, out-of-range geometry, capacity
