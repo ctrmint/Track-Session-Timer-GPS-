@@ -29,7 +29,41 @@ This approach reduces enclosure work while the display, GNSS and antenna install
 
 Procurement data belongs in `HARDWARE_BOM.md` and `hardware/bom.csv`; prices and stock must be rechecked before ordering.
 
-## 2. GNSS UART
+## 2. Onboard display, touch and microSD
+
+Verified against the physical board on 2026-08-18 by reading the chip and the vendor
+wiki; the pin table below is the one the firmware encodes.
+
+| Function | Pin | Notes |
+|---|---|---|
+| AMOLED QSPI CS / CLK / D0-D3 | GPIO9 / 10 / 11-14 | `SPI2_HOST` |
+| AMOLED reset | GPIO21 | |
+| AMOLED enable / tearing-effect | EXIO1 / EXIO0 | On the I2C expander; not required for display output |
+| Touch reset | GPIO3 | Touch interrupt (EXIO2) is not used |
+| Shared I2C SDA / SCL | GPIO47 / GPIO48 | Touch, IMU, RTC and the expander |
+| microSD CS / SCLK / MOSI / MISO | GPIO2 / 4 / 5 / 6 | `SPI3_HOST`, SPI mode |
+
+The panel controller is a **Raydium RM690B0**, natively 450 x 600 portrait and rotated
+to the 600 x 450 landscape orientation by `MADCTL 0x36 = 0x30`. There is no RM690B0
+driver in the ESP component registry; its QSPI command set is compatible with
+`espressif/esp_lcd_sh8601`, so the RM690B0 power-on sequence is supplied to that driver
+as a vendor init table. The panel's active area begins at native column 16, which the
+init table's `0x2A` window encodes.
+
+Touch is an **FT6336**, driven through `espressif/esp_lcd_touch_ft5x06`. It reports in
+the panel's native portrait axes, so the landscape mapping is `swap_xy` with `mirror_y`.
+
+The microSD slot is driven in SPI mode on `SPI3_HOST` because `SPI2_HOST` carries the
+panel. The card proved intermittently unmountable at the 20 MHz SDSPI default and is
+clocked at 10 MHz; logging throughput requires far less. A card can also latch into a
+non-responsive state that survives a CPU reset and clears only on a power cycle.
+
+Measured on the board: the LVGL draw buffers are two 600 x 40 RGB565 partial buffers
+(96,000 bytes total) allocated from PSRAM, matching the budget in
+[UI_FOUNDATION.md](UI_FOUNDATION.md). Frame time, CPU load and long-run brightness
+stability are **not yet measured**; those remain open in issue #10.
+
+## 3. GNSS UART
 
 Preferred prototype connection:
 
@@ -45,7 +79,7 @@ Final GPIO numbers are deliberately **not assigned in this planning package**. T
 
 Do not copy pin assignments from another Waveshare board with a similar name.
 
-## 3. UART configuration
+## 4. UART configuration
 
 Initial target:
 
@@ -57,7 +91,7 @@ Initial target:
 
 115200 may be sufficient for a deliberately small set of 20/25 Hz UBX messages, but 230400 gives useful margin for diagnostics and future message additions. Measure actual serial throughput rather than relying only on calculation.
 
-## 4. GNSS update-rate bring-up
+## 5. GNSS update-rate bring-up
 
 Bring the receiver up in this order:
 
@@ -70,7 +104,7 @@ Bring the receiver up in this order:
 
 The project requirement is **20 Hz minimum**. The 25 Hz capability is useful headroom, not permission to compromise reliability.
 
-## 5. GNSS message set
+## 6. GNSS message set
 
 Minimum desired information:
 
@@ -80,7 +114,7 @@ Minimum desired information:
 
 Disable unnecessary high-rate NMEA text output once bring-up is complete. Use UBX binary messages for the normal timing path where practical to reduce bandwidth and parsing overhead.
 
-## 6. RF and antenna rules
+## 7. RF and antenna rules
 
 The selected GPS-17285 already provides an integrated SMA antenna connector.
 
@@ -96,7 +130,7 @@ Therefore:
 
 The final active antenna is not yet selected. It must use a compatible SMA connection and be sourced through a suitable UK procurement route.
 
-## 7. Power
+## 8. Power
 
 Development order:
 
@@ -118,13 +152,13 @@ Record current and rail voltage at:
 - combined display + GNSS + SD load
 - Wi-Fi off and on, even though Wi-Fi is not required during normal track operation
 
-## 8. EMI and Wi-Fi
+## 9. EMI and Wi-Fi
 
 Normal track mode should not require Wi-Fi. If GNSS sensitivity changes materially with Wi-Fi enabled, disable Wi-Fi during active timing and document the measured result.
 
 Do not place the GNSS antenna feed directly alongside noisy power conversion or unnecessary high-speed digital wiring.
 
-## 9. Enclosure environment
+## 10. Enclosure environment
 
 Design for:
 
@@ -139,7 +173,7 @@ Design for:
 
 The final case may benefit from a small visor or an adjustable screen angle if sunlight testing demonstrates a real improvement.
 
-## 10. Hardware acceptance gates
+## 11. Hardware acceptance gates
 
 Before moving to track validation, the prototype must demonstrate:
 

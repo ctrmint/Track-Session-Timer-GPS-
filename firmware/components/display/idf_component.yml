@@ -1,0 +1,5 @@
+dependencies:
+  idf: ">=6.0.0"
+  espressif/esp_lcd_sh8601: "^2.0.0"
+  espressif/esp_lcd_touch_ft5x06: "^1.0.5"
+  lvgl/lvgl: "==9.5.0"
