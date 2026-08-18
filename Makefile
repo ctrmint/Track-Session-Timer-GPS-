@@ -36,13 +36,14 @@ ACTIVE_SESSION_TEST_BINARY := build/host/active_session_test
 DISPLAY_POLICY_TEST_BINARY := build/host/display_policy_test
 IMU_METER_TEST_BINARY := build/host/imu_meter_test
 REST_SESSION_TEST_BINARY := build/host/rest_session_test
+TRACK_CATALOG_TEST_BINARY := build/host/track_catalog_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
+.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
 
-check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test ui-foundation-test navigation-test
+check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -347,6 +348,30 @@ rest-session-test:
 		firmware/components/ui/rest_session.cpp \
 		tests/cpp/test_rest_session.cpp -o $(REST_SESSION_TEST_BINARY)
 	$(REST_SESSION_TEST_BINARY)
+
+track-catalog-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/catalog/include \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
+		-Ifirmware/components/timing/include \
+		-Ifirmware/components/track/include \
+		-Isimulator/include \
+		firmware/components/catalog/track_catalog.cpp \
+		firmware/components/catalog/track_loader.cpp \
+		firmware/components/settings/component.cpp \
+		firmware/components/timing/crossing_time.cpp \
+		firmware/components/timing/crossing_validation.cpp \
+		firmware/components/timing/engine.cpp \
+		firmware/components/timing/intersection.cpp \
+		firmware/components/timing/lap_state_machine.cpp \
+		firmware/components/timing/settings_adapter.cpp \
+		firmware/components/track/definition.cpp \
+		firmware/components/track/projection.cpp \
+		simulator/src/file_track_definition_store.cpp \
+		tests/cpp/test_track_catalog.cpp -o $(TRACK_CATALOG_TEST_BINARY)
+	$(TRACK_CATALOG_TEST_BINARY) data/tracks/synthetic_test_loop.json
 
 ui-foundation-test:
 	mkdir -p build/host
