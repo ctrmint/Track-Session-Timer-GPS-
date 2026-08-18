@@ -8,9 +8,17 @@ This repository is a clean hardware and firmware rebuild of the ideas proven in 
 
 ## Project status
 
-**Planning and bootstrap repository.**
+**Hardware bring-up in progress.**
 
-The repository contains the project plan, architecture, hardware bill of materials, GNSS timing design, UI requirements, test plan, issue backlog and an ESP-IDF firmware skeleton. Hardware-specific display and touch drivers are intentionally not implemented yet. The first development milestone is hardware bring-up on the selected Waveshare board.
+Running on the Waveshare board: the RM690B0 AMOLED panel over QSPI, FT6336 touch, the
+microSD card, and a gesture-driven UI whose track catalog is read from the card at boot.
+
+Not yet implemented: **GNSS**, which is the critical path. There is no receiver driver, so
+the timing engine, lap state machine and logger are exercised only by host tests and have
+never seen a real fix. The IMU and RTC are also not driven yet.
+
+The repository additionally holds the project plan, architecture, hardware bill of
+materials, GNSS timing design, UI requirements, test plan and issue backlog.
 
 ## Target hardware
 
@@ -186,6 +194,11 @@ ignored by Git and all public-map geometry remains timer-only until validated.
 The bootstrap application only proves that the ESP32-S3 toolchain and board connection work. Display, touch and GNSS support are later milestones.
 
 ## Hardware-independent screen simulator
+
+**Frozen. No longer developed.** The simulator lags the device and cannot exercise the
+gesture-driven interaction model the firmware uses. It is kept in CI as a regression
+guard over the shared firmware components it compiles. See
+[CONTRIBUTING.md](CONTRIBUTING.md#the-simulator-is-frozen).
 
 The 600 x 450 LVGL/SDL simulator runs the device presentation model without the
 Waveshare board. On a Linux host with CMake, Ninja, and SDL2 development headers:
