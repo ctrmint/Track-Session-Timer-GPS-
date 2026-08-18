@@ -1,7 +1,10 @@
 #include "track_timer/simulator/file_track_definition_store.hpp"
 
 #include <cctype>
+#include <algorithm>
 #include <fstream>
+#include <string>
+#include <vector>
 #include <system_error>
 
 namespace track_timer::simulator {
@@ -162,6 +165,41 @@ bool FileTrackDefinitionStore::write_atomic(
         return false;
     }
     return true;
+}
+
+track::TrackStoreReadResult FileTrackDefinitionStore::list_track_ids(
+    track::TrackIdList& output) noexcept
+{
+    output = {};
+    std::error_code error;
+    if (!std::filesystem::is_directory(directory_, error) || error) {
+        return track::TrackStoreReadResult::not_found;
+    }
+    // Sorted so the catalog order is deterministic across hosts and filesystems.
+    std::vector<std::string> identifiers;
+    for (const auto& entry : std::filesystem::directory_iterator(directory_, error)) {
+        if (error) {
+            return track::TrackStoreReadResult::io_error;
+        }
+        if (!entry.is_regular_file(error) || error || entry.path().extension() != ".json") {
+            continue;
+        }
+        auto stem = entry.path().stem().string();
+        if (stem.empty() || stem.size() >= track::kTrackIdCapacity) {
+            continue;
+        }
+        identifiers.push_back(std::move(stem));
+    }
+    std::sort(identifiers.begin(), identifiers.end());
+    for (const auto& identifier : identifiers) {
+        ++output.discovered;
+        if (output.count >= output.ids.size()) {
+            continue;
+        }
+        std::copy(identifier.begin(), identifier.end(), output.ids[output.count].begin());
+        ++output.count;
+    }
+    return track::TrackStoreReadResult::loaded;
 }
 
 const std::filesystem::path& FileTrackDefinitionStore::directory() const noexcept

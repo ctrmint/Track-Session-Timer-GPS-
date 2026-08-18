@@ -144,8 +144,9 @@ std::size_t list_entries(char names[][64], const std::size_t capacity) noexcept
 
 namespace {
 
-// Depth- and count-bounded so a pathological card cannot hang the boot.
-constexpr int kMaxWalkDepth = 6;
+// Recurses, so the per-frame footprint is kept deliberately small: a 280-byte buffer at
+// depth 6 overflowed the main task stack once the card held nested pack directories.
+constexpr int kMaxWalkDepth = 3;
 constexpr std::uint32_t kMaxWalkEntries = 20'000;
 
 void walk(const char* path, int depth, MediaSurvey& survey) noexcept
@@ -161,8 +162,8 @@ void walk(const char* path, int depth, MediaSurvey& survey) noexcept
         if (entry->d_name[0] == '.') {
             continue;
         }
-        char child[280]{};
-        std::snprintf(child, sizeof(child), "%.180s/%.90s", path, entry->d_name);
+        char child[160]{};
+        std::snprintf(child, sizeof(child), "%.100s/%.50s", path, entry->d_name);
         struct stat details {};
         if (stat(child, &details) != 0) {
             continue;

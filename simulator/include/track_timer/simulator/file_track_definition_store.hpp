@@ -6,7 +6,8 @@
 
 namespace track_timer::simulator {
 
-class FileTrackDefinitionStore final : public track::TrackDefinitionStore {
+class FileTrackDefinitionStore final : public track::TrackDefinitionStore,
+                                       public track::TrackCatalogSource {
   public:
     explicit FileTrackDefinitionStore(std::filesystem::path directory);
 
@@ -16,6 +17,8 @@ class FileTrackDefinitionStore final : public track::TrackDefinitionStore {
     [[nodiscard]] bool write_atomic(
         std::string_view track_id,
         const track::TrackDefinitionBlob& blob) noexcept override;
+    [[nodiscard]] track::TrackStoreReadResult list_track_ids(
+        track::TrackIdList& output) noexcept override;
     [[nodiscard]] const std::filesystem::path& directory() const noexcept;
 
   private:

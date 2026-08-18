@@ -13,6 +13,8 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - FT6336 touch input registered as an LVGL pointer device
 - on-device screen routing for the ready, setup, review and diagnostics screens
 - microSD mount, inspection and opt-in format support
+- microSD-backed track catalog: packs are read from the card at boot
+- track loader that applies a selected definition to the timing engine
 - containerised flash, monitor and device-info make targets
 - initial repository architecture
 - hardware BOM
