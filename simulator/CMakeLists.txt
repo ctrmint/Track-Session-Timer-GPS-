@@ -60,6 +60,8 @@ add_library(
     ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/imu_meter.cpp
     ../firmware/components/ui/navigation.cpp
+    ../firmware/components/ui/input.cpp
+    ../firmware/components/ui/shell_navigation.cpp
     ../firmware/components/ui/presenter.cpp
     ../firmware/components/ui/rest_session.cpp
     ../firmware/components/ui/session_review.cpp
@@ -110,7 +112,9 @@ target_compile_features(track_timer_simulator_model PUBLIC cxx_std_17)
 
 add_library(
     track_timer_lvgl_ui
+    ../firmware/components/ui/carousel_screen.cpp
     ../firmware/components/ui/diagnostics_screen.cpp
+    ../firmware/components/ui/gesture_input.cpp
     ../firmware/components/ui/gate_capture_screen.cpp
     ../firmware/components/ui/g_meter_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp

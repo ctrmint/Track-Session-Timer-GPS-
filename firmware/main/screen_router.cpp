@@ -7,13 +7,16 @@
 #include "track_timer/diagnostics/snapshot.hpp"
 #include "track_timer/display/panel.hpp"
 #include "track_timer/ui/diagnostics.hpp"
+#include "track_timer/ui/carousel_screen.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
+#include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
 #include "track_timer/ui/session_review.hpp"
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
+#include "track_timer/ui/shell_navigation.hpp"
 
 #include <lvgl.h>
 
@@ -89,6 +92,27 @@ ui::ReadySnapshot ready_snapshot() noexcept
     return snapshot;
 }
 
+// LVGL's symbol set covers these top levels. The settings level still needs the custom
+// icon font tracked in issue #128.
+// Icons are colour-coded by function so the destination reads before the label does:
+// amber for adjustment, azure for stored data and position, green for health.
+constexpr std::uint32_t kAmber = 0xFFB020;
+constexpr std::uint32_t kAzure = 0x35B0FF;
+constexpr std::uint32_t kGreen = 0x3FC98A;
+constexpr std::uint32_t kViolet = 0xB06CFF;
+
+constexpr ui::CarouselEntry kMenuEntries[] = {
+    {LV_SYMBOL_SETTINGS, "SETUP", kAmber},
+    {LV_SYMBOL_LIST, "REVIEW", kAzure},
+    {LV_SYMBOL_EYE_OPEN, "DIAGNOSTICS", kGreen},
+};
+
+constexpr ui::CarouselEntry kSetupEntries[] = {
+    {LV_SYMBOL_EDIT, "DEVICE SETTINGS", kAmber},
+    {LV_SYMBOL_GPS, "TRACK SELECTION", kAzure},
+    {LV_SYMBOL_REFRESH, "G-METER", kViolet},
+};
+
 class ScreenRouter {
   public:
     [[nodiscard]] bool build() noexcept
@@ -108,6 +132,21 @@ class ScreenRouter {
             screen_for(ui::Destination::review), on_review, this);
         diagnostics_ = new (diagnostics_storage_) ui::DiagnosticsScreen(
             screen_for(ui::Destination::diagnostics), on_diagnostics, this);
+
+        // The gated menu lives on its own screen so the Ready dashboard keeps the whole
+        // panel for the timer.
+        carousel_root_ = lv_obj_create(nullptr);
+        if (carousel_root_ == nullptr) {
+            return false;
+        }
+        carousel_ = new (carousel_storage_)
+            ui::CarouselScreen(carousel_root_, on_input, this);
+        carousel_->set_entries(kMenuEntries, 3);
+
+        // A hold anywhere on the Ready dashboard opens the menu; the carousel screen
+        // takes swipes, presses and the back gesture.
+        ui::attach_gesture_input(screen_for(ui::Destination::ready), on_input, this);
+        ui::attach_gesture_input(carousel_root_, on_input, this);
 
         ready_->update(ui::present_ready(ready_snapshot()));
         review_controller_.begin(nullptr);  // no storage backend yet
@@ -136,6 +175,9 @@ class ScreenRouter {
             diagnostics_controller_.update(device_snapshot());
             diagnostics_->update(diagnostics_controller_.view_model());
         }
+        if (result.current == ui::Destination::ready) {
+            shell_.close();
+        }
         if (auto* target = screen_for(result.current); target != nullptr) {
             lv_screen_load(target);
         }
@@ -144,6 +186,56 @@ class ScreenRouter {
     static void on_ready(const ui::NavigationAction action, void* context) noexcept
     {
         static_cast<ScreenRouter*>(context)->go(action);
+    }
+
+    static void on_input(const ui::InputAction action, void* context) noexcept
+    {
+        static_cast<ScreenRouter*>(context)->handle_input(action);
+    }
+
+    void handle_input(const ui::InputAction action) noexcept
+    {
+        const auto result = shell_.dispatch(action);
+        switch (result.outcome) {
+        case ui::ShellOutcome::menu_opened:
+            carousel_->set_entries(kMenuEntries, 3);
+            carousel_->set_title("MENU");
+            carousel_->set_position(static_cast<std::size_t>(result.state.menu_item));
+            lv_screen_load(carousel_root_);
+            break;
+        case ui::ShellOutcome::moved:
+            carousel_->set_position(
+                result.state.level == ui::ShellLevel::menu
+                    ? static_cast<std::size_t>(result.state.menu_item)
+                    : static_cast<std::size_t>(result.state.setup_item));
+            break;
+        case ui::ShellOutcome::entered:
+            if (result.state.level == ui::ShellLevel::section) {
+                // Setup descends into its own carousel rather than leaving the shell.
+                carousel_->set_entries(kSetupEntries, 3);
+                carousel_->set_title("SETUP");
+                carousel_->set_position(
+                    static_cast<std::size_t>(result.state.setup_item));
+                break;
+            }
+            if (result.emits_action) {
+                go(result.action);
+            }
+            break;
+        case ui::ShellOutcome::exited:
+            if (result.state.level == ui::ShellLevel::menu) {
+                carousel_->set_entries(kMenuEntries, 3);
+                carousel_->set_title("MENU");
+                carousel_->set_position(
+                    static_cast<std::size_t>(result.state.menu_item));
+                break;
+            }
+            lv_screen_load(screen_for(ui::Destination::ready));
+            break;
+        case ui::ShellOutcome::refused_session_active:
+        case ui::ShellOutcome::ignored:
+            break;
+        }
     }
 
     static void on_setup(const ui::SetupMenuAction action, void* context) noexcept
@@ -201,6 +293,7 @@ class ScreenRouter {
     }
 
     ui::NavigationController navigation_{};
+    ui::ShellNavigation shell_{};
     ui::SessionReviewController review_controller_{};
     ui::DiagnosticsController diagnostics_controller_{};
     std::array<lv_obj_t*, 6> screens_{};
@@ -209,6 +302,8 @@ class ScreenRouter {
     ui::SetupMenuScreen* setup_{nullptr};
     ui::SessionReviewScreen* review_{nullptr};
     ui::DiagnosticsScreen* diagnostics_{nullptr};
+    ui::CarouselScreen* carousel_{nullptr};
+    lv_obj_t* carousel_root_{nullptr};
 
     alignas(ui::ReadyScreen) std::byte ready_storage_[sizeof(ui::ReadyScreen)]{};
     alignas(ui::SetupMenuScreen) std::byte setup_storage_[sizeof(ui::SetupMenuScreen)]{};
@@ -216,6 +311,7 @@ class ScreenRouter {
         review_storage_[sizeof(ui::SessionReviewScreen)]{};
     alignas(ui::DiagnosticsScreen) std::byte
         diagnostics_storage_[sizeof(ui::DiagnosticsScreen)]{};
+    alignas(ui::CarouselScreen) std::byte carousel_storage_[sizeof(ui::CarouselScreen)]{};
 };
 
 ScreenRouter router{};
