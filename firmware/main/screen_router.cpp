@@ -1,6 +1,7 @@
 #include "screen_router.hpp"
 
 #include "esp_app_desc.h"
+#include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -17,6 +18,8 @@
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
 #include "track_timer/ui/shell_navigation.hpp"
+#include "track_timer/ui/device_mode.hpp"
+#include "track_timer/ui/value_picker.hpp"
 
 #include <lvgl.h>
 
@@ -100,11 +103,47 @@ constexpr std::uint32_t kAmber = 0xFFB020;
 constexpr std::uint32_t kAzure = 0x35B0FF;
 constexpr std::uint32_t kGreen = 0x3FC98A;
 constexpr std::uint32_t kViolet = 0xB06CFF;
+constexpr std::uint32_t kRuby = 0xFF8FA3;
+
+// The settings level has no dedicated glyphs in LVGL's built-in set, so related fields
+// share an icon. The custom icon font remains open in #128.
+[[nodiscard]] const char* icon_for(const ui::SettingsField field) noexcept
+{
+    switch (field) {
+    case ui::SettingsField::session_duration:
+    case ui::SettingsField::rest_duration:
+    case ui::SettingsField::average_lap:
+        return LV_SYMBOL_LOOP;
+    case ui::SettingsField::launch_sensitivity:
+        return LV_SYMBOL_CHARGE;
+    case ui::SettingsField::day_brightness:
+    case ui::SettingsField::night_brightness:
+    case ui::SettingsField::auto_dim:
+        return LV_SYMBOL_EYE_OPEN;
+    case ui::SettingsField::lower_display:
+        return LV_SYMBOL_LIST;
+    case ui::SettingsField::lap_boundary:
+    case ui::SettingsField::pit_exit_auto_start:
+    case ui::SettingsField::pit_entry_auto_stop:
+        return LV_SYMBOL_GPS;
+    default:
+        return LV_SYMBOL_REFRESH;
+    }
+}
 
 constexpr ui::CarouselEntry kMenuEntries[] = {
+    {LV_SYMBOL_POWER, "MODE", kRuby},
     {LV_SYMBOL_SETTINGS, "SETUP", kAmber},
     {LV_SYMBOL_LIST, "REVIEW", kAzure},
     {LV_SYMBOL_EYE_OPEN, "DIAGNOSTICS", kGreen},
+};
+
+// Track Day is first: it is the safe default, since it withholds the live lap times that
+// many track-day regulations prohibit.
+constexpr ui::CarouselEntry kModeEntries[] = {
+    {LV_SYMBOL_LOOP, "TRACK DAY", kGreen},
+    {LV_SYMBOL_PLAY, "RACE", kRuby},
+    {LV_SYMBOL_CHARGE, "G-ONLY", kViolet},
 };
 
 constexpr ui::CarouselEntry kSetupEntries[] = {
@@ -124,8 +163,11 @@ class ScreenRouter {
             }
         }
 
+        // Setup, Review and Diagnostics are reached by holding the dashboard, so their
+        // buttons are gone and Start has the space to itself.
         ready_ = new (ready_storage_)
-            ui::ReadyScreen(screen_for(ui::Destination::ready), on_ready, this);
+            ui::ReadyScreen(screen_for(ui::Destination::ready), on_ready, this,
+                            ui::ReadyControls::start_only);
         setup_ = new (setup_storage_)
             ui::SetupMenuScreen(screen_for(ui::Destination::setup), on_setup, this);
         review_ = new (review_storage_) ui::SessionReviewScreen(
@@ -141,7 +183,7 @@ class ScreenRouter {
         }
         carousel_ = new (carousel_storage_)
             ui::CarouselScreen(carousel_root_, on_input, this);
-        carousel_->set_entries(kMenuEntries, 3);
+        carousel_->set_entries(kMenuEntries, 4);
 
         // A hold anywhere on the Ready dashboard opens the menu; the carousel screen
         // takes swipes, presses and the back gesture.
@@ -193,48 +235,137 @@ class ScreenRouter {
         static_cast<ScreenRouter*>(context)->handle_input(action);
     }
 
+    void show_menu(const ui::ShellState& state) noexcept
+    {
+        carousel_->set_entries(kMenuEntries, 4);
+        carousel_->set_title("MENU");
+        carousel_->set_position(state.menu_index);
+    }
+
+    void show_section(const ui::ShellState& state) noexcept
+    {
+        const auto mode = shell_.menu_item() == ui::MenuItem::mode;
+        carousel_->set_entries(mode ? kModeEntries : kSetupEntries, 3);
+        // Showing the live mode in the title means the driver can see what is selected
+        // before changing it, rather than having to remember.
+        carousel_->set_title(mode ? ui::device_mode_label(
+                                        ui::mode_from_settings(settings_))
+                                  : "SETUP");
+        carousel_->set_position(state.section_index);
+    }
+
+    void show_fields(const ui::ShellState& state) noexcept
+    {
+        for (std::size_t index = 0; index < ui::kPickerFields.size(); ++index) {
+            const auto field = ui::kPickerFields[index];
+            field_entries_[index] = {icon_for(field), ui::picker_field_label(field),
+                                     kAmber};
+        }
+        carousel_->set_entries(field_entries_.data(), field_entries_.size());
+        carousel_->set_title("DEVICE SETTINGS");
+        carousel_->set_position(state.field_index);
+    }
+
+    // Every value the field accepts, each one press away. This is what replaces the
+    // increment/decrement stepping that needed up to 150 presses for an average lap.
+    void show_values(const ui::ShellState& state, const bool reset_to_current) noexcept
+    {
+        const auto field = ui::kPickerFields[state.field_index];
+        const auto list = ui::choices_for(field, settings_);
+        for (std::size_t index = 0; index < list.count; ++index) {
+            value_text_[index] = list.choices[index].text;
+            value_entries_[index] = {icon_for(field), value_text_[index].data(), kAzure};
+        }
+        shell_.set_value_count(list.count);
+        carousel_->set_entries(value_entries_.data(), list.count);
+        carousel_->set_title(ui::picker_field_label(field));
+        carousel_->set_position(reset_to_current ? list.selected : state.value_index);
+        if (reset_to_current) {
+            shell_.select_value(list.selected);
+        }
+    }
+
     void handle_input(const ui::InputAction action) noexcept
     {
         const auto result = shell_.dispatch(action);
         switch (result.outcome) {
         case ui::ShellOutcome::menu_opened:
-            carousel_->set_entries(kMenuEntries, 3);
-            carousel_->set_title("MENU");
-            carousel_->set_position(static_cast<std::size_t>(result.state.menu_item));
+            show_menu(result.state);
             lv_screen_load(carousel_root_);
             break;
         case ui::ShellOutcome::moved:
-            carousel_->set_position(
-                result.state.level == ui::ShellLevel::menu
-                    ? static_cast<std::size_t>(result.state.menu_item)
-                    : static_cast<std::size_t>(result.state.setup_item));
+            carousel_->set_position(position_for(result.state));
             break;
         case ui::ShellOutcome::entered:
-            if (result.state.level == ui::ShellLevel::section) {
-                // Setup descends into its own carousel rather than leaving the shell.
-                carousel_->set_entries(kSetupEntries, 3);
-                carousel_->set_title("SETUP");
-                carousel_->set_position(
-                    static_cast<std::size_t>(result.state.setup_item));
+            switch (result.state.level) {
+            case ui::ShellLevel::section:
+                show_section(result.state);
                 break;
-            }
-            if (result.emits_action) {
-                go(result.action);
+            case ui::ShellLevel::field:
+                show_fields(result.state);
+                break;
+            case ui::ShellLevel::value:
+                show_values(result.state, true);
+                break;
+            default:
+                if (result.emits_action) {
+                    go(result.action);
+                }
+                break;
             }
             break;
+        case ui::ShellOutcome::mode_selected:
+            ui::apply_mode(static_cast<ui::DeviceMode>(result.state.section_index),
+                           settings_);
+            ESP_LOGI("track_timer", "mode: %s",
+                     ui::device_mode_name(ui::mode_from_settings(settings_)));
+            shell_.close();
+            lv_screen_load(screen_for(ui::Destination::ready));
+            break;
+        case ui::ShellOutcome::value_selected:
+            if (ui::apply_choice(ui::kPickerFields[result.state.field_index],
+                                 result.state.value_index, settings_)) {
+                ESP_LOGI("track_timer", "set %s",
+                         ui::picker_field_label(
+                             ui::kPickerFields[result.state.field_index]));
+            }
+            show_values(result.state, true);
+            break;
         case ui::ShellOutcome::exited:
-            if (result.state.level == ui::ShellLevel::menu) {
-                carousel_->set_entries(kMenuEntries, 3);
-                carousel_->set_title("MENU");
-                carousel_->set_position(
-                    static_cast<std::size_t>(result.state.menu_item));
+            switch (result.state.level) {
+            case ui::ShellLevel::menu:
+                show_menu(result.state);
+                break;
+            case ui::ShellLevel::section:
+                show_section(result.state);
+                break;
+            case ui::ShellLevel::field:
+                show_fields(result.state);
+                break;
+            default:
+                lv_screen_load(screen_for(ui::Destination::ready));
                 break;
             }
-            lv_screen_load(screen_for(ui::Destination::ready));
             break;
         case ui::ShellOutcome::refused_session_active:
         case ui::ShellOutcome::ignored:
             break;
+        }
+    }
+
+    [[nodiscard]] static std::size_t position_for(const ui::ShellState& state) noexcept
+    {
+        switch (state.level) {
+        case ui::ShellLevel::menu:
+            return state.menu_index;
+        case ui::ShellLevel::section:
+            return state.section_index;
+        case ui::ShellLevel::field:
+            return state.field_index;
+        case ui::ShellLevel::value:
+            return state.value_index;
+        default:
+            return 0;
         }
     }
 
@@ -293,7 +424,12 @@ class ScreenRouter {
     }
 
     ui::NavigationController navigation_{};
-    ui::ShellNavigation shell_{};
+    ui::ShellNavigation shell_{ui::kPickerFields.size()};
+    settings::DeviceSettings settings_{};
+    std::array<ui::CarouselEntry, ui::kPickerFields.size()> field_entries_{};
+    std::array<ui::CarouselEntry, ui::kValueChoiceCapacity> value_entries_{};
+    std::array<std::array<char, ui::kValueTextCapacity>, ui::kValueChoiceCapacity>
+        value_text_{};
     ui::SessionReviewController review_controller_{};
     ui::DiagnosticsController diagnostics_controller_{};
     std::array<lv_obj_t*, 6> screens_{};
