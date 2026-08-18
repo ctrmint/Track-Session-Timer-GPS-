@@ -84,6 +84,31 @@ void flush(lv_display_t* display, const lv_area_t* area, std::uint8_t* pixels) n
     }
 }
 
+// The RM690B0 addresses its frame memory in 2-pixel units, and esp_lcd_sh8601 passes the
+// window straight through without enforcing that. An odd column start or an odd width
+// therefore makes the panel interpret the pixel stream with the wrong stride, which
+// renders as horizontal bands each shifted further than the last.
+//
+// A full-screen redraw happens to satisfy the alignment (0..599), which is why the first
+// screens looked correct and only partial redraws broke.
+void round_invalidated_area(lv_event_t* event) noexcept
+{
+    auto* area = static_cast<lv_area_t*>(lv_event_get_param(event));
+    if (area == nullptr) {
+        return;
+    }
+    area->x1 &= ~1;              // start on an even column
+    area->x2 |= 1;               // end on an odd column, so the width is even
+    area->y1 &= ~1;
+    area->y2 |= 1;
+    if (area->x2 >= kPanelWidthPx) {
+        area->x2 = kPanelWidthPx - 1;
+    }
+    if (area->y2 >= kPanelHeightPx) {
+        area->y2 = kPanelHeightPx - 1;
+    }
+}
+
 void tick(void*) noexcept { lv_tick_inc(kLvglTickPeriodMs); }
 
 void lvgl_task(void*) noexcept
@@ -196,6 +221,8 @@ PanelResult start_panel() noexcept
     lv_display_set_buffers(lvgl_display, first, second, kDrawBufferBytes,
                            LV_DISPLAY_RENDER_MODE_PARTIAL);
     lv_display_set_flush_cb(lvgl_display, flush);
+    lv_display_add_event_cb(lvgl_display, round_invalidated_area,
+                            LV_EVENT_INVALIDATE_AREA, nullptr);
 
     const esp_timer_create_args_t tick_args{tick, nullptr, ESP_TIMER_TASK, "lvgl_tick",
                                             true};
