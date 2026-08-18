@@ -19,8 +19,9 @@ lv_obj_t* make_value_panel(lv_obj_t* parent, const std::int32_t x, const std::in
 }  // namespace
 
 ReadyScreen::ReadyScreen(lv_obj_t* root, const NavigationCallback callback,
-                         void* callback_context) noexcept
-    : callback_(callback), callback_context_(callback_context), root_(root)
+                         void* callback_context, const ReadyControls controls) noexcept
+    : callback_(callback), callback_context_(callback_context), root_(root),
+      controls_(controls)
 {
     style_screen(root_);
 
@@ -62,6 +63,20 @@ ReadyScreen::ReadyScreen(lv_obj_t* root, const NavigationCallback callback,
     lv_obj_set_pos(timing_mode_label_, 20, 205);
     lv_obj_set_size(timing_mode_label_, 560, 34);
 
+    if (controls_ == ReadyControls::start_only) {
+        // Start takes the space the three secondary buttons occupied. The rest of the
+        // dashboard is left clear so a hold has somewhere to land: a press on a button
+        // is consumed by that button and never reaches the screen's gesture handler.
+        buttons_[0] = create_button(0, NavigationAction::start_session,
+                                    LV_SYMBOL_PLAY " START", 20, 265, 560, 120,
+                                    color::positive);
+        hold_hint_ = create_label(root_, Typography::caption, color::text_secondary);
+        lv_label_set_text(hold_hint_, "hold anywhere for Mode, Setup, Review, Diagnostics");
+        lv_obj_set_pos(hold_hint_, 20, 398);
+        lv_obj_set_size(hold_hint_, 560, 30);
+        return;
+    }
+
     buttons_[0] = create_button(0, NavigationAction::start_session, LV_SYMBOL_PLAY " START",
                                 20, 265, 200, 165, color::positive);
     buttons_[1] = create_button(1, NavigationAction::open_setup, LV_SYMBOL_SETTINGS " SETUP",
@@ -92,18 +107,22 @@ void ReadyScreen::update(const ReadyViewModel& model) noexcept
                                     lv_color_hex(items[index]->color_rgb), 0);
     }
 
-    if (model.setup_enabled) {
-        lv_obj_remove_state(buttons_[1], LV_STATE_DISABLED);
-    }
-    else {
-        lv_obj_add_state(buttons_[1], LV_STATE_DISABLED);
+    if (buttons_[1] != nullptr) {
+        if (model.setup_enabled) {
+            lv_obj_remove_state(buttons_[1], LV_STATE_DISABLED);
+        }
+        else {
+            lv_obj_add_state(buttons_[1], LV_STATE_DISABLED);
+        }
     }
 }
 
 void ReadyScreen::add_buttons_to_group(lv_group_t* group) noexcept
 {
     for (auto* button : buttons_) {
-        lv_group_add_obj(group, button);
+        if (button != nullptr) {
+            lv_group_add_obj(group, button);
+        }
     }
 }
 
