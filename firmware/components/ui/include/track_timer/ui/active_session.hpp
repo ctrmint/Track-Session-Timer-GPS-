@@ -48,14 +48,43 @@ struct StopControlViewModel {
 struct ActiveSessionDisplayConfig {
     std::uint16_t average_lap_seconds{0};
     bool trackday_mode_enabled{false};
+    // Appended, not inserted: this struct is aggregate-initialised at call sites, so
+    // adding a field in the middle silently reassigns every positional initialiser.
+    // Needed for the decaying bar and the proportional part of the colour ramp, since
+    // remaining time alone cannot say what fraction of the session is left.
+    std::uint16_t session_duration_minutes{0};
+};
+
+// Urgency bands for the countdown. Named rather than raw colours so the thresholds are
+// testable without pinning the palette.
+enum class SessionUrgency : std::uint8_t {
+    ample,     // green
+    easing,    // yellow
+    closing,   // amber
+    urgent,    // orange
+    critical,  // red
+    overtime,
 };
 
 struct TrackdayModeViewModel {
     std::array<char, 32> countdown{};
     std::array<char, 24> estimated_laps{};
+    // 1.0 at the start of a session falling to 0.0 at its end, for the decaying bar.
+    float remaining_ratio{0.0F};
+    SessionUrgency urgency{SessionUrgency::ample};
     bool estimate_available{false};
     bool visible{false};
 };
+
+// Blends a proportional ramp with an absolute floor. Proportion alone would leave a
+// 60-minute session green with four minutes to run; absolute alone would open a
+// 20-minute session already amber. The more urgent of the two wins.
+[[nodiscard]] SessionUrgency session_urgency(std::int64_t remaining_ms,
+                                             std::int64_t total_ms) noexcept;
+[[nodiscard]] float session_remaining_ratio(std::int64_t remaining_ms,
+                                            std::int64_t total_ms) noexcept;
+[[nodiscard]] std::uint32_t urgency_rgb(SessionUrgency urgency) noexcept;
+[[nodiscard]] const char* session_urgency_name(SessionUrgency urgency) noexcept;
 
 struct ActiveSessionViewModel {
     DeviceViewModel timing{};

@@ -66,6 +66,98 @@ void format_estimated_laps(TrackdayModeViewModel& model,
 
 }  // namespace
 
+float session_remaining_ratio(const std::int64_t remaining_ms,
+                              const std::int64_t total_ms) noexcept
+{
+    if (total_ms <= 0 || remaining_ms == domain::kUnavailableTime || remaining_ms <= 0) {
+        return 0.0F;
+    }
+    const auto ratio = static_cast<float>(remaining_ms) / static_cast<float>(total_ms);
+    return ratio > 1.0F ? 1.0F : ratio;
+}
+
+SessionUrgency session_urgency(const std::int64_t remaining_ms,
+                               const std::int64_t total_ms) noexcept
+{
+    if (remaining_ms == domain::kUnavailableTime) {
+        return SessionUrgency::ample;
+    }
+    if (remaining_ms <= 0) {
+        return SessionUrgency::overtime;
+    }
+
+    // Absolute floor, deliberately covering only the genuinely final minutes. Wider
+    // absolute bands defeat the proportional ramp entirely: a 20 minute session begins
+    // with 20 minutes left, so a 20 minute threshold would open it already yellow.
+    auto absolute = SessionUrgency::ample;
+    if (remaining_ms <= 2 * 60'000) {
+        absolute = SessionUrgency::critical;
+    }
+    else if (remaining_ms <= 5 * 60'000) {
+        absolute = SessionUrgency::urgent;
+    }
+
+    // Proportional ramp, so a short session still walks through every band rather than
+    // opening amber and staying there.
+    const auto ratio = session_remaining_ratio(remaining_ms, total_ms);
+    auto proportional = SessionUrgency::ample;
+    if (total_ms > 0) {
+        if (ratio <= 0.10F) {
+            proportional = SessionUrgency::critical;
+        }
+        else if (ratio <= 0.25F) {
+            proportional = SessionUrgency::urgent;
+        }
+        else if (ratio <= 0.45F) {
+            proportional = SessionUrgency::closing;
+        }
+        else if (ratio <= 0.70F) {
+            proportional = SessionUrgency::easing;
+        }
+    }
+
+    return static_cast<std::uint8_t>(absolute) >= static_cast<std::uint8_t>(proportional)
+               ? absolute
+               : proportional;
+}
+
+std::uint32_t urgency_rgb(const SessionUrgency urgency) noexcept
+{
+    switch (urgency) {
+    case SessionUrgency::ample:
+        return 0x2FD16D;
+    case SessionUrgency::easing:
+        return 0xF2E44B;
+    case SessionUrgency::closing:
+        return 0xFFC02E;
+    case SessionUrgency::urgent:
+        return 0xFF8A24;
+    case SessionUrgency::critical:
+    case SessionUrgency::overtime:
+        return 0xFF3B30;
+    }
+    return 0xFFFFFF;
+}
+
+const char* session_urgency_name(const SessionUrgency urgency) noexcept
+{
+    switch (urgency) {
+    case SessionUrgency::ample:
+        return "ample";
+    case SessionUrgency::easing:
+        return "easing";
+    case SessionUrgency::closing:
+        return "closing";
+    case SessionUrgency::urgent:
+        return "urgent";
+    case SessionUrgency::critical:
+        return "critical";
+    case SessionUrgency::overtime:
+        return "overtime";
+    }
+    return "unknown";
+}
+
 void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
                                      const std::uint64_t now_ms,
                                      const ActiveSessionDisplayConfig& display) noexcept
@@ -93,6 +185,12 @@ void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
         view_.trackday.countdown = view_.timing.session_remaining;
         format_estimated_laps(view_.trackday, snapshot.session_remaining_ms,
                               display.average_lap_seconds);
+        const auto total_ms =
+            static_cast<std::int64_t>(display.session_duration_minutes) * 60'000;
+        view_.trackday.remaining_ratio =
+            session_remaining_ratio(snapshot.session_remaining_ms, total_ms);
+        view_.trackday.urgency =
+            session_urgency(snapshot.session_remaining_ms, total_ms);
         view_.timing.lap_label.fill('\0');
         view_.timing.current_lap.fill('\0');
         view_.timing.previous_lap.fill('\0');
