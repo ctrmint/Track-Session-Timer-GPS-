@@ -88,6 +88,10 @@ CarouselScreen::CarouselScreen(lv_obj_t* const root, const InputCallback callbac
         chevrons_[index] = button;
     }
 
+    position_text_ = create_label(root_, Typography::caption, kMutedRgb);
+    lv_obj_align(position_text_, LV_ALIGN_BOTTOM_MID, 0, -44);
+    lv_obj_add_flag(position_text_, LV_OBJ_FLAG_HIDDEN);
+
     for (auto*& dot : dots_) {
         dot = lv_obj_create(root_);
         lv_obj_set_size(dot, kDotSize, kDotSize);
@@ -145,8 +149,20 @@ void CarouselScreen::refresh() noexcept
     lv_obj_set_style_text_color(icon_, lv_color_hex(entry.icon_rgb), 0);
     lv_label_set_text(label_, entry.label == nullptr ? "" : entry.label);
 
-    const auto total_width =
-        static_cast<std::int32_t>(count_ - 1) * kDotSpacing;
+    // A long list gets a counter; dots stop conveying position once there are too many
+    // to distinguish at a glance.
+    if (count_ > kCarouselMaximumDots) {
+        for (auto* dot : dots_) {
+            lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_remove_flag(position_text_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text_fmt(position_text_, "%u / %u",
+                              static_cast<unsigned>(index_ + 1),
+                              static_cast<unsigned>(count_));
+        return;
+    }
+    lv_obj_add_flag(position_text_, LV_OBJ_FLAG_HIDDEN);
+    const auto total_width = static_cast<std::int32_t>(count_ - 1) * kDotSpacing;
     for (std::size_t index = 0; index < dots_.size(); ++index) {
         auto* dot = dots_[index];
         if (index >= count_) {
