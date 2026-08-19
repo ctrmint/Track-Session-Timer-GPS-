@@ -30,6 +30,8 @@ The project follows Semantic Versioning once the first firmware release is tagge
   sensor scale
 - radar-style G meter used as the G-Only display
 - device settings persisted in NVS, so Mode survives a reboot
+- top-level track selection that loads the chosen circuit and arms the timing engine
+- the selected circuit and its timing readiness are shown on the start page
 - top-level Mode selection: Track Day, Race and G-Only
 - one-press direct value selection for device settings, replacing increment stepping
 - press-and-hold gated menu with swipe carousels for Mode, Setup, Review and Diagnostics
