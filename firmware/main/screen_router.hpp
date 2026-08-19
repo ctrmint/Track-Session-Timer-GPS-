@@ -10,4 +10,7 @@ namespace track_timer::main_app {
 
 [[nodiscard]] bool start_screen_router() noexcept;
 
+// Refreshes IMU-driven views. Called from the LVGL service task, which owns LVGL.
+void service_screen_router() noexcept;
+
 }  // namespace track_timer::main_app

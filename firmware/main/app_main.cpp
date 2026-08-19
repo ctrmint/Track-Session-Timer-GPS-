@@ -6,6 +6,7 @@
 #include "track_timer/domain/contracts.hpp"
 #include "track_timer/catalog/track_catalog.hpp"
 #include "track_timer/catalog/track_loader.hpp"
+#include "track_timer/imu/qmi8658.hpp"
 #include "track_timer/storage/sd_card.hpp"
 #include "track_timer/storage/sd_track_store.hpp"
 #include "track_timer/timing/engine.hpp"
@@ -30,6 +31,9 @@ extern "C" void app_main(void)
 
     const auto touch = track_timer::display::start_touch();
     ESP_LOGI(kTag, "touch: %s", track_timer::display::touch_result_name(touch));
+
+    const auto imu = track_timer::imu::start();
+    ESP_LOGI(kTag, "imu: %s", track_timer::imu::imu_start_result_name(imu));
 
     // Inspection only: format_if_unreadable stays false so that simply booting can
     // never destroy the contents of a card.
@@ -138,6 +142,7 @@ extern "C" void app_main(void)
         return;
     }
 
+    track_timer::display::set_service_callback(track_timer::main_app::service_screen_router);
     ESP_LOGI(kTag, "ready screen presented on the 600x450 panel");
     ESP_LOGI(kTag, "GNSS, storage and IMU drivers are not implemented yet");
 }

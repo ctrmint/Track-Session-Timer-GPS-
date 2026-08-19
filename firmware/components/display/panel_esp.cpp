@@ -62,6 +62,7 @@ esp_lcd_panel_io_handle_t io_handle = nullptr;
 esp_lcd_panel_handle_t panel_handle = nullptr;
 SemaphoreHandle_t lvgl_mutex = nullptr;
 esp_timer_handle_t tick_timer = nullptr;
+ServiceCallback service_callback = nullptr;
 bool started = false;
 
 bool flush_ready(esp_lcd_panel_io_handle_t, esp_lcd_panel_io_event_data_t*, void*) noexcept
@@ -116,6 +117,9 @@ void lvgl_task(void*) noexcept
     auto delay_ms = kLvglMinDelayMs;
     for (;;) {
         if (lock(portMAX_DELAY)) {
+            if (service_callback != nullptr) {
+                service_callback();
+            }
             delay_ms = lv_timer_handler();
             unlock();
         }
@@ -238,6 +242,11 @@ PanelResult start_panel() noexcept
 
     started = true;
     return PanelResult::ready;
+}
+
+void set_service_callback(const ServiceCallback callback) noexcept
+{
+    service_callback = callback;
 }
 
 bool panel_ready() noexcept { return started; }

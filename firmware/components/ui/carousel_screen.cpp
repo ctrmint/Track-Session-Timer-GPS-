@@ -1,5 +1,6 @@
 #include "track_timer/ui/carousel_screen.hpp"
 
+#include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/lvgl_visual_system.hpp"
 
 #include <algorithm>
@@ -13,12 +14,19 @@ constexpr std::int32_t kChevronWidth = 96;   // comfortably beyond the 56 px min
 constexpr std::int32_t kDotSize = 14;
 constexpr std::int32_t kDotSpacing = 30;
 
-// LVGL's largest built-in font is 48 px, which is only about 3.9 mm on this 311 PPI
-// panel. Scaling the glyph is a stopgap until the custom icon font in issue #128 exists;
-// it gets the layout and interaction right now, and the icon sharpens later.
+// NO transform_scale here, deliberately.
 //
-// 3.2x rather than 4x, so the glyph clears the name beneath it.
-constexpr std::int32_t kIconScale = (32 * LV_SCALE_NONE) / 10;
+// Scaling a glyph forces LVGL to render it to an intermediate layer and run the software
+// transform path (lv_draw_sw_img transform_and_recolor). On this part there is no 2D
+// accelerator, so that is a per-pixel software operation over the icon area on every
+// redraw. It was slow enough to stop the LVGL task yielding at all: the task watchdog
+// fired on a starved IDLE0, the screen froze, and input was never serviced because
+// lv_timer_handler never returned.
+//
+// The icon is therefore drawn at the largest built-in font, 48 px, which is only about
+// 3.9 mm on this 311 PPI panel. Making it physically larger needs a real font at that
+// size, which is the custom icon font in issue #128 - now a requirement rather than a
+// cosmetic improvement.
 
 constexpr std::uint32_t kBackgroundRgb = 0x000000;
 constexpr std::uint32_t kMutedRgb = 0x5A6472;
@@ -32,8 +40,8 @@ constexpr std::uint32_t kLabelRubyRgb = 0xFF8FA3;
 
 // The icon sits high so the name has room beneath it, and both stay clear of the
 // position dots and the gesture hint along the bottom.
-constexpr std::int32_t kIconOffsetY = -75;
-constexpr std::int32_t kLabelOffsetY = 80;
+constexpr std::int32_t kIconOffsetY = -60;
+constexpr std::int32_t kLabelOffsetY = 30;
 
 }  // namespace
 
@@ -49,13 +57,6 @@ CarouselScreen::CarouselScreen(lv_obj_t* const root, const InputCallback callbac
     lv_obj_align(title_, LV_ALIGN_TOP_MID, 0, 18);
 
     icon_ = create_label(root_, Typography::timer_primary, 0xFFFFFF);
-    // The pivot defaults to the object's top-left corner, so a scaled glyph grows right
-    // and down instead of outward from its own centre. That is what pushed the icon off
-    // centre and over the name below it.
-    lv_obj_set_style_transform_pivot_x(icon_, lv_pct(50), 0);
-    lv_obj_set_style_transform_pivot_y(icon_, lv_pct(50), 0);
-    lv_obj_set_style_transform_scale_x(icon_, kIconScale, 0);
-    lv_obj_set_style_transform_scale_y(icon_, kIconScale, 0);
     lv_obj_set_style_text_align(icon_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(icon_, LV_ALIGN_CENTER, 0, kIconOffsetY);
 
@@ -83,6 +84,7 @@ CarouselScreen::CarouselScreen(lv_obj_t* const root, const InputCallback callbac
         lv_obj_center(glyph);
         lv_obj_add_event_cb(button, chevron_event, LV_EVENT_SHORT_CLICKED, this);
         lv_obj_set_user_data(button, reinterpret_cast<void*>(static_cast<std::uintptr_t>(index)));
+        bubble_gestures_to_parent(button);
         chevrons_[index] = button;
     }
 

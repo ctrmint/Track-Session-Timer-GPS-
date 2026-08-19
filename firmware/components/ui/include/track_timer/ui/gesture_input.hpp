@@ -4,6 +4,8 @@
 
 #include <lvgl.h>
 
+#include <cstdint>
+
 namespace track_timer::ui {
 
 // Translates LVGL events on `target` into the abstract InputAction contract. This is the
@@ -15,5 +17,24 @@ namespace track_timer::ui {
 // also select whatever it swiped onto.
 void attach_gesture_input(lv_obj_t* target, InputCallback callback,
                           void* context) noexcept;
+
+// indev_gesture() delivers LV_EVENT_GESTURE to the object under the finger and only
+// walks up to its parent while that object has LV_OBJ_FLAG_GESTURE_BUBBLE. Any clickable
+// child therefore swallows swipes that begin on it. Call this for such children so a
+// swipe starting anywhere still reaches the screen's handler.
+void bubble_gestures_to_parent(lv_obj_t* child) noexcept;
+
+// Raw counts of what LVGL actually delivered, so a passive log can distinguish "no
+// events arrive" from "events arrive but are suppressed" from "actions are dispatched
+// but the screen does not follow".
+struct GestureCounters {
+    std::uint32_t pressed{0};
+    std::uint32_t gesture{0};
+    std::uint32_t long_pressed{0};
+    std::uint32_t short_clicked{0};
+    std::uint32_t dispatched{0};
+    std::uint32_t suppressed{0};
+};
+[[nodiscard]] GestureCounters gesture_counters() noexcept;
 
 }  // namespace track_timer::ui
