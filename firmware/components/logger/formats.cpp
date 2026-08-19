@@ -114,8 +114,8 @@ bool valid_settings_record(const SessionSettingsV1& record) noexcept
     }
 
     settings::DeviceSettings source{};
-    source.session_duration_minutes = record.session_duration_minutes;
-    source.rest_duration_minutes = record.rest_duration_minutes;
+    source.session_duration_seconds = record.session_duration_seconds;
+    source.rest_duration_seconds = record.rest_duration_seconds;
     source.launch_sensitivity_milli_g = record.launch_sensitivity_milli_g;
     source.average_lap_seconds = record.average_lap_seconds;
     source.day_brightness_percent = record.day_brightness_percent;
@@ -137,8 +137,8 @@ bool valid_settings_record(const SessionSettingsV1& record) noexcept
 SessionSettingsV1 make_session_settings(const settings::DeviceSettings& source) noexcept
 {
     SessionSettingsV1 result{};
-    result.session_duration_minutes = source.session_duration_minutes;
-    result.rest_duration_minutes = source.rest_duration_minutes;
+    result.session_duration_seconds = source.session_duration_seconds;
+    result.rest_duration_seconds = source.rest_duration_seconds;
     result.launch_sensitivity_milli_g = source.launch_sensitivity_milli_g;
     result.average_lap_seconds = source.average_lap_seconds;
     result.day_brightness_percent = source.day_brightness_percent;

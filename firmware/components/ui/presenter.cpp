@@ -1,5 +1,7 @@
 #include "track_timer/ui/presenter.hpp"
 
+#include "track_timer/ui/time_roller.hpp"
+
 #include "track_timer/ui/foundation.hpp"
 
 #include <cstdio>
@@ -134,10 +136,13 @@ ReadyViewModel present_ready(const ReadySnapshot& snapshot) noexcept
     std::snprintf(model.selected_track.data(), model.selected_track.size(), "%.47s",
                   snapshot.selected_track[0] == '\0' ? "NO TRACK SELECTED"
                                                       : snapshot.selected_track.data());
-    std::snprintf(model.session_duration.data(), model.session_duration.size(), "%u MIN SESSION",
-                  static_cast<unsigned>(snapshot.session_duration_minutes));
-    std::snprintf(model.rest_duration.data(), model.rest_duration.size(), "%u MIN REST",
-                  static_cast<unsigned>(snapshot.rest_duration_minutes));
+    std::array<char, 12> duration{};
+    format_duration_value(duration.data(), duration.size(), snapshot.session_duration_seconds);
+    std::snprintf(model.session_duration.data(), model.session_duration.size(),
+                  "%s SESSION", duration.data());
+    format_duration_value(duration.data(), duration.size(), snapshot.rest_duration_seconds);
+    std::snprintf(model.rest_duration.data(), model.rest_duration.size(), "%s REST",
+                  duration.data());
 
     std::snprintf(model.gnss.text.data(), model.gnss.text.size(), "%s",
                   gnss_label(snapshot.gnss_health));

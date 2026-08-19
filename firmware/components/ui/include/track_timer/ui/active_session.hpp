@@ -52,7 +52,7 @@ struct ActiveSessionDisplayConfig {
     // adding a field in the middle silently reassigns every positional initialiser.
     // Needed for the decaying bar and the proportional part of the colour ramp, since
     // remaining time alone cannot say what fraction of the session is left.
-    std::uint16_t session_duration_minutes{0};
+    std::uint32_t session_duration_seconds{0};
 };
 
 // Urgency bands for the countdown. Named rather than raw colours so the thresholds are

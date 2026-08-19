@@ -7,7 +7,7 @@
 
 namespace track_timer::settings {
 
-inline constexpr std::uint16_t kCurrentSettingsVersion = 4;
+inline constexpr std::uint16_t kCurrentSettingsVersion = 5;
 inline constexpr std::size_t kSettingsBlobCapacity = 128;
 inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 
@@ -35,8 +35,10 @@ enum class LapBoundaryMode : std::uint8_t {
 };
 
 struct DeviceSettings {
-    std::uint16_t session_duration_minutes{20};
-    std::uint16_t rest_duration_minutes{20};
+    // Seconds, not minutes: the roller sets these as minutes and seconds, and 24 hours of
+    // seconds does not fit a uint16.
+    std::uint32_t session_duration_seconds{20 * 60};
+    std::uint32_t rest_duration_seconds{20 * 60};
     std::uint16_t launch_sensitivity_milli_g{0};
     std::uint16_t average_lap_seconds{0};
     std::uint8_t day_brightness_percent{100};
@@ -53,8 +55,8 @@ struct DeviceSettings {
 };
 
 struct LegacySettingsV1 {
-    std::uint16_t session_duration_minutes{20};
-    std::uint16_t rest_duration_minutes{20};
+    std::uint16_t session_duration_seconds{20};
+    std::uint16_t rest_duration_seconds{20};
     std::uint8_t brightness_percent{100};
     OrientationMode orientation{OrientationMode::fixed_0};
     bool auto_dim_enabled{false};
@@ -83,6 +85,7 @@ enum class DecodeResult : std::uint8_t {
     migrated_v1,
     migrated_v2,
     migrated_v3,
+    migrated_v4,
     corrupt,
     unsupported_version,
 };
@@ -92,6 +95,7 @@ enum class SettingsSource : std::uint8_t {
     migrated_v1,
     migrated_v2,
     migrated_v3,
+    migrated_v4,
     defaults_missing,
     defaults_corrupt,
     defaults_unsupported,
@@ -141,6 +145,8 @@ struct FeatureAvailability {
 [[nodiscard]] SettingsBlob encode_legacy_settings_v1(
     const LegacySettingsV1& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v2(
+    const DeviceSettings& settings) noexcept;
+[[nodiscard]] SettingsBlob encode_legacy_settings_v4(
     const DeviceSettings& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v3(
     const DeviceSettings& settings) noexcept;

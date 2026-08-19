@@ -22,3 +22,6 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Core dumps, which a failing host test binary drops in the repository root.
+core.*

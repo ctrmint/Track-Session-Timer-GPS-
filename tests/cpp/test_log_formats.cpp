@@ -23,8 +23,8 @@ int main()
     using namespace track_timer;
 
     settings::DeviceSettings settings{};
-    settings.session_duration_minutes = 30;
-    settings.rest_duration_minutes = 10;
+    settings.session_duration_seconds = 30 * 60;
+    settings.rest_duration_seconds = 10 * 60;
     settings.trackday_mode_enabled = true;
     settings.lap_boundary = settings::LapBoundaryMode::start;
     settings.pit_exit_auto_start_enabled = true;
@@ -52,7 +52,9 @@ int main()
     assert(meta.settings.pit_entry_auto_stop_enabled);
 
     auto invalid_meta = meta;
-    invalid_meta.schema_version = 2;
+    // Relative to the current version, so bumping the format does not turn this sentinel
+    // into the valid value, as it did when the version moved to 2.
+    invalid_meta.schema_version = logger::kLogFormatVersion + 1;
     assert(!logger::valid_meta(invalid_meta));
     invalid_meta = meta;
     copy_text(invalid_meta.track_fingerprint, "too-short");

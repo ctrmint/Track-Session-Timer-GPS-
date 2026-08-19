@@ -41,15 +41,16 @@ SHELL_NAVIGATION_TEST_BINARY := build/host/shell_navigation_test
 DEVICE_MODE_TEST_BINARY := build/host/device_mode_test
 IMU_CALIBRATION_TEST_BINARY := build/host/imu_calibration_test
 SESSION_URGENCY_TEST_BINARY := build/host/session_urgency_test
+TIME_ROLLER_TEST_BINARY := build/host/time_roller_test
 GATE_CAPTURE_TEST_BINARY := build/host/gate_capture_test
 GATE_SESSION_AUTOMATION_TEST_BINARY := build/host/gate_session_automation_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
+.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test time-roller-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
 
-check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
+check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test time-roller-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -99,11 +100,12 @@ simulator-model-test:
 		-Ifirmware/components/board/include \
 		-Ifirmware/components/domain/include \
 		-Ifirmware/components/logger/include \
+		-Ifirmware/components/settings/include \
 		-Ifirmware/components/ui/include \
 		-Isimulator/include \
 		firmware/components/logger/async_logger.cpp \
 		firmware/components/ui/foundation.cpp firmware/components/ui/navigation.cpp \
-		firmware/components/ui/presenter.cpp \
+		firmware/components/ui/presenter.cpp firmware/components/ui/time_roller.cpp \
 		simulator/src/device_backends.cpp \
 		simulator/src/fixed_cell_text.cpp \
 		simulator/src/scenario.cpp \
@@ -135,7 +137,7 @@ settings-editor-test:
 		-Ifirmware/components/settings/include \
 		-Ifirmware/components/ui/include \
 		firmware/components/settings/component.cpp \
-		firmware/components/ui/settings_editor.cpp \
+		firmware/components/ui/settings_editor.cpp firmware/components/ui/time_roller.cpp \
 		tests/cpp/test_settings_editor.cpp -o $(SETTINGS_EDITOR_TEST_BINARY)
 	$(SETTINGS_EDITOR_TEST_BINARY)
 
@@ -314,10 +316,11 @@ active-session-test:
 	mkdir -p build/host
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
 		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
 		-Ifirmware/components/ui/include \
 		firmware/components/ui/active_session.cpp \
 		firmware/components/ui/foundation.cpp \
-		firmware/components/ui/presenter.cpp \
+		firmware/components/ui/presenter.cpp firmware/components/ui/time_roller.cpp \
 		tests/cpp/test_active_session.cpp -o $(ACTIVE_SESSION_TEST_BINARY)
 	$(ACTIVE_SESSION_TEST_BINARY)
 
@@ -420,14 +423,25 @@ gate-session-automation-test:
 		-o $(GATE_SESSION_AUTOMATION_TEST_BINARY)
 	$(GATE_SESSION_AUTOMATION_TEST_BINARY)
 
+time-roller-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/settings/include \
+		-Ifirmware/components/ui/include \
+		firmware/components/settings/component.cpp \
+		firmware/components/ui/time_roller.cpp \
+		tests/cpp/test_time_roller.cpp -o $(TIME_ROLLER_TEST_BINARY)
+	$(TIME_ROLLER_TEST_BINARY)
+
 session-urgency-test:
 	mkdir -p build/host
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
 		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
 		-Ifirmware/components/ui/include \
 		firmware/components/ui/active_session.cpp \
 		firmware/components/ui/foundation.cpp \
-		firmware/components/ui/presenter.cpp \
+		firmware/components/ui/presenter.cpp firmware/components/ui/time_roller.cpp \
 		tests/cpp/test_session_urgency.cpp -o $(SESSION_URGENCY_TEST_BINARY)
 	$(SESSION_URGENCY_TEST_BINARY)
 
@@ -449,7 +463,7 @@ device-mode-test:
 		-Ifirmware/components/ui/include \
 		firmware/components/settings/component.cpp \
 		firmware/components/ui/device_mode.cpp \
-		firmware/components/ui/value_picker.cpp \
+		firmware/components/ui/value_picker.cpp firmware/components/ui/time_roller.cpp \
 		tests/cpp/test_device_mode.cpp -o $(DEVICE_MODE_TEST_BINARY)
 	$(DEVICE_MODE_TEST_BINARY)
 
@@ -468,9 +482,10 @@ ui-foundation-test:
 	mkdir -p build/host
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
 		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
 		-Ifirmware/components/ui/include \
 		firmware/components/ui/foundation.cpp \
-		firmware/components/ui/presenter.cpp \
+		firmware/components/ui/presenter.cpp firmware/components/ui/time_roller.cpp \
 		tests/cpp/test_ui_foundation.cpp -o $(UI_FOUNDATION_TEST_BINARY)
 	$(UI_FOUNDATION_TEST_BINARY)
 
@@ -478,10 +493,11 @@ navigation-test:
 	mkdir -p build/host
 	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
 		-Ifirmware/components/domain/include \
+		-Ifirmware/components/settings/include \
 		-Ifirmware/components/ui/include \
 		firmware/components/ui/foundation.cpp \
 		firmware/components/ui/navigation.cpp \
-		firmware/components/ui/presenter.cpp \
+		firmware/components/ui/presenter.cpp firmware/components/ui/time_roller.cpp \
 		tests/cpp/test_navigation.cpp -o $(NAVIGATION_TEST_BINARY)
 	$(NAVIGATION_TEST_BINARY)
 

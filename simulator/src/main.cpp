@@ -378,10 +378,10 @@ void update_screen(ApplicationContext& context)
         context.player.reset(track_timer::simulator::ScenarioId::active);
         context.workflow_time_offset_ms = workflow_now;
         context.lifecycle = track_timer::session::SessionController{{
-            static_cast<std::int64_t>(context.settings->current().session_duration_minutes) *
-                60'000,
-            static_cast<std::int64_t>(context.settings->current().rest_duration_minutes) *
-                60'000}};
+            static_cast<std::int64_t>(context.settings->current().session_duration_seconds) *
+                1'000,
+            static_cast<std::int64_t>(context.settings->current().rest_duration_seconds) *
+                1'000}};
         (void)context.lifecycle.start(workflow_now);
         context.workflow_active = true;
     }
@@ -458,8 +458,8 @@ void update_screen(ApplicationContext& context)
             break;
         }
     }
-    ready.session_duration_minutes = context.settings->current().session_duration_minutes;
-    ready.rest_duration_minutes = context.settings->current().rest_duration_minutes;
+    ready.session_duration_seconds = context.settings->current().session_duration_seconds;
+    ready.rest_duration_seconds = context.settings->current().rest_duration_seconds;
     ready.gnss_health = active_snapshot.gnss_health;
     const auto storage_health = context.player.device().storage().status().health;
     ready.storage = storage_health == track_timer::board::StorageHealth::ready

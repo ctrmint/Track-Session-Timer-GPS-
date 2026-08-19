@@ -17,6 +17,7 @@ enum class InputAction : std::uint8_t {
     swipe_left,   // move to the next item in a carousel
     swipe_right,  // move to the previous item in a carousel
     swipe_down,   // back one level
+    swipe_up,     // only meaningful where a screen drives a value with vertical gestures
 };
 
 using InputCallback = void (*)(InputAction action, void* context) noexcept;

@@ -27,6 +27,7 @@
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
 #include "track_timer/ui/shell_navigation.hpp"
+#include "track_timer/ui/time_roller_screen.hpp"
 #include "track_timer/ui/trackday_screen.hpp"
 #include "track_timer/session/controller.hpp"
 #include "track_timer/settings/nvs_store.hpp"
@@ -100,8 +101,8 @@ ui::ReadySnapshot ready_snapshot() noexcept
     ui::ReadySnapshot snapshot{};
     std::strncpy(snapshot.selected_track.data(), "No track selected",
                  snapshot.selected_track.size() - 1);
-    snapshot.session_duration_minutes = 20;
-    snapshot.rest_duration_minutes = 20;
+    snapshot.session_duration_seconds = 20 * 60;
+    snapshot.rest_duration_seconds = 20 * 60;
     snapshot.gnss_health = domain::GnssHealth::unavailable;
     snapshot.storage = ui::Readiness::unavailable;
     snapshot.imu = ui::Readiness::unavailable;
@@ -226,7 +227,7 @@ class ScreenRouter {
         ui::ActiveSessionDisplayConfig display{};
         display.average_lap_seconds = settings_.average_lap_seconds;
         display.trackday_mode_enabled = true;
-        display.session_duration_minutes = settings_.session_duration_minutes;
+        display.session_duration_seconds = settings_.session_duration_seconds;
 
         active_session_.update(ui_snapshot, static_cast<std::uint64_t>(now_ms), display);
         trackday_->update(active_session_.view_model().trackday);
@@ -234,6 +235,13 @@ class ScreenRouter {
 
     // Pulls a sample and refreshes the radar. Called from the LVGL task so LVGL is only
     // ever touched by its owner.
+    // One entry point for everything the LVGL service tick drives.
+    void service() noexcept
+    {
+        service_imu();
+        service_roller();
+    }
+
     void service_imu() noexcept
     {
         board::ImuSample sample{};
@@ -327,6 +335,18 @@ class ScreenRouter {
         // is only true because nothing on it consumes presses.
         ui::attach_gesture_input(radar_root_, on_input, this);
 
+        // The time fields are edited on their own screen: no list of twelve choices can
+        // span 0 to 59:59, so they roll rather than pick.
+        roller_root_ = lv_obj_create(nullptr);
+        if (roller_root_ == nullptr) {
+            return false;
+        }
+        roller_ = new (roller_storage_) ui::TimeRollerScreen(roller_root_);
+        ui::attach_gesture_input(roller_root_, on_input, this);
+        // Vertical travel drives the columns, so this screen needs the pointer itself
+        // rather than the discrete gestures everything else consumes.
+        ui::attach_drag_input(roller_root_, on_drag, this);
+
         carousel_ = new (carousel_storage_)
             ui::CarouselScreen(carousel_root_, on_input, this);
         carousel_->set_entries(kMenuEntries, 4);
@@ -401,18 +421,17 @@ class ScreenRouter {
         const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
         session::SessionConfiguration configuration{};
         configuration.session_duration_ms =
-            static_cast<std::int64_t>(settings_.session_duration_minutes) * 60'000;
+            static_cast<std::int64_t>(settings_.session_duration_seconds) * 1'000;
         configuration.rest_duration_ms =
-            static_cast<std::int64_t>(settings_.rest_duration_minutes) * 60'000;
+            static_cast<std::int64_t>(settings_.rest_duration_seconds) * 1'000;
         if (session_.save_configuration(configuration, now_ms) !=
             session::TransitionResult::accepted) {
             (void)session_.enter_configuration(now_ms);
             (void)session_.save_configuration(configuration, now_ms);
         }
         const auto started = session_.start(now_ms);
-        ESP_LOGI("track_timer", "session start: %d over %u min",
-                 static_cast<int>(started),
-                 static_cast<unsigned>(settings_.session_duration_minutes));
+        ESP_LOGI("track_timer", "session start: %d over %u s", static_cast<int>(started),
+                 static_cast<unsigned>(settings_.session_duration_seconds));
         if (trackday_ != nullptr) {
             trackday_->set_track_name(active_track_.name[0] != '\0'
                                           ? active_track_.name.data()
@@ -451,8 +470,8 @@ class ScreenRouter {
     [[nodiscard]] ui::ReadySnapshot ready_snapshot() const noexcept
     {
         ui::ReadySnapshot snapshot{};
-        snapshot.session_duration_minutes = settings_.session_duration_minutes;
-        snapshot.rest_duration_minutes = settings_.rest_duration_minutes;
+        snapshot.session_duration_seconds = settings_.session_duration_seconds;
+        snapshot.rest_duration_seconds = settings_.rest_duration_seconds;
         snapshot.gnss_health = domain::GnssHealth::unavailable;
         snapshot.storage = storage::mounted() ? ui::Readiness::ready
                                               : ui::Readiness::unavailable;
@@ -638,6 +657,18 @@ class ScreenRouter {
     void show_values(const ui::ShellState& state, const bool reset_to_current) noexcept
     {
         const auto field = ui::kPickerFields[state.field_index];
+        if (ui::is_time_field(field)) {
+            if (roller_ != nullptr) {
+                roller_->configure(ui::picker_field_label(field), field,
+                                   ui::time_field_seconds(field, settings_));
+                roller_field_ = field;
+                roller_active_ = true;
+                roller_serviced_ms_ = lv_tick_get();
+                lv_screen_load(roller_root_);
+            }
+            return;
+        }
+        roller_active_ = false;
         const auto list = ui::choices_for(field, settings_);
         for (std::size_t index = 0; index < list.count; ++index) {
             value_text_[index] = list.choices[index].text;
@@ -652,8 +683,118 @@ class ScreenRouter {
         }
     }
 
+    static void on_drag(const ui::DragSample& sample, void* const context) noexcept
+    {
+        static_cast<ScreenRouter*>(context)->handle_drag(sample);
+    }
+
+    void handle_drag(const ui::DragSample& sample) noexcept
+    {
+        if (!roller_active_ || roller_ == nullptr) {
+            return;
+        }
+        switch (sample.phase) {
+        case ui::DragPhase::began:
+            // The column is chosen by where the touch lands, so minutes and seconds are
+            // both adjustable without switching focus between them.
+            roller_->roller().begin(roller_->column_at(sample.x));
+            hold_.begin(lv_tick_get());
+            roller_->set_hold_progress(0.0F);
+            break;
+        case ui::DragPhase::moved:
+            roller_->roller().drag(static_cast<float>(sample.dy), sample.elapsed_ms);
+            hold_.travel(sample.dy);
+            roller_->refresh();
+            break;
+        case ui::DragPhase::ended:
+            roller_->roller().release();
+            hold_.end();
+            roller_->set_hold_progress(0.0F);
+            roller_serviced_ms_ = lv_tick_get();
+            break;
+        }
+    }
+
+    // Carries a flick after the finger has gone. Driven from the service tick rather than
+    // a timer of its own, so it cannot outlive the screen that owns it.
+    void service_roller() noexcept
+    {
+        if (!roller_active_ || roller_ == nullptr) {
+            return;
+        }
+        // A save is a hold measured here rather than LVGL's 400 ms long press, which was
+        // eager enough to commit a value the driver was still rolling.
+        if (hold_.active()) {
+            const auto now = lv_tick_get();
+            roller_->set_hold_progress(hold_.progress(now));
+            if (hold_.complete(now)) {
+                hold_.end();
+                roller_->set_hold_progress(0.0F);
+                leave_roller(true);
+                return;
+            }
+        }
+        if (!roller_->roller().coasting()) {
+            return;
+        }
+        const auto now_ms = lv_tick_get();
+        const auto elapsed = now_ms - roller_serviced_ms_;
+        roller_serviced_ms_ = now_ms;
+        (void)roller_->roller().advance(elapsed);
+        roller_->refresh();
+    }
+
+    // Leaves the roller for the field list, saving first when asked. Cancelling is a
+    // horizontal swipe because down now drives the digits and can no longer mean back.
+    void leave_roller(const bool commit) noexcept
+    {
+        if (roller_ != nullptr && commit) {
+            if (ui::apply_time_field(roller_field_, roller_->roller().committed_seconds(),
+                                     settings_)) {
+                persist_settings();
+                ESP_LOGI("track_timer", "set %s to %u s",
+                         ui::picker_field_label(roller_field_),
+                         static_cast<unsigned>(
+                             ui::time_field_seconds(roller_field_, settings_)));
+            }
+        }
+        roller_active_ = false;
+        hold_.end();
+        const auto result = shell_.dispatch(ui::InputAction::swipe_down);
+        if (result.state.level == ui::ShellLevel::field) {
+            show_fields(result.state);
+            lv_screen_load(carousel_root_);
+            return;
+        }
+        lv_screen_load(home_screen());
+    }
+
     void handle_input(const ui::InputAction action) noexcept
     {
+        if (roller_active_ && roller_ != nullptr) {
+            switch (action) {
+            case ui::InputAction::long_press:
+                // Saving is driven by the measured hold in service_roller, not by LVGL's
+                // 400 ms threshold.
+                return;
+            case ui::InputAction::swipe_left:
+            case ui::InputAction::swipe_right:
+                leave_roller(false);
+                return;
+            case ui::InputAction::swipe_up:
+                roller_->roller().step(roller_->roller().active(), 1);
+                roller_->refresh();
+                return;
+            case ui::InputAction::swipe_down:
+                roller_->roller().step(roller_->roller().active(), -1);
+                roller_->refresh();
+                return;
+            default:
+                // A tap changes nothing here: saving is deliberate, and a stray press
+                // must not commit a half-rolled value.
+                return;
+            }
+        }
         const auto result = shell_.dispatch(action);
         switch (result.outcome) {
         case ui::ShellOutcome::menu_opened:
@@ -820,6 +961,12 @@ class ScreenRouter {
     lv_obj_t* radar_root_{nullptr};
     ui::TrackdayScreen* trackday_{nullptr};
     lv_obj_t* trackday_root_{nullptr};
+    ui::TimeRollerScreen* roller_{nullptr};
+    ui::SettingsField roller_field_{ui::SettingsField::average_lap};
+    lv_obj_t* roller_root_{nullptr};
+    bool roller_active_{false};
+    ui::HoldToSave hold_{};
+    std::uint32_t roller_serviced_ms_{0};
     session::SessionController session_{};
     ui::ActiveSessionController active_session_{};
     bool session_was_active_{false};
@@ -844,6 +991,8 @@ class ScreenRouter {
     alignas(ui::CarouselScreen) std::byte carousel_storage_[sizeof(ui::CarouselScreen)]{};
     alignas(ui::GRadarScreen) std::byte radar_storage_[sizeof(ui::GRadarScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
+    alignas(ui::TimeRollerScreen) std::byte
+        roller_storage_[sizeof(ui::TimeRollerScreen)]{};
 };
 
 ScreenRouter router{};
@@ -851,7 +1000,7 @@ ScreenRouter router{};
 }  // namespace
 
 // Exposed so the LVGL task can drive the radar without the router owning a task.
-void service_screen_router() noexcept { router.service_imu(); }
+void service_screen_router() noexcept { router.service(); }
 
 bool start_screen_router() noexcept
 {

@@ -43,8 +43,8 @@ std::string read_file(const std::filesystem::path& path)
 settings::DeviceSettings default_settings()
 {
     settings::DeviceSettings value{};
-    value.session_duration_minutes = 20;
-    value.rest_duration_minutes = 20;
+    value.session_duration_seconds = 20;
+    value.rest_duration_seconds = 20;
     value.average_lap_seconds = 0;
     value.lower_display = settings::LowerDisplayMode::elapsed;
     return value;

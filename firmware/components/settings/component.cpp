@@ -12,7 +12,14 @@ constexpr std::size_t kHeaderSize = 12;
 constexpr std::size_t kLegacyV1PayloadSize = 7;
 constexpr std::size_t kLegacyV2PayloadSize = 62;
 constexpr std::size_t kLegacyV3PayloadSize = 63;
-constexpr std::size_t kCurrentPayloadSize = 66;
+constexpr std::size_t kLegacyV4PayloadSize = 66;
+// v5 appends the durations as seconds. The minutes still written at offsets 0-3 are
+// vestigial: they keep the shared prefix that every earlier version's decoder reads, and
+// v5 ignores them in favour of the appended values.
+constexpr std::size_t kCurrentPayloadSize = 74;
+
+inline constexpr std::uint32_t kMaximumDurationSeconds = 24U * 60U * 60U;
+inline constexpr std::uint32_t kMinimumSessionSeconds = 60U;
 
 bool valid_brightness(const std::uint8_t percent) noexcept
 {
@@ -118,9 +125,9 @@ bool header_valid(const SettingsBlob& blob, std::uint16_t& version,
 
 bool valid_legacy_settings(const LegacySettingsV1& settings) noexcept
 {
-    return settings.session_duration_minutes >= 1 &&
-           settings.session_duration_minutes <= 24 * 60 &&
-           settings.rest_duration_minutes <= 24 * 60 &&
+    return settings.session_duration_seconds >= 1 &&
+           settings.session_duration_seconds <= 24 * 60 &&
+           settings.rest_duration_seconds <= 24 * 60 &&
            valid_brightness(settings.brightness_percent) &&
            settings.orientation <= OrientationMode::automatic;
 }
@@ -129,9 +136,9 @@ bool valid_legacy_settings(const LegacySettingsV1& settings) noexcept
 
 bool valid_settings(const DeviceSettings& settings) noexcept
 {
-    return settings.session_duration_minutes >= 1 &&
-           settings.session_duration_minutes <= 24 * 60 &&
-           settings.rest_duration_minutes <= 24 * 60 &&
+    return settings.session_duration_seconds >= kMinimumSessionSeconds &&
+           settings.session_duration_seconds <= kMaximumDurationSeconds &&
+           settings.rest_duration_seconds <= kMaximumDurationSeconds &&
            valid_launch_sensitivity(settings.launch_sensitivity_milli_g) &&
            settings.average_lap_seconds <= 59 * 60 + 59 &&
            valid_brightness(settings.day_brightness_percent) &&
@@ -147,8 +154,8 @@ bool valid_settings(const DeviceSettings& settings) noexcept
 
 bool settings_equal(const DeviceSettings& left, const DeviceSettings& right) noexcept
 {
-    return left.session_duration_minutes == right.session_duration_minutes &&
-           left.rest_duration_minutes == right.rest_duration_minutes &&
+    return left.session_duration_seconds == right.session_duration_seconds &&
+           left.rest_duration_seconds == right.rest_duration_seconds &&
            left.launch_sensitivity_milli_g == right.launch_sensitivity_milli_g &&
            left.average_lap_seconds == right.average_lap_seconds &&
            left.day_brightness_percent == right.day_brightness_percent &&
@@ -170,8 +177,12 @@ SettingsBlob encode_legacy_settings_v2(const DeviceSettings& settings) noexcept
     }
 
     std::array<std::uint8_t, kLegacyV2PayloadSize> payload{};
-    put_u16(payload.data(), settings.session_duration_minutes);
-    put_u16(payload.data() + 2, settings.rest_duration_minutes);
+    // Older formats only ever held minutes, so a value with seconds in it necessarily
+    // loses them here. v5 carries the exact seconds separately.
+    put_u16(payload.data(),
+            static_cast<std::uint16_t>(settings.session_duration_seconds / 60U));
+    put_u16(payload.data() + 2,
+            static_cast<std::uint16_t>(settings.rest_duration_seconds / 60U));
     put_u16(payload.data() + 4, settings.launch_sensitivity_milli_g);
     put_u16(payload.data() + 6, settings.average_lap_seconds);
     payload[8] = settings.day_brightness_percent;
@@ -197,17 +208,30 @@ SettingsBlob encode_legacy_settings_v3(const DeviceSettings& settings) noexcept
     return make_blob(3, payload.data(), payload.size());
 }
 
-SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+SettingsBlob encode_legacy_settings_v4(const DeviceSettings& settings) noexcept
 {
     const auto legacy = encode_legacy_settings_v3(settings);
     if (legacy.size == 0) {
         return {};
     }
-    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::array<std::uint8_t, kLegacyV4PayloadSize> payload{};
     std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV3PayloadSize, payload.data());
     payload[63] = static_cast<std::uint8_t>(settings.lap_boundary);
     payload[64] = settings.pit_exit_auto_start_enabled ? 1U : 0U;
     payload[65] = settings.pit_entry_auto_stop_enabled ? 1U : 0U;
+    return make_blob(4, payload.data(), payload.size());
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    const auto legacy = encode_legacy_settings_v4(settings);
+    if (legacy.size == 0) {
+        return {};
+    }
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV4PayloadSize, payload.data());
+    put_u32(payload.data() + 66, settings.session_duration_seconds);
+    put_u32(payload.data() + 70, settings.rest_duration_seconds);
     return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
 }
 
@@ -217,8 +241,8 @@ SettingsBlob encode_legacy_settings_v1(const LegacySettingsV1& settings) noexcep
         return {};
     }
     std::array<std::uint8_t, kLegacyV1PayloadSize> payload{};
-    put_u16(payload.data(), settings.session_duration_minutes);
-    put_u16(payload.data() + 2, settings.rest_duration_minutes);
+    put_u16(payload.data(), settings.session_duration_seconds);
+    put_u16(payload.data() + 2, settings.rest_duration_seconds);
     payload[4] = settings.brightness_percent;
     payload[5] = static_cast<std::uint8_t>(settings.orientation);
     payload[6] = settings.auto_dim_enabled ? 1U : 0U;
@@ -239,8 +263,8 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         if (payload_size != kLegacyV1PayloadSize) {
             return DecodeResult::corrupt;
         }
-        candidate.session_duration_minutes = get_u16(payload);
-        candidate.rest_duration_minutes = get_u16(payload + 2);
+        candidate.session_duration_seconds = get_u16(payload) * 60U;
+        candidate.rest_duration_seconds = get_u16(payload + 2) * 60U;
         candidate.day_brightness_percent = payload[4];
         candidate.orientation = static_cast<OrientationMode>(payload[5]);
         candidate.auto_dim_enabled = payload[6] != 0;
@@ -250,18 +274,22 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         settings = candidate;
         return DecodeResult::migrated_v1;
     }
-    if (version != 2 && version != 3 && version != kCurrentSettingsVersion) {
+    if (version != 2 && version != 3 && version != 4 &&
+        version != kCurrentSettingsVersion) {
         return DecodeResult::unsupported_version;
     }
     const auto expected_payload_size =
-        version == 2 ? kLegacyV2PayloadSize
-                     : version == 3 ? kLegacyV3PayloadSize : kCurrentPayloadSize;
+        version == 2   ? kLegacyV2PayloadSize
+        : version == 3 ? kLegacyV3PayloadSize
+        : version == 4 ? kLegacyV4PayloadSize
+                       : kCurrentPayloadSize;
     if (payload_size != expected_payload_size) {
         return DecodeResult::corrupt;
     }
 
-    candidate.session_duration_minutes = get_u16(payload);
-    candidate.rest_duration_minutes = get_u16(payload + 2);
+    // Every format before v5 stored whole minutes, so a migrated session is exact.
+    candidate.session_duration_seconds = get_u16(payload) * 60U;
+    candidate.rest_duration_seconds = get_u16(payload + 2) * 60U;
     candidate.launch_sensitivity_milli_g = get_u16(payload + 4);
     candidate.average_lap_seconds = get_u16(payload + 6);
     candidate.day_brightness_percent = payload[8];
@@ -275,14 +303,19 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     if (version >= 3) {
         candidate.trackday_mode_enabled = payload[62] != 0;
     }
-    if (version == kCurrentSettingsVersion) {
+    if (version >= 4) {
         candidate.lap_boundary = static_cast<LapBoundaryMode>(payload[63]);
         candidate.pit_exit_auto_start_enabled = payload[64] != 0;
         candidate.pit_entry_auto_stop_enabled = payload[65] != 0;
     }
+    if (version == kCurrentSettingsVersion) {
+        // The authoritative durations, which the vestigial minutes above cannot express.
+        candidate.session_duration_seconds = get_u32(payload + 66);
+        candidate.rest_duration_seconds = get_u32(payload + 70);
+    }
     if (payload[12] > 1 ||
         (version >= 3 && payload[62] > 1) ||
-        (version == kCurrentSettingsVersion &&
+        (version >= 4 &&
          (payload[63] > static_cast<std::uint8_t>(LapBoundaryMode::finish) ||
           payload[64] > 1 || payload[65] > 1)) ||
         !valid_settings(candidate)) {
@@ -291,6 +324,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     settings = candidate;
     return version == 2   ? DecodeResult::migrated_v2
            : version == 3 ? DecodeResult::migrated_v3
+           : version == 4 ? DecodeResult::migrated_v4
                           : DecodeResult::current;
 }
 
@@ -338,6 +372,9 @@ SettingsLoadReport SettingsManager::load() noexcept
     case DecodeResult::migrated_v3:
         current_ = decoded;
         return {SettingsSource::migrated_v3, persist(current_)};
+    case DecodeResult::migrated_v4:
+        current_ = decoded;
+        return {SettingsSource::migrated_v4, persist(current_)};
     case DecodeResult::corrupt:
         current_ = {};
         return {SettingsSource::defaults_corrupt, persist(current_)};
