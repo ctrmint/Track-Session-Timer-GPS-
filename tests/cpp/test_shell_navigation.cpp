@@ -35,20 +35,58 @@ void only_a_hold_opens_the_menu()
     assert(shell.menu_item() == MenuItem::mode);
 }
 
-void the_menu_offers_mode_first_and_wraps()
+// Track sits between Mode and Setup: at a circuit it is the most frequently changed
+// thing, so it must not be buried under Setup.
+void the_menu_offers_mode_then_track_and_wraps()
 {
     auto shell = opened();
     assert(shell.menu_item() == MenuItem::mode);
-    (void)shell.dispatch(InputAction::swipe_left);
-    assert(shell.menu_item() == MenuItem::setup);
-    (void)shell.dispatch(InputAction::swipe_left);
-    assert(shell.menu_item() == MenuItem::review);
-    (void)shell.dispatch(InputAction::swipe_left);
-    assert(shell.menu_item() == MenuItem::diagnostics);
-    (void)shell.dispatch(InputAction::swipe_left);
-    assert(shell.menu_item() == MenuItem::mode);
+    for (const auto expected : {MenuItem::track, MenuItem::setup, MenuItem::review,
+                                MenuItem::diagnostics, MenuItem::mode}) {
+        (void)shell.dispatch(InputAction::swipe_left);
+        assert(shell.menu_item() == expected);
+    }
     (void)shell.dispatch(InputAction::swipe_right);
     assert(shell.menu_item() == MenuItem::diagnostics);
+}
+
+// The list length comes from the card, so the shell must be told and must wrap over it.
+void the_track_list_is_sized_by_the_caller()
+{
+    auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);      // TRACK
+    assert(shell.menu_item() == MenuItem::track);
+    auto result = shell.dispatch(InputAction::press);
+    assert(result.outcome == ShellOutcome::entered);
+    assert(result.state.level == ShellLevel::section);
+    assert(!result.emits_action);                       // track has no destination screen
+
+    shell.set_section_count(25);
+    for (std::size_t index = 1; index < 25; ++index) {
+        assert(shell.dispatch(InputAction::swipe_left).state.section_index == index);
+    }
+    // Wraps at the end rather than sticking on the last circuit.
+    assert(shell.dispatch(InputAction::swipe_left).state.section_index == 0);
+    assert(shell.dispatch(InputAction::swipe_right).state.section_index == 24);
+
+    result = shell.dispatch(InputAction::press);
+    assert(result.outcome == ShellOutcome::track_selected);
+    assert(result.state.section_index == 24);
+}
+
+// A shorter list after a card change must not leave the cursor past the end.
+void a_shorter_track_list_resets_an_out_of_range_index()
+{
+    auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);
+    (void)shell.dispatch(InputAction::press);
+    shell.set_section_count(25);
+    for (int i = 0; i < 20; ++i) {
+        (void)shell.dispatch(InputAction::swipe_left);
+    }
+    assert(shell.state().section_index == 20);
+    shell.set_section_count(3);
+    assert(shell.state().section_index == 0);
 }
 
 // Choosing a mode is the entire interaction: enter Mode, swipe to it, press.
@@ -70,8 +108,9 @@ void a_mode_is_three_gestures_from_the_dashboard()
 void review_and_diagnostics_hand_over_to_the_destination_model()
 {
     auto shell = opened();
-    (void)shell.dispatch(InputAction::swipe_left);
-    (void)shell.dispatch(InputAction::swipe_left);
+    for (int i = 0; i < 3; ++i) {
+        (void)shell.dispatch(InputAction::swipe_left);   // mode -> track -> setup -> review
+    }
     auto result = shell.dispatch(InputAction::press);
     assert(result.emits_action && result.action == NavigationAction::open_review);
     assert(result.state.level == ShellLevel::menu);
@@ -85,6 +124,7 @@ void review_and_diagnostics_hand_over_to_the_destination_model()
 void a_setting_value_is_reachable_by_descending_three_levels()
 {
     auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);            // TRACK
     (void)shell.dispatch(InputAction::swipe_left);            // SETUP
     auto result = shell.dispatch(InputAction::press);
     assert(result.state.level == ShellLevel::section);
@@ -108,6 +148,7 @@ void every_level_climbs_back_out_one_at_a_time()
 {
     auto shell = opened();
     (void)shell.dispatch(InputAction::swipe_left);
+    (void)shell.dispatch(InputAction::swipe_left);
     (void)shell.dispatch(InputAction::press);
     (void)shell.dispatch(InputAction::press);
     shell.set_value_count(4);
@@ -128,6 +169,7 @@ void every_level_climbs_back_out_one_at_a_time()
 void a_hold_anywhere_inside_the_menu_returns_to_the_timer()
 {
     auto shell = opened();
+    (void)shell.dispatch(InputAction::swipe_left);
     (void)shell.dispatch(InputAction::swipe_left);
     (void)shell.dispatch(InputAction::press);
     (void)shell.dispatch(InputAction::press);
@@ -161,6 +203,7 @@ void changing_the_value_count_resets_an_out_of_range_index()
 {
     auto shell = opened();
     (void)shell.dispatch(InputAction::swipe_left);
+    (void)shell.dispatch(InputAction::swipe_left);
     (void)shell.dispatch(InputAction::press);
     (void)shell.dispatch(InputAction::press);
     shell.set_value_count(10);
@@ -187,7 +230,9 @@ void names_are_stable_for_logging_and_replay()
 int main()
 {
     only_a_hold_opens_the_menu();
-    the_menu_offers_mode_first_and_wraps();
+    the_menu_offers_mode_then_track_and_wraps();
+    the_track_list_is_sized_by_the_caller();
+    a_shorter_track_list_resets_an_out_of_range_index();
     a_mode_is_three_gestures_from_the_dashboard();
     review_and_diagnostics_hand_over_to_the_destination_model();
     a_setting_value_is_reachable_by_descending_three_levels();

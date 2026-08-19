@@ -23,15 +23,19 @@ enum class ShellLevel : std::uint8_t {
     value,    // that setting's values, each one press away
 };
 
+// Track selection sits at the top level, between Mode and Setup: at a circuit it is the
+// thing most often changed, and burying it under Setup made it the deepest common task.
 enum class MenuItem : std::uint8_t {
     mode,
+    track,
     setup,
     review,
     diagnostics,
 };
-inline constexpr std::size_t kMenuItemCount = 4;
+inline constexpr std::size_t kMenuItemCount = 5;
 
-// Both MODE and SETUP happen to offer three children.
+// Mode and Setup each offer three children; the track list is however many are on the
+// card, so the section count is set by the caller.
 inline constexpr std::size_t kSectionItemCount = 3;
 
 enum class SetupItem : std::uint8_t {
@@ -48,6 +52,7 @@ enum class ShellOutcome : std::uint8_t {
     exited,
     refused_session_active,
     mode_selected,   // a Mode was chosen; the caller persists it
+    track_selected,  // a track was chosen; the caller loads and applies it
     value_selected,  // a setting value was chosen; the caller applies it
 };
 
@@ -77,6 +82,10 @@ class ShellNavigation {
     // settings.
     void set_value_count(std::size_t count) noexcept;
 
+    // The track list length comes from the card, so the shell is told rather than
+    // assuming. Applies to whichever section carousel is currently open.
+    void set_section_count(std::size_t count) noexcept;
+
     // Places the cursor on the value the setting already holds, so opening a field shows
     // the current choice rather than always starting at the first one.
     void select_value(std::size_t index) noexcept;
@@ -101,6 +110,7 @@ class ShellNavigation {
     ShellState state_{};
     std::size_t field_count_{1};
     std::size_t value_count_{1};
+    std::size_t section_count_{kSectionItemCount};
     bool session_active_{false};
 };
 

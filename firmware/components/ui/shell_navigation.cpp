@@ -24,6 +24,7 @@ namespace {
     case MenuItem::diagnostics:
         return NavigationAction::open_diagnostics;
     case MenuItem::mode:
+    case MenuItem::track:
         break;
     }
     return NavigationAction::back;
@@ -42,7 +43,7 @@ std::size_t ShellNavigation::count_for(const ShellLevel level) const noexcept
     case ShellLevel::menu:
         return kMenuItemCount;
     case ShellLevel::section:
-        return kSectionItemCount;
+        return section_count_;
     case ShellLevel::field:
         return field_count_;
     case ShellLevel::value:
@@ -81,7 +82,8 @@ void ShellNavigation::enter(ShellResult& result) noexcept
     case ShellLevel::menu: {
         const auto item = menu_item();
         state_.section_index = 0;
-        if (item == MenuItem::mode || item == MenuItem::setup) {
+        if (item == MenuItem::mode || item == MenuItem::track ||
+            item == MenuItem::setup) {
             state_.level = ShellLevel::section;
             result.outcome = ShellOutcome::entered;
             if (item == MenuItem::setup) {
@@ -101,6 +103,10 @@ void ShellNavigation::enter(ShellResult& result) noexcept
             // Choosing a mode is the whole interaction; the caller persists it and the
             // shell returns the driver to the timer.
             result.outcome = ShellOutcome::mode_selected;
+            return;
+        }
+        if (menu_item() == MenuItem::track) {
+            result.outcome = ShellOutcome::track_selected;
             return;
         }
         if (state_.section_index == static_cast<std::size_t>(SetupItem::device_settings)) {
@@ -194,6 +200,14 @@ ShellResult ShellNavigation::dispatch(const InputAction action) noexcept
     return result;
 }
 
+void ShellNavigation::set_section_count(const std::size_t count) noexcept
+{
+    section_count_ = count == 0 ? 1 : count;
+    if (state_.section_index >= section_count_) {
+        state_.section_index = 0;
+    }
+}
+
 void ShellNavigation::set_value_count(const std::size_t count) noexcept
 {
     value_count_ = count == 0 ? 1 : count;
@@ -265,6 +279,8 @@ const char* shell_outcome_name(const ShellOutcome outcome) noexcept
         return "refused-session-active";
     case ShellOutcome::mode_selected:
         return "mode-selected";
+    case ShellOutcome::track_selected:
+        return "track-selected";
     case ShellOutcome::value_selected:
         return "value-selected";
     }
@@ -276,6 +292,8 @@ const char* menu_item_name(const MenuItem item) noexcept
     switch (item) {
     case MenuItem::mode:
         return "mode";
+    case MenuItem::track:
+        return "track";
     case MenuItem::setup:
         return "setup";
     case MenuItem::review:
