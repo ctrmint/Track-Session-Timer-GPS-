@@ -27,6 +27,8 @@
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
 #include "track_timer/ui/shell_navigation.hpp"
+#include "track_timer/ui/trackday_screen.hpp"
+#include "track_timer/session/controller.hpp"
 #include "track_timer/settings/nvs_store.hpp"
 #include "track_timer/ui/device_mode.hpp"
 #include "track_timer/ui/value_picker.hpp"
@@ -197,6 +199,39 @@ class ScreenRouter {
         settings_ = settings_manager_.current();
     }
 
+    // Advances the session clock and refreshes whichever running-session screen is up.
+    // Driven from the LVGL service tick so the countdown updates without a task of its
+    // own, and so the session clock is never blocked by storage or the card.
+    void service_session() noexcept
+    {
+        const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
+        (void)session_.advance(now_ms);
+        const auto snapshot = session_.snapshot();
+        const auto active = snapshot.state == session::SessionState::running ||
+                            snapshot.state == session::SessionState::overtime;
+
+        shell_.synchronize_session(active);
+        if (active != session_was_active_) {
+            session_was_active_ = active;
+            lv_screen_load(active ? trackday_root_ : home_screen());
+        }
+        if (!active || trackday_ == nullptr) {
+            return;
+        }
+
+        domain::UiSnapshot ui_snapshot{};
+        ui_snapshot.session_active = true;
+        ui_snapshot.session_remaining_ms = snapshot.session_remaining_ms;
+
+        ui::ActiveSessionDisplayConfig display{};
+        display.average_lap_seconds = settings_.average_lap_seconds;
+        display.trackday_mode_enabled = true;
+        display.session_duration_minutes = settings_.session_duration_minutes;
+
+        active_session_.update(ui_snapshot, static_cast<std::uint64_t>(now_ms), display);
+        trackday_->update(active_session_.view_model().trackday);
+    }
+
     // Pulls a sample and refreshes the radar. Called from the LVGL task so LVGL is only
     // ever touched by its owner.
     void service_imu() noexcept
@@ -232,6 +267,7 @@ class ScreenRouter {
         input.y_axis_valid = resolved.valid;
         // No session is wired on the device yet, so peaks are not session-scoped here.
         // Session-scoped peaks for Review are tracked in #137.
+        service_session();
         const auto& snapshot = imu_meter_.update(input, false);
         // Only when the radar is the visible screen. Repositioning 26 objects and
         // reformatting five labels on every LVGL iteration is wasted work off-screen,
@@ -277,6 +313,15 @@ class ScreenRouter {
         if (radar_root_ == nullptr) {
             return false;
         }
+        trackday_root_ = lv_obj_create(nullptr);
+        if (trackday_root_ == nullptr) {
+            return false;
+        }
+        trackday_ = new (trackday_storage_) ui::TrackdayScreen(trackday_root_);
+        // A hold still reaches the menu from a running session; the shell refuses to open
+        // it while one is live, which is what stops a stray hold ending a session.
+        ui::attach_gesture_input(trackday_root_, on_input, this);
+
         radar_ = new (radar_storage_) ui::GRadarScreen(radar_root_);
         // The hold must still reach the gesture handler with the radar full-panel, which
         // is only true because nothing on it consumes presses.
@@ -341,7 +386,51 @@ class ScreenRouter {
 
     static void on_ready(const ui::NavigationAction action, void* context) noexcept
     {
-        static_cast<ScreenRouter*>(context)->go(action);
+        auto* self = static_cast<ScreenRouter*>(context);
+        if (action == ui::NavigationAction::start_session) {
+            self->start_session();
+            return;
+        }
+        self->go(action);
+    }
+
+    // Only Track Day has a running-session screen so far. Race and G-Only still need
+    // their own layouts, tracked on #132.
+    void start_session() noexcept
+    {
+        const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
+        session::SessionConfiguration configuration{};
+        configuration.session_duration_ms =
+            static_cast<std::int64_t>(settings_.session_duration_minutes) * 60'000;
+        configuration.rest_duration_ms =
+            static_cast<std::int64_t>(settings_.rest_duration_minutes) * 60'000;
+        if (session_.save_configuration(configuration, now_ms) !=
+            session::TransitionResult::accepted) {
+            (void)session_.enter_configuration(now_ms);
+            (void)session_.save_configuration(configuration, now_ms);
+        }
+        const auto started = session_.start(now_ms);
+        ESP_LOGI("track_timer", "session start: %d over %u min",
+                 static_cast<int>(started),
+                 static_cast<unsigned>(settings_.session_duration_minutes));
+        if (trackday_ != nullptr) {
+            trackday_->set_track_name(active_track_.name[0] != '\0'
+                                          ? active_track_.name.data()
+                                          : "TIMER ONLY");
+            switch (ui::mode_from_settings(settings_)) {
+            case ui::DeviceMode::track_day:
+                trackday_->set_mode_note("TRACK DAY  -  lap times available in Review");
+                break;
+            case ui::DeviceMode::race:
+                // Race wants lap times and a delta alongside the countdown. Neither
+                // exists without GNSS, so it borrows the countdown and says so.
+                trackday_->set_mode_note("RACE  -  lap times pending GNSS");
+                break;
+            case ui::DeviceMode::g_only:
+                trackday_->set_mode_note("G-ONLY  -  session timer");
+                break;
+            }
+        }
     }
 
     static void on_input(const ui::InputAction action, void* context) noexcept
@@ -729,6 +818,11 @@ class ScreenRouter {
     lv_obj_t* carousel_root_{nullptr};
     ui::GRadarScreen* radar_{nullptr};
     lv_obj_t* radar_root_{nullptr};
+    ui::TrackdayScreen* trackday_{nullptr};
+    lv_obj_t* trackday_root_{nullptr};
+    session::SessionController session_{};
+    ui::ActiveSessionController active_session_{};
+    bool session_was_active_{false};
     ui::ImuMeterController imu_meter_{};
     track::TrackDefinition active_track_{};
     bool track_armed_{false};
@@ -749,6 +843,7 @@ class ScreenRouter {
         diagnostics_storage_[sizeof(ui::DiagnosticsScreen)]{};
     alignas(ui::CarouselScreen) std::byte carousel_storage_[sizeof(ui::CarouselScreen)]{};
     alignas(ui::GRadarScreen) std::byte radar_storage_[sizeof(ui::GRadarScreen)]{};
+    alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
 };
 
 ScreenRouter router{};

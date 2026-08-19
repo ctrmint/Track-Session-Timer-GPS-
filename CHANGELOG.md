@@ -8,6 +8,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- LVGL allocated from a fixed 64 KB pool, so large glyph bitmaps evicted and
+  re-rasterised on every draw and starved the UI task; it now uses the ESP-IDF heap
+  with glyph bitmaps in PSRAM
+- live views were refreshed at the LVGL loop rate rather than a sensible one
+
 - the scaled carousel icon drove LVGL's software image transform hard enough to starve
   the UI task, tripping the task watchdog and freezing the menu
 - the G meter showed raw accelerometer axes, so the dot sat wherever the unit was tilted
@@ -30,6 +35,10 @@ The project follows Semantic Versioning once the first firmware release is tagge
   sensor scale
 - radar-style G meter used as the G-Only display
 - device settings persisted in NVS, so Mode survives a reboot
+- Track Day running-session screen: countdown, estimated laps as a float, and a
+  decaying session bar
+- five-band countdown colour ramp blending proportional and absolute thresholds
+- large fixed-cell countdown rendered from an embedded font at any size
 - top-level track selection that loads the chosen circuit and arms the timing engine
 - the selected circuit and its timing readiness are shown on the start page
 - top-level Mode selection: Track Day, Race and G-Only
