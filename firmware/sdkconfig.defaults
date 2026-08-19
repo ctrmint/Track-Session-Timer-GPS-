@@ -30,6 +30,22 @@ CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
 # so the headroom costs nothing at steady state.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=24576
 
+# LVGL's built-in allocator is a single fixed pool, 64 KB by default, and every LVGL
+# allocation comes from it - including rasterised glyph bitmaps. A large digit is tens of
+# kilobytes, so only two fit and the glyph cache evicted and re-rasterised on every draw,
+# starving the UI task. Using the C library allocator puts those allocations on the
+# ESP-IDF heap instead, where SPIRAM_USE_MALLOC can serve them from the 8 MB of PSRAM.
+CONFIG_LV_USE_CLIB_MALLOC=y
+
+# Anything above this may come from PSRAM. The default of 16 KB forced glyph bitmaps
+# back into internal RAM, which is what made a smaller font thrash just as badly.
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+
+# Runtime TTF rendering: LVGL's largest built-in font is 48 px, about 3.9 mm on this
+# 311 PPI panel, which is far too small for a countdown read from a driving position.
+CONFIG_LV_USE_TINY_TTF=y
+CONFIG_LV_TINY_TTF_CACHE_GLYPH_CNT=16
+
 CONFIG_LV_BUILD_EXAMPLES=n
 CONFIG_LV_BUILD_DEMOS=n
 CONFIG_LV_FONT_MONTSERRAT_14=y

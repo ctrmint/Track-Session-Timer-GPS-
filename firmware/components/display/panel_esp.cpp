@@ -37,6 +37,8 @@ constexpr std::uint32_t kLvglTaskStackBytes = 24 * 1024;
 constexpr UBaseType_t kLvglTaskPriority = 2;
 constexpr std::uint32_t kLvglMaxDelayMs = 500;
 constexpr std::uint32_t kLvglMinDelayMs = 1;
+// 20 Hz: smooth for a countdown and a G meter, and far below the LVGL loop rate.
+constexpr std::int64_t kServicePeriodUs = 50'000;
 
 // RM690B0 power-on sequence, transcribed from the Waveshare 09_LVGL_Test demo.
 // 0x2A/0x2B describe the native 450 x 600 window; the panel's active area starts at
@@ -117,10 +119,17 @@ void tick(void*) noexcept { lv_tick_inc(kLvglTickPeriodMs); }
 void lvgl_task(void*) noexcept
 {
     auto delay_ms = kLvglMinDelayMs;
+    std::int64_t last_service_us = 0;
     for (;;) {
         if (lock(portMAX_DELAY)) {
+            // Rate-limited deliberately. lv_timer_handler can return a 1 ms delay, and
+            // refreshing live views at that rate is both pointless and expensive.
             if (service_callback != nullptr) {
-                service_callback();
+                const auto now_us = esp_timer_get_time();
+                if (now_us - last_service_us >= kServicePeriodUs) {
+                    last_service_us = now_us;
+                    service_callback();
+                }
             }
             delay_ms = lv_timer_handler();
             unlock();
