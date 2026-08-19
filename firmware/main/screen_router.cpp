@@ -5,7 +5,12 @@
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "track_timer/catalog/track_catalog.hpp"
+#include "track_timer/catalog/track_loader.hpp"
 #include "track_timer/diagnostics/snapshot.hpp"
+#include "track_timer/storage/sd_card.hpp"
+#include "track_timer/storage/sd_track_store.hpp"
+#include "track_timer/timing/engine.hpp"
 #include "track_timer/display/panel.hpp"
 #include "track_timer/ui/diagnostics.hpp"
 #include "track_timer/ui/carousel_screen.hpp"
@@ -15,7 +20,6 @@
 #include "track_timer/ui/imu_meter.hpp"
 #include "track_timer/imu/calibration.hpp"
 #include "track_timer/imu/qmi8658.hpp"
-#include "esp_timer.h"
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
@@ -29,8 +33,10 @@
 
 #include <lvgl.h>
 
+#include <algorithm>
 #include <cstring>
 #include <new>
+#include <string_view>
 
 namespace track_timer::main_app {
 namespace {
@@ -139,6 +145,7 @@ constexpr std::uint32_t kRuby = 0xFF8FA3;
 
 constexpr ui::CarouselEntry kMenuEntries[] = {
     {LV_SYMBOL_POWER, "MODE", kRuby},
+    {LV_SYMBOL_GPS, "TRACK", kAzure},
     {LV_SYMBOL_SETTINGS, "SETUP", kAmber},
     {LV_SYMBOL_LIST, "REVIEW", kAzure},
     {LV_SYMBOL_EYE_OPEN, "DIAGNOSTICS", kGreen},
@@ -152,10 +159,11 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     {LV_SYMBOL_CHARGE, "G-ONLY", kViolet},
 };
 
+// Track selection has moved to the top level, so Setup keeps only what belongs there.
 constexpr ui::CarouselEntry kSetupEntries[] = {
     {LV_SYMBOL_EDIT, "DEVICE SETTINGS", kAmber},
-    {LV_SYMBOL_GPS, "TRACK SELECTION", kAzure},
     {LV_SYMBOL_REFRESH, "G-METER", kViolet},
+    {LV_SYMBOL_EYE_OPEN, "DISPLAY", kGreen},
 };
 
 class ScreenRouter {
@@ -237,6 +245,7 @@ class ScreenRouter {
     [[nodiscard]] bool build() noexcept
     {
         load_settings();
+        (void)build_catalog();
         for (auto*& screen : screens_) {
             screen = lv_obj_create(nullptr);
             if (screen == nullptr) {
@@ -291,7 +300,9 @@ class ScreenRouter {
         }
         ui::attach_gesture_input(carousel_root_, on_input, this);
 
-        ready_->update(ui::present_ready(ready_snapshot()));
+        // Restore the track that was selected before the last reboot.
+        restore_selected_track();
+        refresh_ready();
         review_controller_.begin(nullptr);  // no storage backend yet
         review_->update(review_controller_.view_model());
         diagnostics_controller_.begin(device_snapshot());
@@ -346,6 +357,157 @@ class ScreenRouter {
                    : screen_for(ui::Destination::ready);
     }
 
+    // The dashboard reflects what is actually loaded, so the driver can confirm the
+    // circuit before going out rather than trusting that a selection took.
+    [[nodiscard]] ui::ReadySnapshot ready_snapshot() const noexcept
+    {
+        ui::ReadySnapshot snapshot{};
+        snapshot.session_duration_minutes = settings_.session_duration_minutes;
+        snapshot.rest_duration_minutes = settings_.rest_duration_minutes;
+        snapshot.gnss_health = domain::GnssHealth::unavailable;
+        snapshot.storage = storage::mounted() ? ui::Readiness::ready
+                                              : ui::Readiness::unavailable;
+        snapshot.imu = imu::running() ? ui::Readiness::ready : ui::Readiness::unavailable;
+        snapshot.logging_available = false;
+        snapshot.session_active = false;
+
+        if (track_armed_) {
+            std::strncpy(snapshot.selected_track.data(), active_track_.name.data(),
+                         snapshot.selected_track.size() - 1);
+            snapshot.track_state = ui::ReadyTrackState::selected;
+        }
+        else if (active_track_.name[0] != '\0') {
+            // Selected and persisted, but the geometry is provisional so timing will not
+            // arm. Saying "selected" here would imply lap timing that is not running.
+            std::strncpy(snapshot.selected_track.data(), active_track_.name.data(),
+                         snapshot.selected_track.size() - 1);
+            snapshot.track_state = ui::ReadyTrackState::invalid;
+        }
+        else {
+            std::strncpy(snapshot.selected_track.data(), "No track selected",
+                         snapshot.selected_track.size() - 1);
+            snapshot.track_state = ui::ReadyTrackState::none;
+        }
+        return snapshot;
+    }
+
+    void refresh_ready() noexcept
+    {
+        if (ready_ != nullptr) {
+            ready_->update(ui::present_ready(ready_snapshot()));
+        }
+    }
+
+    // The definition array and the parse scratch both live in PSRAM: TrackDefinition is
+    // 3.6 KB, so 32 of them is about 115 KB, and a file blob alone is 16 KB. Neither
+    // belongs in internal RAM or on a task stack.
+    [[nodiscard]] bool build_catalog() noexcept
+    {
+        auto* storage_array = static_cast<track::TrackDefinition*>(heap_caps_calloc(
+            track::kMaximumCatalogTracks, sizeof(track::TrackDefinition),
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        load_scratch_ = static_cast<catalog::TrackLoadScratch*>(heap_caps_calloc(
+            1, sizeof(catalog::TrackLoadScratch), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (storage_array == nullptr || load_scratch_ == nullptr) {
+            ESP_LOGE("track_timer", "no PSRAM for the track catalog; timer-only");
+            return false;
+        }
+        track_catalog_ = catalog::TrackCatalog{storage_array, track::kMaximumCatalogTracks};
+
+        const auto status =
+            track_catalog_.rebuild(track_store_, track_store_, load_scratch_->blob);
+        ESP_LOGI("track_timer",
+                 "track catalog: %s (%u discovered, %u loaded, %u rejected, cap %u)",
+                 catalog::catalog_build_result_name(status.result),
+                 static_cast<unsigned>(status.discovered),
+                 static_cast<unsigned>(status.loaded),
+                 static_cast<unsigned>(status.rejected),
+                 static_cast<unsigned>(status.capacity));
+        if (status.truncated()) {
+            ESP_LOGW("track_timer",
+                     "track catalog TRUNCATED: the card holds more tracks than the %u-entry "
+                     "catalog; some circuits are not selectable",
+                     static_cast<unsigned>(status.capacity));
+        }
+        if (status.loaded == 0) {
+            ESP_LOGW("track_timer", "no track geometry under %s; timer-only operation",
+                     track_store_.root());
+        }
+        return true;
+    }
+
+    // Reapply whatever was selected before the reboot, so a driver does not have to
+    // reselect their circuit every time the device powers up.
+    void restore_selected_track() noexcept
+    {
+        const auto& stored = settings_.selected_track_id;
+        const auto length = ::strnlen(stored.data(), stored.size());
+        if (length == 0) {
+            return;
+        }
+        const auto index = track_catalog_.find({stored.data(), length});
+        if (index == track::kNoTrackIndex) {
+            ESP_LOGW("track_timer", "stored track '%s' is not on the card", stored.data());
+            return;
+        }
+        apply_selected_track(index);
+    }
+
+    void show_tracks(const ui::ShellState& state) noexcept
+    {
+        const auto view = track_catalog_.view();
+        const auto count = std::min(view.count, track_entries_.size());
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto& definition = view.definitions[index];
+            track_names_[index] = definition.name;
+            // Colour carries readiness: a provisional circuit cannot arm timing, and the
+            // driver should see that before selecting rather than after.
+            track_entries_[index] = {
+                LV_SYMBOL_GPS, track_names_[index].data(),
+                track::track_timing_ready(definition) ? kGreen : kAmber};
+        }
+        shell_.set_section_count(count == 0 ? 1 : count);
+        carousel_->set_entries(track_entries_.data(), count);
+        carousel_->set_title(count == 0 ? "NO TRACKS ON CARD" : "TRACK");
+        carousel_->set_position(state.section_index);
+    }
+
+    // Reads the chosen definition from the card, parses it and applies it to the timing
+    // engine, then persists the choice. Selection is recorded even when the geometry is
+    // provisional, so the driver keeps their circuit and simply runs timer-only.
+    void apply_selected_track(const std::size_t index) noexcept
+    {
+        const auto view = track_catalog_.view();
+        if (index >= view.count || load_scratch_ == nullptr) {
+            return;
+        }
+        const auto& chosen = view.definitions[index];
+        const std::string_view identifier{
+            chosen.track_id.data(), ::strnlen(chosen.track_id.data(), chosen.track_id.size())};
+
+        const auto report =
+            catalog::apply_track(identifier, track_store_, settings_, false,
+                                 timing_engine_, *load_scratch_, active_track_);
+        track_armed_ = report.ok();
+        if (!track_armed_) {
+            // Keep the name so the dashboard can report the circuit and its state.
+            active_track_ = chosen;
+        }
+
+        std::memset(settings_.selected_track_id.data(), 0,
+                    settings_.selected_track_id.size());
+        std::memcpy(settings_.selected_track_id.data(), identifier.data(),
+                    std::min(identifier.size(), settings_.selected_track_id.size() - 1));
+        persist_settings();
+
+        ESP_LOGI("track_timer", "track %s: %s (rev %u, hash %llx)%s", identifier.data(),
+                 catalog::track_apply_result_name(report.result),
+                 static_cast<unsigned>(report.revision),
+                 static_cast<unsigned long long>(report.definition_hash),
+                 track_armed_ ? " - timing armed" : " - timer only");
+        refresh_ready();
+    }
+
     void show_menu(const ui::ShellState& state) noexcept
     {
         carousel_->set_entries(kMenuEntries, 4);
@@ -355,6 +517,11 @@ class ScreenRouter {
 
     void show_section(const ui::ShellState& state) noexcept
     {
+        if (shell_.menu_item() == ui::MenuItem::track) {
+            show_tracks(state);
+            return;
+        }
+        shell_.set_section_count(ui::kSectionItemCount);
         const auto mode = shell_.menu_item() == ui::MenuItem::mode;
         carousel_->set_entries(mode ? kModeEntries : kSetupEntries, 3);
         // Showing the live mode in the title means the driver can see what is selected
@@ -431,6 +598,11 @@ class ScreenRouter {
             persist_settings();
             ESP_LOGI("track_timer", "mode: %s",
                      ui::device_mode_name(ui::mode_from_settings(settings_)));
+            shell_.close();
+            lv_screen_load(home_screen());
+            break;
+        case ui::ShellOutcome::track_selected:
+            apply_selected_track(result.state.section_index);
             shell_.close();
             lv_screen_load(home_screen());
             break;
@@ -558,6 +730,15 @@ class ScreenRouter {
     ui::GRadarScreen* radar_{nullptr};
     lv_obj_t* radar_root_{nullptr};
     ui::ImuMeterController imu_meter_{};
+    track::TrackDefinition active_track_{};
+    bool track_armed_{false};
+    storage::SdTrackStore track_store_{};
+    catalog::TrackCatalog track_catalog_{nullptr, 0};
+    catalog::TrackLoadScratch* load_scratch_{nullptr};
+    timing::TimingEngine timing_engine_{};
+    std::array<ui::CarouselEntry, track::kMaximumCatalogTracks> track_entries_{};
+    std::array<std::array<char, track::kTrackNameCapacity>,
+               track::kMaximumCatalogTracks> track_names_{};
     imu::GravityCalibration calibration_{};
 
     alignas(ui::ReadyScreen) std::byte ready_storage_[sizeof(ui::ReadyScreen)]{};

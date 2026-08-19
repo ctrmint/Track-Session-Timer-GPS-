@@ -10,7 +10,12 @@
 
 namespace track_timer::ui {
 
-inline constexpr std::size_t kCarouselCapacity = 6;
+// Sized for a track list rather than a menu: the UK pack alone is 24 circuits.
+inline constexpr std::size_t kCarouselCapacity = 34;
+
+// Beyond this many entries the position dots stop being readable, so a "n / total"
+// counter replaces them.
+inline constexpr std::size_t kCarouselMaximumDots = 8;
 
 struct CarouselEntry {
     const char* icon{nullptr};   // LV_SYMBOL_*
@@ -50,7 +55,8 @@ class CarouselScreen {
     lv_obj_t* label_{nullptr};
     lv_obj_t* hint_{nullptr};
     std::array<lv_obj_t*, 2> chevrons_{};
-    std::array<lv_obj_t*, kCarouselCapacity> dots_{};
+    std::array<lv_obj_t*, kCarouselMaximumDots> dots_{};
+    lv_obj_t* position_text_{nullptr};
     std::array<CarouselEntry, kCarouselCapacity> entries_{};
     std::size_t count_{0};
     std::size_t index_{0};
