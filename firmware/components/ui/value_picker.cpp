@@ -6,17 +6,10 @@
 namespace track_timer::ui {
 namespace {
 
-constexpr std::array<std::uint16_t, 10> kDurationMinutes{1,  5,  10, 15, 20,
-                                                        25, 30, 40, 50, 60};
 constexpr std::array<std::uint16_t, 10> kLaunchMilliG{0,     500,   1'000, 1'250, 1'500,
                                                       1'750, 2'000, 2'500, 3'500, 4'000};
 constexpr std::array<std::uint8_t, 4> kBrightnessPercent{25, 50, 75, 100};
 
-// Average lap only feeds the laps-remaining estimate, so second-level precision buys
-// nothing. A curated list spanning real circuit lap times is one press per value, where
-// stepping ±1 s across 0-3599 needed up to 150.
-constexpr std::array<std::uint16_t, 11> kAverageLapSeconds{
-    0, 30, 45, 60, 75, 90, 105, 120, 135, 150, 180};
 
 void set_text(ValueChoice& choice, const char* text) noexcept
 {
@@ -55,16 +48,6 @@ ValueChoiceList from_labels(const char* const* labels, const std::size_t count,
     return list;
 }
 
-void format_lap_seconds(ValueChoice& choice, const std::uint16_t seconds) noexcept
-{
-    if (seconds == 0) {
-        set_text(choice, "OFF");
-        return;
-    }
-    std::snprintf(choice.text.data(), choice.text.size(), "%u:%02u", seconds / 60U,
-                  seconds % 60U);
-}
-
 }  // namespace
 
 ValueChoiceList choices_for(const SettingsField field,
@@ -76,19 +59,13 @@ ValueChoiceList choices_for(const SettingsField field,
     static const char* const kOrientation[] = {"0", "90", "180", "270", "AUTO"};
 
     switch (field) {
+    // The time fields have no choice list. A curated ladder could not reach their values
+    // at all - average lap stopped at 3:00 against a 59:59 range - so they are edited on
+    // the two-column roller instead, and an empty list is what tells the caller that.
     case SettingsField::session_duration:
-        return from_list(kDurationMinutes, current.session_duration_minutes,
-                         [](ValueChoice& c, std::uint16_t v) {
-                             set_number(c, "%u MIN", static_cast<int>(v));
-                         });
     case SettingsField::rest_duration:
-        return from_list(kDurationMinutes, current.rest_duration_minutes,
-                         [](ValueChoice& c, std::uint16_t v) {
-                             set_number(c, "%u MIN", static_cast<int>(v));
-                         });
     case SettingsField::average_lap:
-        return from_list(kAverageLapSeconds, current.average_lap_seconds,
-                         [](ValueChoice& c, std::uint16_t v) { format_lap_seconds(c, v); });
+        return {};
     case SettingsField::launch_sensitivity:
         return from_list(kLaunchMilliG, current.launch_sensitivity_milli_g,
                          [](ValueChoice& c, std::uint16_t v) {
@@ -135,29 +112,12 @@ bool apply_choice(const SettingsField field, const std::size_t index,
                   settings::DeviceSettings& draft) noexcept
 {
     switch (field) {
+    // Edited on the roller, not from a list, so there is no index to apply. Returning
+    // false keeps a stale value screen from writing a value the field no longer offers.
     case SettingsField::session_duration:
-        if (index >= kDurationMinutes.size()) {
-            return false;
-        }
-        draft.session_duration_minutes = kDurationMinutes[index];
-        return true;
     case SettingsField::rest_duration:
-        if (index >= kDurationMinutes.size()) {
-            return false;
-        }
-        draft.rest_duration_minutes = kDurationMinutes[index];
-        return true;
     case SettingsField::average_lap:
-        if (index >= kAverageLapSeconds.size()) {
-            return false;
-        }
-        draft.average_lap_seconds = kAverageLapSeconds[index];
-        // The laps-remaining readout is meaningless without an average lap, so turning
-        // it off has to take the dependent setting with it.
-        if (draft.average_lap_seconds == 0) {
-            draft.lower_display = settings::LowerDisplayMode::elapsed;
-        }
-        return true;
+        return false;
     case SettingsField::launch_sensitivity:
         if (index >= kLaunchMilliG.size()) {
             return false;

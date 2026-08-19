@@ -63,6 +63,7 @@ add_library(
     ../firmware/components/ui/input.cpp
     ../firmware/components/ui/shell_navigation.cpp
     ../firmware/components/ui/presenter.cpp
+    ../firmware/components/ui/time_roller.cpp
     ../firmware/components/ui/rest_session.cpp
     ../firmware/components/ui/session_review.cpp
     ../firmware/components/ui/settings_editor.cpp

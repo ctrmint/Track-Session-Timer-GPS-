@@ -1,5 +1,7 @@
 #include "track_timer/ui/settings_editor.hpp"
 
+#include "track_timer/ui/time_roller.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -7,8 +9,10 @@
 namespace track_timer::ui {
 namespace {
 
-constexpr std::array<std::uint16_t, 10> kDurationMinutes{1, 5, 10, 15, 20,
-                                                        25, 30, 40, 50, 60};
+// Seconds now, since the durations are stored in seconds. The stepping editor keeps its
+// coarse preset ladder; the roller in the gated menu is what reaches every value.
+constexpr std::array<std::uint32_t, 10> kDurationSeconds{60,   300,  600,  900,  1200,
+                                                        1500, 1800, 2400, 3000, 3600};
 constexpr std::array<std::uint16_t, 10> kLaunchMilliG{0, 500, 1'000, 1'250, 1'500,
                                                       1'750, 2'000, 2'500, 3'500, 4'000};
 constexpr std::array<std::uint8_t, 4> kBrightnessPercent{25, 50, 75, 100};
@@ -85,12 +89,10 @@ void format_value(const SettingsField field, const settings::DeviceSettings& set
 {
     switch (field) {
     case SettingsField::session_duration:
-        std::snprintf(output.data(), output.size(), "%u MIN",
-                      static_cast<unsigned>(settings.session_duration_minutes));
+        format_duration_value(output.data(), output.size(), settings.session_duration_seconds);
         break;
     case SettingsField::rest_duration:
-        std::snprintf(output.data(), output.size(), "%u MIN",
-                      static_cast<unsigned>(settings.rest_duration_minutes));
+        format_duration_value(output.data(), output.size(), settings.rest_duration_seconds);
         break;
     case SettingsField::launch_sensitivity:
         if (settings.launch_sensitivity_milli_g == 0) {
@@ -312,10 +314,10 @@ bool SettingsEditor::adjust(const bool forward) noexcept
     bool adjusted = false;
     switch (field_) {
     case SettingsField::session_duration:
-        adjusted = step_choice(draft_.session_duration_minutes, kDurationMinutes, forward);
+        adjusted = step_choice(draft_.session_duration_seconds, kDurationSeconds, forward);
         break;
     case SettingsField::rest_duration:
-        adjusted = step_choice(draft_.rest_duration_minutes, kDurationMinutes, forward);
+        adjusted = step_choice(draft_.rest_duration_seconds, kDurationSeconds, forward);
         break;
     case SettingsField::launch_sensitivity:
         adjusted = step_choice(draft_.launch_sensitivity_milli_g, kLaunchMilliG, forward);

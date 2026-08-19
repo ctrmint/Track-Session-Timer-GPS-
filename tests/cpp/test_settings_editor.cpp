@@ -61,12 +61,14 @@ int main()
     assert(!editor.increment());
 
     assert(editor.begin(manager.current(), false));
-    constexpr std::array<std::uint16_t, 10> durations{1, 5, 10, 15, 20,
-                                                    25, 30, 40, 50, 60};
+    // Seconds since v5. The stepping editor's ladder is unchanged in what it means, only
+    // in the unit it is expressed in.
+    constexpr std::array<std::uint32_t, 10> durations{60,   300,  600,  900,  1200,
+                                                     1500, 1800, 2400, 3000, 3600};
     while (editor.decrement()) {
     }
     for (const auto expected : durations) {
-        assert(editor.draft().session_duration_minutes == expected);
+        assert(editor.draft().session_duration_seconds == expected);
         if (expected != durations.back()) {
             assert(editor.increment());
         }
@@ -74,20 +76,20 @@ int main()
     assert(!editor.increment());
 
     auto extended_duration = manager.current();
-    extended_duration.session_duration_minutes = 120;
+    extended_duration.session_duration_seconds = 120 * 60;
     assert(editor.begin(extended_duration, false));
     assert(!editor.increment());
     assert(editor.decrement());
-    assert(editor.draft().session_duration_minutes == 60);
+    assert(editor.draft().session_duration_seconds == 3600);
     assert(editor.begin(manager.current(), false));
 
     select_field(editor, ui::SettingsField::rest_duration);
     while (editor.decrement()) {
     }
-    assert(editor.draft().rest_duration_minutes == durations.front());
+    assert(editor.draft().rest_duration_seconds == durations.front());
     while (editor.increment()) {
     }
-    assert(editor.draft().rest_duration_minutes == durations.back());
+    assert(editor.draft().rest_duration_seconds == durations.back());
 
     select_field(editor, ui::SettingsField::launch_sensitivity);
     constexpr std::array<std::uint16_t, 10> launch_values{0, 500, 1'000, 1'250, 1'500,
@@ -196,7 +198,7 @@ int main()
     assert(editor.draft().trackday_mode_enabled);
     editor.request_restore_defaults();
     editor.resolve_restore_defaults(true);
-    assert(editor.draft().session_duration_minutes == 20);
+    assert(editor.draft().session_duration_seconds == 20 * 60);
     assert(!editor.draft().trackday_mode_enabled);
     assert(std::strcmp(editor.draft().selected_track_id.data(), "silverstone-gp") == 0);
 

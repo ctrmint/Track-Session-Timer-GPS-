@@ -8,6 +8,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- time settings could not reach most of their own range: the average lap picker stopped at
+  3:00 against a field holding 59:59, and the durations at 60 minutes against 24 hours
+- saving on the roller used LVGL's 400 ms long press, which committed a value while it was
+  still being chosen
+
 - the G meter subtracted a gravity reference frozen at calibration, so every later change
   of tilt read as acceleration at sin(angle) - 0.17 g on a 10 degree banked corner - and
   peak-hold latched those artefacts rather than averaging them away; attitude is now
@@ -45,6 +50,9 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- two-column minutes-and-seconds roller for average lap, session and rest duration, with
+  drag, flick momentum, and a deliberate hold to save
+- session and rest durations stored as seconds rather than whole minutes
 - Track Day running-session screen: countdown, estimated laps as a float, and a
   decaying session bar
 - five-band countdown colour ramp blending proportional and absolute thresholds

@@ -45,6 +45,9 @@ void handle(lv_event_t* event) noexcept
         else if (direction == LV_DIR_BOTTOM) {
             action = InputAction::swipe_down;
         }
+        else if (direction == LV_DIR_TOP) {
+            action = InputAction::swipe_up;
+        }
         if (action != InputAction::none) {
             binding->handled_this_touch = true;
             ++counters.dispatched;
@@ -77,7 +80,89 @@ void handle(lv_event_t* event) noexcept
     }
 }
 
+struct DragBinding {
+    DragCallback callback{nullptr};
+    void* context{nullptr};
+    lv_point_t previous{};
+    std::uint32_t previous_ms{0};
+    bool active{false};
+};
+
+constexpr std::size_t kMaximumDragBindings = 4;
+DragBinding drag_bindings[kMaximumDragBindings]{};
+std::size_t drag_binding_count = 0;
+
+void handle_drag(lv_event_t* event) noexcept
+{
+    auto* binding = static_cast<DragBinding*>(lv_event_get_user_data(event));
+    if (binding == nullptr || binding->callback == nullptr) {
+        return;
+    }
+    auto* indev = lv_indev_active();
+    if (indev == nullptr) {
+        return;
+    }
+    lv_point_t point{};
+    lv_indev_get_point(indev, &point);
+    const auto now_ms = lv_tick_get();
+
+    DragSample sample{};
+    sample.x = static_cast<std::int16_t>(point.x);
+    sample.y = static_cast<std::int16_t>(point.y);
+
+    switch (lv_event_get_code(event)) {
+    case LV_EVENT_PRESSED:
+        binding->previous = point;
+        binding->previous_ms = now_ms;
+        binding->active = true;
+        sample.phase = DragPhase::began;
+        break;
+    case LV_EVENT_PRESSING:
+        if (!binding->active) {
+            return;
+        }
+        sample.phase = DragPhase::moved;
+        sample.dy = static_cast<std::int16_t>(point.y - binding->previous.y);
+        sample.elapsed_ms = now_ms - binding->previous_ms;
+        binding->previous = point;
+        binding->previous_ms = now_ms;
+        // A sample with no travel says nothing and would only dilute the speed estimate.
+        if (sample.dy == 0) {
+            return;
+        }
+        break;
+    case LV_EVENT_RELEASED:
+        if (!binding->active) {
+            return;
+        }
+        binding->active = false;
+        sample.phase = DragPhase::ended;
+        break;
+    default:
+        return;
+    }
+    binding->callback(sample, binding->context);
+}
+
 }  // namespace
+
+void attach_drag_input(lv_obj_t* const target, const DragCallback callback,
+                       void* const context) noexcept
+{
+    if (target == nullptr || callback == nullptr ||
+        drag_binding_count >= kMaximumDragBindings) {
+        return;
+    }
+    auto& binding = drag_bindings[drag_binding_count++];
+    binding.callback = callback;
+    binding.context = context;
+    binding.active = false;
+
+    lv_obj_add_flag(target, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(target, handle_drag, LV_EVENT_PRESSED, &binding);
+    lv_obj_add_event_cb(target, handle_drag, LV_EVENT_PRESSING, &binding);
+    lv_obj_add_event_cb(target, handle_drag, LV_EVENT_RELEASED, &binding);
+}
 
 void attach_gesture_input(lv_obj_t* const target, const InputCallback callback,
                           void* const context) noexcept

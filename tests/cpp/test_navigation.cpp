@@ -52,8 +52,8 @@ int main()
 
     ReadySnapshot ready{};
     std::strcpy(ready.selected_track.data(), "Synthetic Test Loop");
-    ready.session_duration_minutes = 30;
-    ready.rest_duration_minutes = 15;
+    ready.session_duration_seconds = 30 * 60;
+    ready.rest_duration_seconds = 15 * 60;
     ready.gnss_health = track_timer::domain::GnssHealth::searching;
     ready.storage = Readiness::degraded;
     ready.imu = Readiness::unavailable;
@@ -64,6 +64,11 @@ int main()
     assert(std::strcmp(degraded.rest_duration.data(), "15 MIN REST") == 0);
     assert(std::strcmp(degraded.timing_mode.data(), "TIMER ONLY - GPS UNAVAILABLE") == 0);
     assert(std::strcmp(degraded.storage.text.data(), "STORAGE DEGRADED") == 0);
+
+    // A duration carrying seconds reads as minutes and seconds rather than being rounded
+    // away, which is the whole point of storing seconds.
+    ready.session_duration_seconds = 20 * 60 + 30;
+    assert(std::strcmp(present_ready(ready).session_duration.data(), "20:30 SESSION") == 0);
     assert(std::strcmp(degraded.imu.text.data(), "NO IMU") == 0);
     assert(std::strcmp(degraded.logging.text.data(), "NO LOGGING") == 0);
     assert(degraded.start_enabled);

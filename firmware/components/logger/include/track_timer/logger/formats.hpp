@@ -11,7 +11,10 @@
 
 namespace track_timer::logger {
 
-inline constexpr std::uint16_t kLogFormatVersion = 1;
+// 2: session and rest durations widened from uint16 minutes to uint32 seconds, which
+// changes both the meaning and the size of every meta record. Logs written before this
+// are rejected by their version rather than silently misread as very short sessions.
+inline constexpr std::uint16_t kLogFormatVersion = 2;
 inline constexpr std::int64_t kUnavailableUtcNs = -1;
 inline constexpr std::size_t kSessionIdentifierCapacity = 32;
 inline constexpr std::size_t kFirmwareCommitCapacity = 41;
@@ -79,8 +82,8 @@ enum DegradedSubsystemFlag : std::uint32_t {
 
 struct SessionSettingsV1 {
     std::uint16_t settings_schema_version{settings::kCurrentSettingsVersion};
-    std::uint16_t session_duration_minutes{0};
-    std::uint16_t rest_duration_minutes{0};
+    std::uint32_t session_duration_seconds{0};
+    std::uint32_t rest_duration_seconds{0};
     std::uint16_t launch_sensitivity_milli_g{0};
     std::uint16_t average_lap_seconds{0};
     std::uint8_t day_brightness_percent{0};

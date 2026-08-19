@@ -24,6 +24,28 @@ void attach_gesture_input(lv_obj_t* target, InputCallback callback,
 // swipe starting anywhere still reaches the screen's handler.
 void bubble_gestures_to_parent(lv_obj_t* child) noexcept;
 
+enum class DragPhase : std::uint8_t {
+    began,
+    moved,
+    ended,
+};
+
+struct DragSample {
+    DragPhase phase{DragPhase::began};
+    std::int16_t x{0};  // screen coordinates, so a screen can tell which column was touched
+    std::int16_t y{0};
+    std::int16_t dy{0};  // travel since the previous sample, positive downward
+    std::uint32_t elapsed_ms{0};
+};
+
+using DragCallback = void (*)(const DragSample& sample, void* context) noexcept;
+
+// Continuous pointer travel, which the InputAction contract deliberately discards when it
+// reduces touch to named gestures. A rolling selector needs it: one discrete swipe per
+// step would take 59 gestures to cross a column, which is worse than the single press it
+// replaces. Everything else should keep using attach_gesture_input.
+void attach_drag_input(lv_obj_t* target, DragCallback callback, void* context) noexcept;
+
 // Raw counts of what LVGL actually delivered, so a passive log can distinguish "no
 // events arrive" from "events arrive but are suppressed" from "actions are dispatched
 // but the screen does not follow".

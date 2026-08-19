@@ -192,6 +192,9 @@ ShellResult ShellNavigation::dispatch(const InputAction action) noexcept
         close();
         result.outcome = ShellOutcome::exited;
         break;
+    case InputAction::swipe_up:
+        // Vertical gestures belong to the screen that draws a value, not to navigation.
+        // The shell has nothing above the current level to move to.
     case InputAction::none:
         break;
     }

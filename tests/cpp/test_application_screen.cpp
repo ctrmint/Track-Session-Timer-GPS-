@@ -145,13 +145,13 @@ int main()
         assert(lv_obj_get_height(button) >= 56);
     }
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::increment));
-    assert(screen.settings_editor().draft().session_duration_minutes == 25);
+    assert(screen.settings_editor().draft().session_duration_seconds == 25 * 60);
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::restore_defaults));
     assert(screen.settings_editor().status() == ui::SettingsEditorStatus::confirm_defaults);
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel_defaults));
-    assert(screen.settings_editor().draft().session_duration_minutes == 25);
+    assert(screen.settings_editor().draft().session_duration_seconds == 25 * 60);
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::save));
-    assert(settings_manager.current().session_duration_minutes == 25);
+    assert(settings_manager.current().session_duration_seconds == 25 * 60);
     click(screen.settings_screen().button_for(ui::SettingsScreenAction::cancel));
     assert(screen.destination() == ui::Destination::setup);
     assert(screen.setup_page() == simulator::SetupPage::menu);

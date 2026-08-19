@@ -25,8 +25,8 @@ enum class ReadyTrackState : std::uint8_t {
 
 struct ReadySnapshot {
     std::array<char, 48> selected_track{};
-    std::uint16_t session_duration_minutes{20};
-    std::uint16_t rest_duration_minutes{20};
+    std::uint32_t session_duration_seconds{20 * 60};
+    std::uint32_t rest_duration_seconds{20 * 60};
     domain::GnssHealth gnss_health{domain::GnssHealth::unavailable};
     Readiness storage{Readiness::unavailable};
     Readiness imu{Readiness::unavailable};

@@ -186,7 +186,7 @@ void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
         format_estimated_laps(view_.trackday, snapshot.session_remaining_ms,
                               display.average_lap_seconds);
         const auto total_ms =
-            static_cast<std::int64_t>(display.session_duration_minutes) * 60'000;
+            static_cast<std::int64_t>(display.session_duration_seconds) * 1'000;
         view_.trackday.remaining_ratio =
             session_remaining_ratio(snapshot.session_remaining_ms, total_ms);
         view_.trackday.urgency =

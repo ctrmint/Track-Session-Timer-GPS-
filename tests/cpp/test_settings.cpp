@@ -45,8 +45,8 @@ class MemorySettingsStore final : public SettingsStore {
 DeviceSettings customized_settings()
 {
     DeviceSettings settings{};
-    settings.session_duration_minutes = 30;
-    settings.rest_duration_minutes = 10;
+    settings.session_duration_seconds = 30 * 60 + 30;  // exercises the seconds v5 added
+    settings.rest_duration_seconds = 10 * 60;
     settings.launch_sensitivity_milli_g = 1'250;
     settings.average_lap_seconds = 103;
     settings.day_brightness_percent = 75;
@@ -74,7 +74,7 @@ void test_validation_and_codec()
     assert(settings_equal(settings, decoded));
 
     auto invalid = settings;
-    invalid.session_duration_minutes = 0;
+    invalid.session_duration_seconds = 0;
     assert(!valid_settings(invalid));
     invalid = settings;
     invalid.launch_sensitivity_milli_g = 777;
@@ -125,7 +125,9 @@ void test_migration_corruption_and_storage_errors()
     const auto migration = migrated.load();
     assert(migration.source == SettingsSource::migrated_v1);
     assert(migration.current_format_persisted);
-    assert(migrated.current().session_duration_minutes == 25);
+    // v1 held whole minutes, so the migrated value is exact.
+    assert(migrated.current().session_duration_seconds == 25 * 60);
+    assert(migrated.current().rest_duration_seconds == 5 * 60);
     assert(migrated.current().day_brightness_percent == 75);
     assert(migrated.current().night_brightness_percent == 50);
     assert(migrated.current().orientation == OrientationMode::fixed_90);
@@ -159,6 +161,21 @@ void test_migration_corruption_and_storage_errors()
     assert(version_three.current().lap_boundary == LapBoundaryMode::finish);
     assert(!version_three.current().pit_exit_auto_start_enabled);
     assert(!version_three.current().pit_entry_auto_stop_enabled);
+
+    MemorySettingsStore version_four_store;
+    version_four_store.found = true;
+    version_four_store.blob = encode_legacy_settings_v4(customized_settings());
+    SettingsManager version_four{version_four_store};
+    const auto version_four_migration = version_four.load();
+    assert(version_four_migration.source == SettingsSource::migrated_v4);
+    assert(version_four_migration.current_format_persisted);
+    // v4 stored minutes, so the seconds in the source value cannot have survived it: 30:30
+    // comes back as 30:00. Everything v4 could express is preserved exactly.
+    assert(version_four.current().session_duration_seconds == 30 * 60);
+    assert(version_four.current().rest_duration_seconds == 10 * 60);
+    assert(version_four.current().trackday_mode_enabled);
+    assert(version_four.current().pit_exit_auto_start_enabled);
+    assert(version_four.current().average_lap_seconds == 103);
 
     MemorySettingsStore corrupt_store;
     corrupt_store.found = true;

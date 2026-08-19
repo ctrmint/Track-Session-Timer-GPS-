@@ -1,4 +1,5 @@
 #include "track_timer/ui/device_mode.hpp"
+#include "track_timer/ui/time_roller.hpp"
 #include "track_timer/ui/value_picker.hpp"
 
 #include <cassert>
@@ -12,8 +13,8 @@ using namespace track_timer;
 settings::DeviceSettings base()
 {
     settings::DeviceSettings value{};
-    value.session_duration_minutes = 20;
-    value.rest_duration_minutes = 20;
+    value.session_duration_seconds = 20;
+    value.rest_duration_seconds = 20;
     return value;
 }
 
@@ -83,42 +84,50 @@ void g_only_shows_nothing_but_the_meter()
     assert(!visibility.lap_delta);
 }
 
-// The point of the rework: every value is one press away, never a stepping run.
+// The point of the rework: every value is one press away, never a stepping run. The time
+// fields are the exception, and deliberately so - no list of twelve can span 0 to 59:59,
+// so they are edited on the roller and report no choices at all.
 void every_field_offers_its_values_directly()
 {
     const auto settings = base();
     for (const auto field : ui::kPickerFields) {
         const auto list = ui::choices_for(field, settings);
+        assert(std::strlen(ui::picker_field_label(field)) > 0);
+        if (ui::is_time_field(field)) {
+            assert(list.count == 0);
+            continue;
+        }
         assert(list.count > 0);
         assert(list.count <= ui::kValueChoiceCapacity);
         assert(list.selected < list.count);
         assert(std::strlen(list.choices[0].text.data()) > 0);
-        assert(std::strlen(ui::picker_field_label(field)) > 0);
     }
 }
 
-// The old editor needed up to 150 presses to reach a 2:30 average lap by stepping.
-void average_lap_is_reachable_in_one_press()
+// The preset ladder stopped at 3:00 against a field that holds 59:59, so a circuit with a
+// longer lap could not be configured at all. The roller reaches every second of the range.
+void any_average_lap_is_reachable_on_the_roller()
 {
     auto settings = base();
-    const auto list = ui::choices_for(ui::SettingsField::average_lap, settings);
-    std::size_t target = list.count;
-    for (std::size_t index = 0; index < list.count; ++index) {
-        if (std::strcmp(list.choices[index].text.data(), "2:30") == 0) {
-            target = index;
-        }
-    }
-    assert(target < list.count);
-    assert(ui::apply_choice(ui::SettingsField::average_lap, target, settings));
-    assert(settings.average_lap_seconds == 150);
+    const auto spec = ui::time_field_spec(ui::SettingsField::average_lap);
+    assert(spec.maximum_seconds == 59 * 60 + 59);
+
+    ui::TimeRoller roller{};
+    roller.reset(0, spec);
+    roller.step(ui::RollerColumn::minutes, 8);
+    roller.step(ui::RollerColumn::seconds, 17);
+    assert(roller.total_seconds() == 8 * 60 + 17);
+    assert(ui::apply_time_field(ui::SettingsField::average_lap, roller.committed_seconds(),
+                                settings));
+    assert(settings.average_lap_seconds == 8 * 60 + 17);
 }
 
 void the_selected_index_tracks_the_current_value()
 {
     auto settings = base();
-    settings.session_duration_minutes = 40;
-    const auto list = ui::choices_for(ui::SettingsField::session_duration, settings);
-    assert(std::strcmp(list.choices[list.selected].text.data(), "40 MIN") == 0);
+    settings.day_brightness_percent = 75;
+    const auto list = ui::choices_for(ui::SettingsField::day_brightness, settings);
+    assert(std::strcmp(list.choices[list.selected].text.data(), "75%") == 0);
 }
 
 // A stale screen must not be able to write a value the field does not have.
@@ -128,7 +137,7 @@ void out_of_range_choices_are_refused()
     assert(!ui::apply_choice(ui::SettingsField::session_duration, 99, settings));
     assert(!ui::apply_choice(ui::SettingsField::auto_dim, 2, settings));
     assert(!ui::apply_choice(ui::SettingsField::orientation, 5, settings));
-    assert(settings.session_duration_minutes == 20);
+    assert(settings.session_duration_seconds == 20);
 }
 
 // Dependent settings must stay consistent, matching the existing editor's rule.
@@ -138,9 +147,8 @@ void turning_off_average_lap_resets_the_dependent_field()
     settings.average_lap_seconds = 90;
     settings.lower_display = settings::LowerDisplayMode::laps_remaining;
 
-    const auto list = ui::choices_for(ui::SettingsField::average_lap, settings);
-    assert(std::strcmp(list.choices[0].text.data(), "OFF") == 0);
-    assert(ui::apply_choice(ui::SettingsField::average_lap, 0, settings));
+    // Rolling both columns back to 00:00 is now how the average lap is cleared.
+    assert(ui::apply_time_field(ui::SettingsField::average_lap, 0, settings));
     assert(settings.average_lap_seconds == 0);
     assert(settings.lower_display == settings::LowerDisplayMode::elapsed);
 
@@ -168,7 +176,7 @@ int main()
     race_shows_laps_delta_and_remaining();
     g_only_shows_nothing_but_the_meter();
     every_field_offers_its_values_directly();
-    average_lap_is_reachable_in_one_press();
+    any_average_lap_is_reachable_on_the_roller();
     the_selected_index_tracks_the_current_value();
     out_of_range_choices_are_refused();
     turning_off_average_lap_resets_the_dependent_field();
