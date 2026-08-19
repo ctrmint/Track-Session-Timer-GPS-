@@ -10,7 +10,12 @@
 #include "track_timer/ui/diagnostics.hpp"
 #include "track_timer/ui/carousel_screen.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
+#include "track_timer/ui/g_radar_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
+#include "track_timer/ui/imu_meter.hpp"
+#include "track_timer/imu/calibration.hpp"
+#include "track_timer/imu/qmi8658.hpp"
+#include "esp_timer.h"
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
@@ -18,6 +23,7 @@
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
 #include "track_timer/ui/shell_navigation.hpp"
+#include "track_timer/settings/nvs_store.hpp"
 #include "track_timer/ui/device_mode.hpp"
 #include "track_timer/ui/value_picker.hpp"
 
@@ -154,8 +160,83 @@ constexpr ui::CarouselEntry kSetupEntries[] = {
 
 class ScreenRouter {
   public:
+    // Settings are loaded before any screen is built, so the UI is constructed from what
+    // was actually stored rather than from defaults that are then corrected.
+    void load_settings() noexcept
+    {
+        if (!settings_store_.begin()) {
+            ESP_LOGE("track_timer", "settings: NVS unavailable; using defaults");
+            return;
+        }
+        const auto report = settings_manager_.load();
+        settings_ = settings_manager_.current();
+        ESP_LOGI("track_timer", "settings: source=%u current-format=%d, mode %s",
+                 static_cast<unsigned>(report.source),
+                 static_cast<int>(report.current_format_persisted),
+                 ui::device_mode_name(ui::mode_from_settings(settings_)));
+    }
+
+    // Every change goes through SettingsManager so validation and the transactional path
+    // are the same ones the host tests cover.
+    void persist_settings() noexcept
+    {
+        const auto result = settings_manager_.apply(settings_, false);
+        if (result != settings::SettingsApplyResult::applied) {
+            ESP_LOGW("track_timer", "settings not saved (apply result %u)",
+                     static_cast<unsigned>(result));
+            return;
+        }
+        settings_ = settings_manager_.current();
+    }
+
+    // Pulls a sample and refreshes the radar. Called from the LVGL task so LVGL is only
+    // ever touched by its owner.
+    void service_imu() noexcept
+    {
+        board::ImuSample sample{};
+        ui::ImuMeterInput input{};
+        input.sample_available = imu::read(sample);
+        input.now_ms = static_cast<std::uint64_t>(esp_timer_get_time() / 1000);
+
+        // Gravity dominates a raw accelerometer reading, so feeding raw axes to the meter
+        // parks the dot wherever the unit happens to be tilted. The calibration learns
+        // gravity while the device is still, then hands back acceleration with gravity
+        // removed and resolved into vehicle axes, whatever angle the unit is mounted at.
+        if (input.sample_available) {
+            (void)calibration_.update(sample);
+        }
+        const auto resolved = calibration_.resolve(sample);
+        input.calibrating = input.sample_available &&
+                            calibration_.state() != imu::CalibrationState::ready;
+
+        // The meter divides its input by g and applies a display rotation, so the
+        // resolved values are handed back in m/s2 on the axes it expects.
+        board::ImuSample resolved_sample{};
+        resolved_sample.monotonic_us = sample.monotonic_us;
+        resolved_sample.acceleration_x_mps2 =
+            resolved.lateral_g * imu::kStandardGravityMps2;
+        resolved_sample.acceleration_y_mps2 =
+            resolved.longitudinal_g * imu::kStandardGravityMps2;
+        resolved_sample.valid = resolved.valid;
+        input.sample = resolved_sample;
+        input.sample_available = resolved.valid;
+        input.x_axis_valid = resolved.valid;
+        input.y_axis_valid = resolved.valid;
+        // No session is wired on the device yet, so peaks are not session-scoped here.
+        // Session-scoped peaks for Review are tracked in #137.
+        const auto& snapshot = imu_meter_.update(input, false);
+        // Only when the radar is the visible screen. Repositioning 26 objects and
+        // reformatting five labels on every LVGL iteration is wasted work off-screen,
+        // and it invalidates areas nobody is looking at.
+        if (radar_ != nullptr && radar_root_ != nullptr &&
+            lv_screen_active() == radar_root_) {
+            radar_->update(snapshot);
+        }
+    }
+
     [[nodiscard]] bool build() noexcept
     {
+        load_settings();
         for (auto*& screen : screens_) {
             screen = lv_obj_create(nullptr);
             if (screen == nullptr) {
@@ -181,6 +262,17 @@ class ScreenRouter {
         if (carousel_root_ == nullptr) {
             return false;
         }
+        // G-Only owns the whole panel, so the radar gets its own screen object rather
+        // than sharing the dashboard.
+        radar_root_ = lv_obj_create(nullptr);
+        if (radar_root_ == nullptr) {
+            return false;
+        }
+        radar_ = new (radar_storage_) ui::GRadarScreen(radar_root_);
+        // The hold must still reach the gesture handler with the radar full-panel, which
+        // is only true because nothing on it consumes presses.
+        ui::attach_gesture_input(radar_root_, on_input, this);
+
         carousel_ = new (carousel_storage_)
             ui::CarouselScreen(carousel_root_, on_input, this);
         carousel_->set_entries(kMenuEntries, 4);
@@ -188,6 +280,15 @@ class ScreenRouter {
         // A hold anywhere on the Ready dashboard opens the menu; the carousel screen
         // takes swipes, presses and the back gesture.
         ui::attach_gesture_input(screen_for(ui::Destination::ready), on_input, this);
+        // Start is the largest object on the dashboard and consumes its own presses, so
+        // without this a hold on it reaches nothing and the "hold anywhere" hint lies.
+        // Its own click handler still starts the session; at Ready level a press is
+        // ignored by the shell, so the two cannot conflict.
+        if (auto* start = ready_->button_for(ui::NavigationAction::start_session);
+            start != nullptr) {
+            ui::attach_gesture_input(start, on_input, this);
+            ui::bubble_gestures_to_parent(start);
+        }
         ui::attach_gesture_input(carousel_root_, on_input, this);
 
         ready_->update(ui::present_ready(ready_snapshot()));
@@ -196,7 +297,7 @@ class ScreenRouter {
         diagnostics_controller_.begin(device_snapshot());
         diagnostics_->update(diagnostics_controller_.view_model());
 
-        lv_screen_load(screen_for(ui::Destination::ready));
+        lv_screen_load(home_screen());
         return true;
     }
 
@@ -219,6 +320,8 @@ class ScreenRouter {
         }
         if (result.current == ui::Destination::ready) {
             shell_.close();
+            lv_screen_load(home_screen());
+            return;
         }
         if (auto* target = screen_for(result.current); target != nullptr) {
             lv_screen_load(target);
@@ -233,6 +336,14 @@ class ScreenRouter {
     static void on_input(const ui::InputAction action, void* context) noexcept
     {
         static_cast<ScreenRouter*>(context)->handle_input(action);
+    }
+
+    // In G-Only the radar is home; otherwise the ready dashboard is.
+    [[nodiscard]] lv_obj_t* home_screen() noexcept
+    {
+        return ui::mode_from_settings(settings_) == ui::DeviceMode::g_only
+                   ? radar_root_
+                   : screen_for(ui::Destination::ready);
     }
 
     void show_menu(const ui::ShellState& state) noexcept
@@ -317,14 +428,16 @@ class ScreenRouter {
         case ui::ShellOutcome::mode_selected:
             ui::apply_mode(static_cast<ui::DeviceMode>(result.state.section_index),
                            settings_);
+            persist_settings();
             ESP_LOGI("track_timer", "mode: %s",
                      ui::device_mode_name(ui::mode_from_settings(settings_)));
             shell_.close();
-            lv_screen_load(screen_for(ui::Destination::ready));
+            lv_screen_load(home_screen());
             break;
         case ui::ShellOutcome::value_selected:
             if (ui::apply_choice(ui::kPickerFields[result.state.field_index],
                                  result.state.value_index, settings_)) {
+                persist_settings();
                 ESP_LOGI("track_timer", "set %s",
                          ui::picker_field_label(
                              ui::kPickerFields[result.state.field_index]));
@@ -343,7 +456,7 @@ class ScreenRouter {
                 show_fields(result.state);
                 break;
             default:
-                lv_screen_load(screen_for(ui::Destination::ready));
+                lv_screen_load(home_screen());
                 break;
             }
             break;
@@ -425,6 +538,8 @@ class ScreenRouter {
 
     ui::NavigationController navigation_{};
     ui::ShellNavigation shell_{ui::kPickerFields.size()};
+    settings::NvsSettingsStore settings_store_{};
+    settings::SettingsManager settings_manager_{settings_store_};
     settings::DeviceSettings settings_{};
     std::array<ui::CarouselEntry, ui::kPickerFields.size()> field_entries_{};
     std::array<ui::CarouselEntry, ui::kValueChoiceCapacity> value_entries_{};
@@ -440,6 +555,10 @@ class ScreenRouter {
     ui::DiagnosticsScreen* diagnostics_{nullptr};
     ui::CarouselScreen* carousel_{nullptr};
     lv_obj_t* carousel_root_{nullptr};
+    ui::GRadarScreen* radar_{nullptr};
+    lv_obj_t* radar_root_{nullptr};
+    ui::ImuMeterController imu_meter_{};
+    imu::GravityCalibration calibration_{};
 
     alignas(ui::ReadyScreen) std::byte ready_storage_[sizeof(ui::ReadyScreen)]{};
     alignas(ui::SetupMenuScreen) std::byte setup_storage_[sizeof(ui::SetupMenuScreen)]{};
@@ -448,11 +567,15 @@ class ScreenRouter {
     alignas(ui::DiagnosticsScreen) std::byte
         diagnostics_storage_[sizeof(ui::DiagnosticsScreen)]{};
     alignas(ui::CarouselScreen) std::byte carousel_storage_[sizeof(ui::CarouselScreen)]{};
+    alignas(ui::GRadarScreen) std::byte radar_storage_[sizeof(ui::GRadarScreen)]{};
 };
 
 ScreenRouter router{};
 
 }  // namespace
+
+// Exposed so the LVGL task can drive the radar without the router owning a task.
+void service_screen_router() noexcept { router.service_imu(); }
 
 bool start_screen_router() noexcept
 {
