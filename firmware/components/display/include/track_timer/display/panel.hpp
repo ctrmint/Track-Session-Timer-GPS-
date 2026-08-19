@@ -44,6 +44,12 @@ enum class PanelResult : std::uint8_t {
 // Safe to call once; a second call reports already_started.
 [[nodiscard]] PanelResult start_panel() noexcept;
 
+using ServiceCallback = void (*)() noexcept;
+
+// Invoked from the LVGL service task while the LVGL lock is held, so callers can refresh
+// live views without owning a task or reasoning about the lock themselves.
+void set_service_callback(ServiceCallback callback) noexcept;
+
 [[nodiscard]] bool panel_ready() noexcept;
 
 // LVGL is not thread safe. Anything touching lv_* from outside the service task must
@@ -67,6 +73,18 @@ enum class TouchResult : std::uint8_t {
 // FT6336 capacitive controller on the shared I2C bus (GPIO47/48), registered as an
 // LVGL pointer input device. Requires start_panel() to have succeeded first.
 [[nodiscard]] TouchResult start_touch() noexcept;
+
+// How many times the touch controller has been polled, and how many of those reported a
+// finger. Lets a passive serial capture distinguish "the UI task is dead" from "the task
+// is alive but sees no touches" from "touches arrive but produce no gesture".
+struct TouchCounters {
+    std::uint32_t reads{0};
+    std::uint32_t presses{0};
+    std::uint32_t controller_reports{0};  // driver returned OK, regardless of finger count
+    std::int32_t last_x{-1};
+    std::int32_t last_y{-1};
+};
+[[nodiscard]] TouchCounters touch_counters() noexcept;
 [[nodiscard]] const char* touch_result_name(TouchResult result) noexcept;
 
 }  // namespace track_timer::display
