@@ -8,6 +8,14 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the G meter subtracted a gravity reference frozen at calibration, so every later change
+  of tilt read as acceleration at sin(angle) - 0.17 g on a 10 degree banked corner - and
+  peak-hold latched those artefacts rather than averaging them away; attitude is now
+  tracked with the gyroscope
+- the vehicle frame was built with "up" pointing down, which inverted the lateral axis and
+  swapped the recorded left and right peaks
+- rest detection accepted a device that was turning
+
 - LVGL allocated from a fixed 64 KB pool, so large glyph bitmaps evicted and
   re-rasterised on every draw and starved the UI task; it now uses the ESP-IDF heap
   with glyph bitmaps in PSRAM
@@ -34,6 +42,8 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - gravity auto-calibration: centres the G meter at any mounting angle and corrects
   sensor scale
 - radar-style G meter used as the G-Only display
+- vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
+- gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
 - Track Day running-session screen: countdown, estimated laps as a float, and a
   decaying session bar
