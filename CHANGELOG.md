@@ -8,6 +8,13 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the scaled carousel icon drove LVGL's software image transform hard enough to starve
+  the UI task, tripping the task watchdog and freezing the menu
+- the G meter showed raw accelerometer axes, so the dot sat wherever the unit was tilted
+  instead of at the centre
+- a swipe also fired a press, because LVGL sends RELEASED before SHORT_CLICKED
+- swipes starting on a clickable child never reached the screen's gesture handler
+
 - RM690B0 partial redraws rendered as offset horizontal bands; flush areas are now
   aligned to even columns
 
@@ -18,6 +25,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - FT6336 touch input registered as an LVGL pointer device
 - on-device screen routing for the ready, setup, review and diagnostics screens
 - microSD mount, inspection and opt-in format support
+- QMI8658 6-axis IMU driver on a shared board I2C bus
+- gravity auto-calibration: centres the G meter at any mounting angle and corrects
+  sensor scale
+- radar-style G meter used as the G-Only display
+- device settings persisted in NVS, so Mode survives a reboot
 - top-level Mode selection: Track Day, Race and G-Only
 - one-press direct value selection for device settings, replacing increment stepping
 - press-and-hold gated menu with swipe carousels for Mode, Setup, Review and Diagnostics
