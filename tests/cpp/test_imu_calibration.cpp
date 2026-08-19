@@ -33,6 +33,32 @@ void settle(imu::GravityCalibration& calibration, const board::ImuSample& at_res
     }
 }
 
+constexpr std::int64_t kStepUs = 50'000;  // the 20 Hz service tick the device runs at
+
+board::ImuSample sample_at(float x, float y, float z, std::int64_t us, float gx = 0.0F,
+                           float gy = 0.0F, float gz = 0.0F)
+{
+    auto sample = sample_of(x, y, z);
+    sample.monotonic_us = us;
+    sample.angular_rate_x_dps = gx;
+    sample.angular_rate_y_dps = gy;
+    sample.angular_rate_z_dps = gz;
+    return sample;
+}
+
+// Settles with timestamps, so attitude tracking has an interval to work over. Returns the
+// timestamp to carry on from.
+std::int64_t settle_at(imu::GravityCalibration& calibration, float x, float y, float z,
+                       float gx = 0.0F, float gy = 0.0F, float gz = 0.0F)
+{
+    std::int64_t us = kStepUs;
+    for (std::size_t index = 0; index < imu::kRestSamplesRequired + 2; ++index) {
+        (void)calibration.update(sample_at(x, y, z, us, gx, gy, gz));
+        us += kStepUs;
+    }
+    return us;
+}
+
 // The device does not sit level on a dashboard, so gravity lands across several axes.
 // This is the vector the real board reported at rest, magnitude 1.077 g.
 const auto kRealResting = sample_of(8.21F, 6.62F, -0.56F);
@@ -187,6 +213,126 @@ void restart_clears_the_reference()
                        "ready") == 0);
 }
 
+// Right-handed vehicle axes: forward x up = right. An accelerometer at rest measures
+// specific force, which points up, so treating the rest reading as "down" inverts this and
+// reports a right-hand corner as a left-hand one.
+void positive_lateral_is_to_the_right()
+{
+    imu::GravityCalibration calibration{imu::MountFacing::screen_to_driver};
+    (void)settle_at(calibration, 0.0F, kG, 0.0F);
+
+    // Up is +Y and forward is -Z, so right is +X. Turning right accelerates the car to the
+    // right, and specific force gains a +X component to match.
+    const auto resolved = calibration.resolve(sample_of(0.5F * kG, kG, 0.0F));
+    assert(resolved.valid);
+    assert(near(resolved.lateral_g, 0.5F, 0.03F));
+}
+
+// Kerbs and compressions are a different kind of event from anything the tyres do in plan,
+// so the vertical axis is reported rather than discarded.
+void positive_vertical_is_upward()
+{
+    imu::GravityCalibration calibration;
+    (void)settle_at(calibration, 0.0F, kG, 0.0F);
+    assert(near(calibration.resolve(sample_of(0.0F, kG, 0.0F)).vertical_g, 0.0F));
+
+    const auto compression = calibration.resolve(sample_of(0.0F, 1.3F * kG, 0.0F));
+    assert(near(compression.vertical_g, 0.3F, 0.03F));
+    assert(near(compression.lateral_g, 0.0F, 0.03F));
+    assert(near(compression.longitudinal_g, 0.0F, 0.03F));
+}
+
+// Rolling the unit is not acceleration. A reference frozen at rest turns every later change
+// of tilt into false G at sin(angle); the gyroscope measures that rotation, so the reference
+// turns with it instead of being left behind.
+void a_tilt_is_followed_rather_than_read_as_g()
+{
+    constexpr float kRateDps = 40.0F;
+    constexpr int kSteps = 10;  // half a second, so twenty degrees of roll
+
+    const auto roll = [](bool report_rate) {
+        imu::GravityCalibration calibration;
+        auto us = settle_at(calibration, 0.0F, kG, 0.0F);
+        board::ImuSample last{};
+        for (int step = 1; step <= kSteps; ++step) {
+            const auto degrees = kRateDps * static_cast<float>(step) *
+                                 (static_cast<float>(kStepUs) / 1.0e6F);
+            const auto radians = degrees * 3.14159265F / 180.0F;
+            last = sample_at(kG * std::sin(radians), kG * std::cos(radians), 0.0F, us,
+                             0.0F, 0.0F, report_rate ? kRateDps : 0.0F);
+            (void)calibration.update(last);
+            us += kStepUs;
+        }
+        return calibration.resolve(last);
+    };
+
+    const auto tracked = roll(true);
+    assert(tracked.valid);
+    assert(near(tracked.lateral_g, 0.0F, 0.03F));
+    assert(near(tracked.longitudinal_g, 0.0F, 0.03F));
+
+    // The same tilt with the gyroscope silent is the error this exists to remove: twenty
+    // degrees is sin(20) = 0.34 g of cornering load that the car never pulled.
+    assert(std::fabs(roll(false).lateral_g) > 0.20F);
+}
+
+// The mirror image of the tilt case: a long constant-radius corner is real acceleration and
+// must not be learned as the new level, however steady it looks.
+void a_sustained_corner_is_not_absorbed()
+{
+    imu::GravityCalibration calibration;
+    auto us = settle_at(calibration, 0.0F, kG, 0.0F);
+    for (int step = 0; step < 100; ++step) {  // five seconds
+        (void)calibration.update(sample_at(0.6F * kG, kG, 0.0F, us));
+        us += kStepUs;
+    }
+
+    const auto resolved = calibration.resolve(sample_at(0.6F * kG, kG, 0.0F, us));
+    assert(near(resolved.lateral_g, 0.6F, 0.03F));
+    // The accelerometer is not measuring gravity alone here, so it must not be believed.
+    assert(calibration.coasting());
+}
+
+// Whatever the gyroscope reports while the device is still is its zero-rate offset.
+// Integrating that unremoved is a ramp straight into false G.
+void the_gyro_zero_rate_offset_is_learned_and_removed()
+{
+    imu::GravityCalibration calibration;
+    auto us = settle_at(calibration, 0.0F, kG, 0.0F, 2.0F, -1.0F, 3.0F);
+
+    const auto bias = calibration.gyro_bias();
+    assert(near(bias.x, 2.0F, 0.1F));
+    assert(near(bias.y, -1.0F, 0.1F));
+    assert(near(bias.z, 3.0F, 0.1F));
+
+    // Held still and still reporting that offset, the estimate must not walk. Unremoved,
+    // 3 dps for a second is three degrees, which is 0.05 g of invented cornering.
+    board::ImuSample last{};
+    for (int step = 0; step < 20; ++step) {
+        last = sample_at(0.0F, kG, 0.0F, us, 2.0F, -1.0F, 3.0F);
+        (void)calibration.update(last);
+        us += kStepUs;
+    }
+    const auto resolved = calibration.resolve(last);
+    assert(near(resolved.lateral_g, 0.0F, 0.02F));
+    assert(near(resolved.longitudinal_g, 0.0F, 0.02F));
+}
+
+// A device being turned is not at rest, whatever the force on it looks like. The gate tests
+// the change in rate rather than the rate itself, so a unit with a large zero-rate offset
+// still calibrates.
+void a_changing_turn_rate_prevents_calibration()
+{
+    imu::GravityCalibration calibration;
+    std::int64_t us = kStepUs;
+    for (std::size_t index = 0; index < imu::kRestSamplesRequired * 3; ++index) {
+        const auto rate = (index % 2 == 0) ? 0.0F : 4.0F * imu::kRestRateJitterDps;
+        (void)calibration.update(sample_at(0.0F, kG, 0.0F, us, 0.0F, 0.0F, rate));
+        us += kStepUs;
+    }
+    assert(calibration.state() == imu::CalibrationState::collecting);
+}
+
 }  // namespace
 
 int main()
@@ -202,8 +348,14 @@ int main()
     a_learned_reference_survives_movement();
     an_invalid_sample_is_refused();
     restart_clears_the_reference();
+    positive_lateral_is_to_the_right();
+    positive_vertical_is_upward();
+    a_tilt_is_followed_rather_than_read_as_g();
+    a_sustained_corner_is_not_absorbed();
+    the_gyro_zero_rate_offset_is_learned_and_removed();
+    a_changing_turn_rate_prevents_calibration();
 
     std::cout << "Gravity auto-calibration: centring at any mounting angle, scale "
-                 "correction, and vehicle-axis resolution passed\n";
+                 "correction, vehicle-axis resolution, and gyro-tracked attitude passed\n";
     return 0;
 }
