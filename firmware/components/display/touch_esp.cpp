@@ -1,26 +1,29 @@
 #include "track_timer/display/panel.hpp"
 
-#include "driver/i2c_master.h"
+#include "track_timer/board/i2c_bus.hpp"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_touch_ft5x06.h"
 
 #include <lvgl.h>
 
+#include <cstdint>
+
 namespace track_timer::display {
 namespace {
 
-// Shared I2C bus: touch, IMU, RTC and the IO expander all live here.
-constexpr gpio_num_t kPinSda = GPIO_NUM_47;
-constexpr gpio_num_t kPinScl = GPIO_NUM_48;
 constexpr gpio_num_t kPinTouchReset = GPIO_NUM_3;
 constexpr std::uint32_t kBusSpeedHz = 300'000;
 
 // FT5x06 register interface: address only, no control phase.
 constexpr std::uint32_t kTouchAddress = 0x38;
 
-i2c_master_bus_handle_t i2c_bus = nullptr;
 esp_lcd_touch_handle_t touch_handle = nullptr;
 lv_indev_t* touch_indev = nullptr;
+std::uint32_t read_count = 0;
+std::uint32_t press_count = 0;
+std::uint32_t raw_report_count = 0;   // controller said "finger", before any mapping
+std::int32_t last_x = -1;
+std::int32_t last_y = -1;
 
 void read_touch(lv_indev_t*, lv_indev_data_t* data) noexcept
 {
@@ -32,9 +35,19 @@ void read_touch(lv_indev_t*, lv_indev_data_t* data) noexcept
     std::uint16_t y = 0;
     std::uint16_t strength = 0;
     std::uint8_t count = 0;
+    ++read_count;
     (void)esp_lcd_touch_read_data(touch_handle);
-    if (esp_lcd_touch_get_coordinates(touch_handle, &x, &y, &strength, &count, 1) &&
-        count > 0) {
+    const auto got = esp_lcd_touch_get_coordinates(touch_handle, &x, &y, &strength,
+                                                   &count, 1);
+    if (got) {
+        ++raw_report_count;
+    }
+    if (got && count > 0) {
+        ++press_count;
+        // Recorded rather than logged: a cumulative last-value survives until the next
+        // capture, where a momentary log line has to be caught as it happens.
+        last_x = x;
+        last_y = y;
         data->point.x = x;
         data->point.y = y;
         data->state = LV_INDEV_STATE_PRESSED;
@@ -49,14 +62,8 @@ TouchResult start_touch() noexcept
         return TouchResult::already_started;
     }
 
-    i2c_master_bus_config_t bus_config{};
-    bus_config.i2c_port = I2C_NUM_0;
-    bus_config.sda_io_num = kPinSda;
-    bus_config.scl_io_num = kPinScl;
-    bus_config.clk_source = I2C_CLK_SRC_DEFAULT;
-    bus_config.glitch_ignore_cnt = 7;
-    bus_config.flags.enable_internal_pullup = true;
-    if (i2c_new_master_bus(&bus_config, &i2c_bus) != ESP_OK) {
+    auto* const i2c_bus = board::shared_i2c_bus();
+    if (i2c_bus == nullptr) {
         return TouchResult::bus_failed;
     }
 
@@ -99,6 +106,11 @@ TouchResult start_touch() noexcept
     lv_indev_set_type(touch_indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(touch_indev, read_touch);
     return TouchResult::ready;
+}
+
+TouchCounters touch_counters() noexcept
+{
+    return {read_count, press_count, raw_report_count, last_x, last_y};
 }
 
 const char* touch_result_name(const TouchResult result) noexcept
