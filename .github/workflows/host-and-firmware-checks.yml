@@ -15,6 +15,9 @@ concurrency:
 jobs:
   host-checks:
     runs-on: ubuntu-24.04
+    # Runs in well under a minute. The ceiling exists so a hang fails visibly rather than
+    # occupying a runner for the six-hour default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -23,24 +26,46 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - name: Install pinned host dependencies
+        timeout-minutes: 10
         run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
       - name: Run host checks
         run: make check
 
   simulator-checks:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Install simulator build dependencies
-        run: >-
-          sudo apt-get update &&
-          sudo apt-get install --yes --no-install-recommends
-          cmake libsdl2-dev ninja-build
+        timeout-minutes: 10
+        # A slow archive mirror leaves apt waiting rather than failing, which has blocked
+        # pull requests here twice. Retrying alone would not help: a hung apt never
+        # returns, so the retry never fires. Each attempt therefore gets its own timeout,
+        # generous against the few seconds this normally takes, and the step and job
+        # timeouts above bound the whole thing. Worst case is 3 x (60 + 90) seconds plus
+        # the backoffs, a little under eight minutes, which fits inside the step timeout.
+        run: |
+          echo 'Acquire::Retries "3";' | sudo tee /etc/apt/apt.conf.d/99-ci-retries > /dev/null
+          for attempt in 1 2 3; do
+            if timeout 60 sudo apt-get update &&
+               timeout 90 sudo apt-get install --yes --no-install-recommends \
+                 cmake libsdl2-dev ninja-build; then
+              exit 0
+            fi
+            echo "::warning::apt attempt ${attempt} failed or timed out; retrying"
+            sudo rm -rf /var/lib/apt/lists/partial
+            sleep 10
+          done
+          echo "::error::could not install simulator build dependencies after 3 attempts"
+          exit 1
       - name: Build and test the 600 x 450 device simulator
         run: make simulator-test
 
   firmware-build:
     runs-on: ubuntu-24.04
+    # Pulls a large pinned image before a full ESP-IDF build, so this is the slow job at
+    # six to seven minutes. Bounded for the same reason as the others.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - name: Build with pinned ESP-IDF image
