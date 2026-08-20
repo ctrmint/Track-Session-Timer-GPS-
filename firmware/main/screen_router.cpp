@@ -24,6 +24,7 @@
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
 #include "track_timer/logger/file_summary_store.hpp"
+#include "track_timer/ui/review_cards.hpp"
 #include "track_timer/ui/rest_session.hpp"
 #include "track_timer/ui/session_trigger.hpp"
 #include "track_timer/ui/session_review.hpp"
@@ -155,6 +156,31 @@ constexpr std::uint32_t kRuby = 0xFF8FA3;
 // appended records rather than a directory per session: this is the Review index, and the
 // per-session logs that #38 will write are a separate thing.
 constexpr const char* kSummaryPath = "/sdcard/sessions.bin";
+
+// Icons live here rather than with the card model, which stays free of LVGL so a session's
+// card list can be tested without a display.
+[[nodiscard]] const char* review_metric_icon(const ui::ReviewMetric metric) noexcept
+{
+    switch (metric) {
+    case ui::ReviewMetric::duration:
+        return LV_SYMBOL_LOOP;
+    case ui::ReviewMetric::overrun:
+        return LV_SYMBOL_WARNING;
+    case ui::ReviewMetric::peak_total:
+        return LV_SYMBOL_CHARGE;
+    case ui::ReviewMetric::longitudinal:
+        return LV_SYMBOL_UP;
+    case ui::ReviewMetric::lateral:
+        return LV_SYMBOL_SHUFFLE;
+    case ui::ReviewMetric::vertical:
+        return LV_SYMBOL_DOWNLOAD;
+    case ui::ReviewMetric::completion:
+        return LV_SYMBOL_OK;
+    case ui::ReviewMetric::integrity:
+        return LV_SYMBOL_EYE_OPEN;
+    }
+    return LV_SYMBOL_LIST;
+}
 
 constexpr ui::CarouselEntry kMenuEntries[] = {
     {LV_SYMBOL_LIST, "REVIEW", kAzure},
@@ -488,6 +514,14 @@ class ScreenRouter {
         if (!result.accepted || result.current == result.previous) {
             return;
         }
+        if (result.current == ui::Destination::review) {
+            reviewing_ = true;
+            review_index_ = 0;
+            review_controller_.begin(&summaries_);
+            show_review();
+            lv_screen_load(carousel_root_);
+            return;
+        }
         if (result.current == ui::Destination::diagnostics) {
             diagnostics_controller_.update(device_snapshot());
             diagnostics_->update(diagnostics_controller_.view_model());
@@ -815,6 +849,89 @@ class ScreenRouter {
         refresh_ready();
     }
 
+    // The record as a carousel, one value per screen, in the same visual language as the
+    // menus. A session read while stopped has no reason to be crammed into rows.
+    void show_review() noexcept
+    {
+        const auto& view = review_controller_.view_model();
+        review_cards_ = {};
+
+        logger::SessionSummaryV1 summary{};
+        const auto readable =
+            (view.status == ui::SessionReviewStatus::ready ||
+             view.status == ui::SessionReviewStatus::partial_log) &&
+            summaries_.read_summary(view.history_index, summary) ==
+                logger::SummaryReadResult::ready;
+
+        if (!readable) {
+            // One card saying why, rather than an empty screen the driver has to interpret.
+            std::snprintf(review_values_[0].data(), review_values_[0].size(), "%s",
+                          view.status == ui::SessionReviewStatus::empty ? "NONE YET"
+                                                                        : "UNREADABLE");
+            review_entries_[0] = {LV_SYMBOL_LIST, review_values_[0].data(), kAmber,
+                                  "SESSIONS"};
+            review_index_ = 0;
+            carousel_->set_entries(review_entries_.data(), 1);
+            carousel_->set_title("REVIEW");
+            carousel_->set_position(0);
+            return;
+        }
+
+        review_cards_ = ui::review_cards(summary);
+        for (std::size_t index = 0; index < review_cards_.count; ++index) {
+            const auto& card = review_cards_.cards[index];
+            review_values_[index] = card.value;
+            review_entries_[index] = {review_metric_icon(card.metric),
+                                      review_values_[index].data(),
+                                      ui::review_metric_rgb(card.metric),
+                                      ui::review_metric_caption(card.metric)};
+        }
+        if (review_index_ >= review_cards_.count) {
+            review_index_ = 0;
+        }
+        // Which session is being read stays on every card, so cycling values never loses it.
+        std::snprintf(review_title_.data(), review_title_.size(), "SESSION %u OF %u",
+                      static_cast<unsigned>(view.history_index + 1),
+                      static_cast<unsigned>(view.session_count));
+        carousel_->set_entries(review_entries_.data(), review_cards_.count);
+        carousel_->set_title(review_title_.data());
+        carousel_->set_position(review_index_);
+    }
+
+    void handle_review_input(const ui::InputAction action) noexcept
+    {
+        const auto count = review_cards_.count;
+        switch (action) {
+        case ui::InputAction::swipe_left:
+            if (count > 0) {
+                review_index_ = (review_index_ + 1) % count;
+                carousel_->set_position(review_index_);
+            }
+            return;
+        case ui::InputAction::swipe_right:
+            if (count > 0) {
+                review_index_ = (review_index_ + count - 1) % count;
+                carousel_->set_position(review_index_);
+            }
+            return;
+        case ui::InputAction::press:
+            // What the OLDER button did. Values are the swipe, so the session is the press.
+            review_controller_.older_session();
+            review_index_ = 0;
+            show_review();
+            return;
+        case ui::InputAction::long_press:
+        case ui::InputAction::swipe_down:
+            reviewing_ = false;
+            shell_.close();
+            go(ui::NavigationAction::back);
+            lv_screen_load(home_screen());
+            return;
+        default:
+            return;
+        }
+    }
+
     void show_menu(const ui::ShellState& state) noexcept
     {
         carousel_->set_entries(kMenuEntries, ui::kMenuItemCount);
@@ -1096,6 +1213,10 @@ class ScreenRouter {
         }
         // While a clock is running the double tap belongs to the session, not the shell,
         // which refuses to open a menu then anyway.
+        if (reviewing_) {
+            handle_review_input(action);
+            return;
+        }
         if (armed_ && action == ui::InputAction::double_tap) {
             disarm_session();
             return;
@@ -1291,6 +1412,12 @@ class ScreenRouter {
     ui::ActiveSessionController active_session_{};
     bool session_was_active_{false};
     logger::FileSummaryStore summaries_{};
+    ui::ReviewCardList review_cards_{};
+    std::array<std::array<char, 24>, ui::kReviewCardCapacity> review_values_{};
+    std::array<ui::CarouselEntry, ui::kReviewCardCapacity> review_entries_{};
+    std::array<char, 32> review_title_{};
+    std::size_t review_index_{0};
+    bool reviewing_{false};
     std::uint32_t session_ordinal_{0};
     bool armed_{false};
     bool armed_ready_{false};
