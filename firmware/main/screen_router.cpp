@@ -196,9 +196,19 @@ class ScreenRouter {
         if (result != settings::SettingsApplyResult::applied) {
             ESP_LOGW("track_timer", "settings not saved (apply result %u)",
                      static_cast<unsigned>(result));
-            return;
         }
-        settings_ = settings_manager_.current();
+        else {
+            settings_ = settings_manager_.current();
+        }
+        // The dashboard renders the session and rest durations from these, and used to be
+        // rebuilt only at boot and on a track change. A duration edited in the menu was
+        // therefore obeyed by the timer but still shown at its old value until a restart.
+        // Refreshing here rather than at each call site means the next screen that writes
+        // a setting cannot forget to.
+        //
+        // Unconditional: if the save failed, settings_ still holds what the device will
+        // use for the next session, and that is what the driver should be shown.
+        refresh_ready();
     }
 
     // Advances the session clock and refreshes whichever running-session screen is up.
