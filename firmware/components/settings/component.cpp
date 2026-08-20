@@ -16,7 +16,9 @@ constexpr std::size_t kLegacyV4PayloadSize = 66;
 // v5 appends the durations as seconds. The minutes still written at offsets 0-3 are
 // vestigial: they keep the shared prefix that every earlier version's decoder reads, and
 // v5 ignores them in favour of the appended values.
-constexpr std::size_t kCurrentPayloadSize = 74;
+constexpr std::size_t kLegacyV5PayloadSize = 74;
+// v6 appends the session trigger, which nothing before it had.
+constexpr std::size_t kCurrentPayloadSize = 75;
 
 inline constexpr std::uint32_t kMaximumDurationSeconds = 24U * 60U * 60U;
 inline constexpr std::uint32_t kMinimumSessionSeconds = 60U;
@@ -149,6 +151,7 @@ bool valid_settings(const DeviceSettings& settings) noexcept
            (settings.average_lap_seconds > 0 ||
             settings.lower_display == LowerDisplayMode::elapsed) &&
            settings.lap_boundary <= LapBoundaryMode::finish &&
+           settings.session_trigger <= SessionTrigger::gps &&
            valid_track_identifier(settings.selected_track_id);
 }
 
@@ -222,16 +225,28 @@ SettingsBlob encode_legacy_settings_v4(const DeviceSettings& settings) noexcept
     return make_blob(4, payload.data(), payload.size());
 }
 
-SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+SettingsBlob encode_legacy_settings_v5(const DeviceSettings& settings) noexcept
 {
     const auto legacy = encode_legacy_settings_v4(settings);
     if (legacy.size == 0) {
         return {};
     }
-    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::array<std::uint8_t, kLegacyV5PayloadSize> payload{};
     std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV4PayloadSize, payload.data());
     put_u32(payload.data() + 66, settings.session_duration_seconds);
     put_u32(payload.data() + 70, settings.rest_duration_seconds);
+    return make_blob(5, payload.data(), payload.size());
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    const auto legacy = encode_legacy_settings_v5(settings);
+    if (legacy.size == 0) {
+        return {};
+    }
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV5PayloadSize, payload.data());
+    payload[74] = static_cast<std::uint8_t>(settings.session_trigger);
     return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
 }
 
@@ -274,7 +289,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         settings = candidate;
         return DecodeResult::migrated_v1;
     }
-    if (version != 2 && version != 3 && version != 4 &&
+    if (version != 2 && version != 3 && version != 4 && version != 5 &&
         version != kCurrentSettingsVersion) {
         return DecodeResult::unsupported_version;
     }
@@ -282,6 +297,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         version == 2   ? kLegacyV2PayloadSize
         : version == 3 ? kLegacyV3PayloadSize
         : version == 4 ? kLegacyV4PayloadSize
+        : version == 5 ? kLegacyV5PayloadSize
                        : kCurrentPayloadSize;
     if (payload_size != expected_payload_size) {
         return DecodeResult::corrupt;
@@ -308,16 +324,23 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         candidate.pit_exit_auto_start_enabled = payload[64] != 0;
         candidate.pit_entry_auto_stop_enabled = payload[65] != 0;
     }
-    if (version == kCurrentSettingsVersion) {
+    if (version >= 5) {
         // The authoritative durations, which the vestigial minutes above cannot express.
         candidate.session_duration_seconds = get_u32(payload + 66);
         candidate.rest_duration_seconds = get_u32(payload + 70);
     }
+    if (version == kCurrentSettingsVersion) {
+        candidate.session_trigger = static_cast<SessionTrigger>(payload[74]);
+    }
+    // Everything before v6 predates the trigger, so it defaults to manual, which is what
+    // those devices were doing.
     if (payload[12] > 1 ||
         (version >= 3 && payload[62] > 1) ||
         (version >= 4 &&
          (payload[63] > static_cast<std::uint8_t>(LapBoundaryMode::finish) ||
           payload[64] > 1 || payload[65] > 1)) ||
+        (version == kCurrentSettingsVersion &&
+         payload[74] > static_cast<std::uint8_t>(SessionTrigger::gps)) ||
         !valid_settings(candidate)) {
         return DecodeResult::corrupt;
     }
@@ -325,6 +348,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     return version == 2   ? DecodeResult::migrated_v2
            : version == 3 ? DecodeResult::migrated_v3
            : version == 4 ? DecodeResult::migrated_v4
+           : version == 5 ? DecodeResult::migrated_v5
                           : DecodeResult::current;
 }
 
@@ -375,6 +399,9 @@ SettingsLoadReport SettingsManager::load() noexcept
     case DecodeResult::migrated_v4:
         current_ = decoded;
         return {SettingsSource::migrated_v4, persist(current_)};
+    case DecodeResult::migrated_v5:
+        current_ = decoded;
+        return {SettingsSource::migrated_v5, persist(current_)};
     case DecodeResult::corrupt:
         current_ = {};
         return {SettingsSource::defaults_corrupt, persist(current_)};

@@ -156,6 +156,8 @@ std::uint32_t urgency_rgb(const SessionUrgency urgency) noexcept
 const char* running_phase_caption(const RunningPhase phase) noexcept
 {
     switch (phase) {
+    case RunningPhase::pending:
+        return "PENDING";
     case RunningPhase::overrun:
         return "OVER RUN";
     case RunningPhase::rest:
@@ -168,7 +170,16 @@ const char* running_phase_caption(const RunningPhase phase) noexcept
 
 std::uint32_t trackday_rgb(const RunningPhase phase, const SessionUrgency urgency) noexcept
 {
-    return phase == RunningPhase::overrun ? kOverrunRgb : urgency_rgb(urgency);
+    switch (phase) {
+    case RunningPhase::pending:
+        return kPendingRgb;
+    case RunningPhase::overrun:
+        return kOverrunRgb;
+    case RunningPhase::session:
+    case RunningPhase::rest:
+        break;
+    }
+    return urgency_rgb(urgency);
 }
 
 const char* session_urgency_name(const SessionUrgency urgency) noexcept
@@ -215,7 +226,22 @@ void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
         view_.feedback = {};
         view_.trackday.visible = true;
         view_.trackday.phase = display.phase;
+        view_.trackday.detail[0] = '\0';
         switch (display.phase) {
+        case RunningPhase::pending: {
+            // The whole session is still ahead, so the bar is full and the clock holds at
+            // the configured duration rather than counting anything.
+            format_running_clock(
+                view_.trackday.countdown,
+                static_cast<std::int64_t>(display.session_duration_seconds) * 1'000);
+            format_estimated_laps(view_.trackday, domain::kUnavailableTime,
+                                  display.average_lap_seconds);
+            view_.trackday.remaining_ratio = 1.0F;
+            view_.trackday.urgency = SessionUrgency::ample;
+            std::snprintf(view_.trackday.detail.data(), view_.trackday.detail.size(), "%s",
+                          display.pending_detail == nullptr ? "" : display.pending_detail);
+            break;
+        }
         case RunningPhase::overrun: {
             // Counting up, so there is no proportion left to show and the bar is spent.
             format_running_clock(view_.trackday.countdown, display.overrun_ms);

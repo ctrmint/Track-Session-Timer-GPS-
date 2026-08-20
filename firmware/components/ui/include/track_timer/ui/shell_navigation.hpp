@@ -28,11 +28,14 @@ enum class ShellLevel : std::uint8_t {
 enum class MenuItem : std::uint8_t {
     mode,
     track,
+    // What starts a session. Sits with the track because both are set at the circuit,
+    // before going out, rather than buried under Setup with the rarely-touched options.
+    trigger,
     setup,
     review,
     diagnostics,
 };
-inline constexpr std::size_t kMenuItemCount = 5;
+inline constexpr std::size_t kMenuItemCount = 6;
 
 // Mode and Setup each offer three children; the track list is however many are on the
 // card, so the section count is set by the caller.
@@ -53,7 +56,8 @@ enum class ShellOutcome : std::uint8_t {
     refused_session_active,
     mode_selected,   // a Mode was chosen; the caller persists it
     track_selected,  // a track was chosen; the caller loads and applies it
-    value_selected,  // a setting value was chosen; the caller applies it
+    value_selected,    // a setting value was chosen; the caller applies it
+    trigger_selected,  // a session trigger was chosen; the caller persists it
 };
 
 struct ShellState {
@@ -88,6 +92,9 @@ class ShellNavigation {
 
     // Places the cursor on the value the setting already holds, so opening a field shows
     // the current choice rather than always starting at the first one.
+    // Opens a carousel on the item currently in force rather than the first one. Without
+    // it a menu cannot tell the driver what is set, only let them change it.
+    void select_section(std::size_t index) noexcept;
     void select_value(std::size_t index) noexcept;
 
     // A live session owns the screen, matching the existing rule that Setup is

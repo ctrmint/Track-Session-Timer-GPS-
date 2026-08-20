@@ -226,6 +226,23 @@ int main()
         assert(view.urgency == ui::SessionUrgency::critical);
     }
 
+    // Armed and waiting: the clock holds at the configured duration and does not move,
+    // because nothing has started. The bar is full for the same reason.
+    config.phase = ui::RunningPhase::pending;
+    config.pending_detail = "WAITING FOR LAUNCH";
+    phases.update(running, 500, config);
+    {
+        const auto& view = phases.view_model().trackday;
+        assert(std::strcmp(view.countdown.data(), "20:00") == 0);
+        assert(std::strcmp(ui::running_phase_caption(view.phase), "PENDING") == 0);
+        assert(std::strcmp(view.detail.data(), "WAITING FOR LAUNCH") == 0);
+        assert(view.remaining_ratio == 1.0F);
+        // Pending is not a countdown, so it must not borrow a point on the ramp: green
+        // would read as "plenty of time left" on a clock that is not running.
+        assert(ui::trackday_rgb(view.phase, view.urgency) == ui::kPendingRgb);
+        assert(ui::kPendingRgb != ui::urgency_rgb(ui::SessionUrgency::ample));
+    }
+
     // The overrun colour must not be mistakable for any point on the ramp.
     for (const auto urgency : {ui::SessionUrgency::ample, ui::SessionUrgency::easing,
                                ui::SessionUrgency::closing, ui::SessionUrgency::urgent,
