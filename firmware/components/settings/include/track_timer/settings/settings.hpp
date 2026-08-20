@@ -7,7 +7,7 @@
 
 namespace track_timer::settings {
 
-inline constexpr std::uint16_t kCurrentSettingsVersion = 6;
+inline constexpr std::uint16_t kCurrentSettingsVersion = 7;
 inline constexpr std::size_t kSettingsBlobCapacity = 128;
 inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 
@@ -41,12 +41,30 @@ enum class LapBoundaryMode : std::uint8_t {
     finish,
 };
 
+// The IMU session trigger reads forward acceleration, which a car reaches at roughly 0.3
+// to 1.0 g. The previous ladder ran to 4.0 g, so six of its ten choices could never fire,
+// and it offered nothing below 0.5 g where a deliberate pit exit actually sits.
+//
+// One definition, consumed by the picker, the stepping editor and the validator alike.
+// Three copies of it were how the values drifted away from anything measurable without
+// anyone noticing.
+inline constexpr std::array<std::uint16_t, 10> kLaunchSensitivityMilliG{
+    150, 200, 250, 300, 350, 400, 500, 600, 800, 1'000};
+// A deliberate pit exit, without tripping on a bump.
+inline constexpr std::uint16_t kDefaultLaunchSensitivityMilliG = 300;
+
+// Snaps any stored value onto the ladder. Settings written before v7 hold values that are
+// no longer offered, and rejecting them would fail the whole blob and take every unrelated
+// setting back to defaults with it.
+[[nodiscard]] std::uint16_t nearest_launch_sensitivity(std::uint16_t milli_g) noexcept;
+[[nodiscard]] bool valid_launch_sensitivity(std::uint16_t milli_g) noexcept;
+
 struct DeviceSettings {
     // Seconds, not minutes: the roller sets these as minutes and seconds, and 24 hours of
     // seconds does not fit a uint16.
     std::uint32_t session_duration_seconds{20 * 60};
     std::uint32_t rest_duration_seconds{20 * 60};
-    std::uint16_t launch_sensitivity_milli_g{0};
+    std::uint16_t launch_sensitivity_milli_g{kDefaultLaunchSensitivityMilliG};
     std::uint16_t average_lap_seconds{0};
     std::uint8_t day_brightness_percent{100};
     std::uint8_t night_brightness_percent{50};
@@ -98,6 +116,7 @@ enum class DecodeResult : std::uint8_t {
     migrated_v3,
     migrated_v4,
     migrated_v5,
+    migrated_v6,
     corrupt,
     unsupported_version,
 };
@@ -109,6 +128,7 @@ enum class SettingsSource : std::uint8_t {
     migrated_v3,
     migrated_v4,
     migrated_v5,
+    migrated_v6,
     defaults_missing,
     defaults_corrupt,
     defaults_unsupported,
@@ -158,6 +178,8 @@ struct FeatureAvailability {
 [[nodiscard]] SettingsBlob encode_legacy_settings_v1(
     const LegacySettingsV1& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v2(
+    const DeviceSettings& settings) noexcept;
+[[nodiscard]] SettingsBlob encode_legacy_settings_v6(
     const DeviceSettings& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v5(
     const DeviceSettings& settings) noexcept;

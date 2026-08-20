@@ -6,8 +6,6 @@
 namespace track_timer::ui {
 namespace {
 
-constexpr std::array<std::uint16_t, 10> kLaunchMilliG{0,     500,   1'000, 1'250, 1'500,
-                                                      1'750, 2'000, 2'500, 3'500, 4'000};
 constexpr std::array<std::uint8_t, 4> kBrightnessPercent{25, 50, 75, 100};
 
 
@@ -67,15 +65,12 @@ ValueChoiceList choices_for(const SettingsField field,
     case SettingsField::average_lap:
         return {};
     case SettingsField::launch_sensitivity:
-        return from_list(kLaunchMilliG, current.launch_sensitivity_milli_g,
+        return from_list(settings::kLaunchSensitivityMilliG, current.launch_sensitivity_milli_g,
                          [](ValueChoice& c, std::uint16_t v) {
-                             if (v == 0) {
-                                 set_text(c, "OFF");
-                             }
-                             else {
-                                 std::snprintf(c.text.data(), c.text.size(), "%u.%02u G",
-                                               v / 1000U, (v % 1000U) / 10U);
-                             }
+                             // No "off" any more: the threshold is always a real value and
+                             // TRIGGER is what decides whether it is consulted.
+                             std::snprintf(c.text.data(), c.text.size(), "%u.%02u G",
+                                           v / 1000U, (v % 1000U) / 10U);
                          });
     case SettingsField::day_brightness:
         return from_list(kBrightnessPercent, current.day_brightness_percent,
@@ -119,10 +114,10 @@ bool apply_choice(const SettingsField field, const std::size_t index,
     case SettingsField::average_lap:
         return false;
     case SettingsField::launch_sensitivity:
-        if (index >= kLaunchMilliG.size()) {
+        if (index >= settings::kLaunchSensitivityMilliG.size()) {
             return false;
         }
-        draft.launch_sensitivity_milli_g = kLaunchMilliG[index];
+        draft.launch_sensitivity_milli_g = settings::kLaunchSensitivityMilliG[index];
         return true;
     case SettingsField::day_brightness:
         if (index >= kBrightnessPercent.size()) {

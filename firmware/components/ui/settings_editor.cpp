@@ -13,8 +13,6 @@ namespace {
 // coarse preset ladder; the roller in the gated menu is what reaches every value.
 constexpr std::array<std::uint32_t, 10> kDurationSeconds{60,   300,  600,  900,  1200,
                                                         1500, 1800, 2400, 3000, 3600};
-constexpr std::array<std::uint16_t, 10> kLaunchMilliG{0, 500, 1'000, 1'250, 1'500,
-                                                      1'750, 2'000, 2'500, 3'500, 4'000};
 constexpr std::array<std::uint8_t, 4> kBrightnessPercent{25, 50, 75, 100};
 
 template <typename T, std::size_t Size>
@@ -95,15 +93,10 @@ void format_value(const SettingsField field, const settings::DeviceSettings& set
         format_duration_value(output.data(), output.size(), settings.rest_duration_seconds);
         break;
     case SettingsField::launch_sensitivity:
-        if (settings.launch_sensitivity_milli_g == 0) {
-            std::snprintf(output.data(), output.size(), "OFF");
-        }
-        else {
-            std::snprintf(output.data(), output.size(), "%u.%02u g",
-                          static_cast<unsigned>(settings.launch_sensitivity_milli_g / 1000),
-                          static_cast<unsigned>((settings.launch_sensitivity_milli_g % 1000) /
-                                                10));
-        }
+        // Always a real threshold now; TRIGGER decides whether it is consulted.
+        std::snprintf(output.data(), output.size(), "%u.%02u g",
+                      static_cast<unsigned>(settings.launch_sensitivity_milli_g / 1000),
+                      static_cast<unsigned>((settings.launch_sensitivity_milli_g % 1000) / 10));
         break;
     case SettingsField::day_brightness:
         std::snprintf(output.data(), output.size(), "%u%%",
@@ -320,7 +313,7 @@ bool SettingsEditor::adjust(const bool forward) noexcept
         adjusted = step_choice(draft_.rest_duration_seconds, kDurationSeconds, forward);
         break;
     case SettingsField::launch_sensitivity:
-        adjusted = step_choice(draft_.launch_sensitivity_milli_g, kLaunchMilliG, forward);
+        adjusted = step_choice(draft_.launch_sensitivity_milli_g, settings::kLaunchSensitivityMilliG, forward);
         break;
     case SettingsField::day_brightness:
         adjusted = step_choice(draft_.day_brightness_percent, kBrightnessPercent, forward);

@@ -92,8 +92,12 @@ int main()
     assert(editor.draft().rest_duration_seconds == durations.back());
 
     select_field(editor, ui::SettingsField::launch_sensitivity);
-    constexpr std::array<std::uint16_t, 10> launch_values{0, 500, 1'000, 1'250, 1'500,
-                                                         1'750, 2'000, 2'500, 3'500, 4'000};
+    // Read from the one definition, so this test cannot describe a ladder the device no
+    // longer offers - which is exactly how the old values went unchecked.
+    const auto& launch_values = settings::kLaunchSensitivityMilliG;
+    // The default no longer sits at the bottom of this ladder, so wind down to it first.
+    while (editor.decrement()) {
+    }
     for (const auto expected : launch_values) {
         assert(editor.draft().launch_sensitivity_milli_g == expected);
         if (expected != launch_values.back()) {

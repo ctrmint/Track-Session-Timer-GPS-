@@ -47,7 +47,7 @@ DeviceSettings customized_settings()
     DeviceSettings settings{};
     settings.session_duration_seconds = 30 * 60 + 30;  // exercises the seconds v5 added
     settings.rest_duration_seconds = 10 * 60;
-    settings.launch_sensitivity_milli_g = 1'250;
+    settings.launch_sensitivity_milli_g = 600;
     settings.average_lap_seconds = 103;
     settings.day_brightness_percent = 75;
     settings.night_brightness_percent = 25;
@@ -90,6 +90,46 @@ void test_validation_and_codec()
     invalid.lap_boundary = static_cast<LapBoundaryMode>(255);
     assert(!valid_settings(invalid));
     assert(encode_settings(invalid).size == 0);
+}
+
+// The ladder changed under stored settings, and rejecting a value no longer offered would
+// fail the whole blob and take every unrelated setting back to defaults with it.
+void test_launch_sensitivity_snapping()
+{
+    // Every value the old ladder offered maps onto the new one rather than being refused.
+    for (const std::uint16_t old_value : {500, 1'000, 1'250, 1'500, 1'750, 2'000, 2'500,
+                                          3'500, 4'000}) {
+        const auto snapped = nearest_launch_sensitivity(old_value);
+        assert(valid_launch_sensitivity(snapped));
+    }
+
+    // Everything above the top of the new ladder lands on it rather than somewhere odd.
+    assert(nearest_launch_sensitivity(4'000) == 1'000);
+    assert(nearest_launch_sensitivity(2'500) == 1'000);
+    assert(nearest_launch_sensitivity(1'250) == 1'000);
+
+    // Zero meant "off", which as a trigger threshold is a device that never starts. The
+    // trigger is the on/off now, so off becomes the default rather than the lowest value,
+    // which would be the most trigger-happy setting of all.
+    assert(nearest_launch_sensitivity(0) == kDefaultLaunchSensitivityMilliG);
+    assert(nearest_launch_sensitivity(0) != kLaunchSensitivityMilliG.front());
+
+    // Nearest really is nearest, either side.
+    assert(nearest_launch_sensitivity(160) == 150);
+    assert(nearest_launch_sensitivity(190) == 200);
+    assert(nearest_launch_sensitivity(700) == 600);
+    assert(nearest_launch_sensitivity(750) == 800);
+
+    // A value already on the ladder is left exactly alone.
+    for (const auto value : kLaunchSensitivityMilliG) {
+        assert(nearest_launch_sensitivity(value) == value);
+    }
+
+    // The ladder itself has to be reachable as forward acceleration, which is the defect
+    // this replaced: a car manages roughly 0.3 to 1.0 g, and the old top was 4.0.
+    assert(kLaunchSensitivityMilliG.front() < 500);   // below a deliberate pit exit
+    assert(kLaunchSensitivityMilliG.back() <= 1'000); // within what a car can pull
+    assert(valid_launch_sensitivity(kDefaultLaunchSensitivityMilliG));
 }
 
 void test_defaults_restart_and_deferred_apply()
@@ -194,6 +234,19 @@ void test_migration_corruption_and_storage_errors()
     // devices were doing.
     assert(version_five.current().session_trigger == SessionTrigger::manual);
 
+    MemorySettingsStore version_six_store;
+    version_six_store.found = true;
+    version_six_store.blob = encode_legacy_settings_v6(customized_settings());
+    SettingsManager version_six{version_six_store};
+    const auto version_six_migration = version_six.load();
+    assert(version_six_migration.source == SettingsSource::migrated_v6);
+    assert(version_six_migration.current_format_persisted);
+    // v6 carried the trigger, so it survives; the launch value was already on the new
+    // ladder, so it is untouched.
+    assert(version_six.current().session_trigger == SessionTrigger::imu);
+    assert(version_six.current().launch_sensitivity_milli_g == 600);
+    assert(version_six.current().session_duration_seconds == 30 * 60 + 30);
+
     MemorySettingsStore corrupt_store;
     corrupt_store.found = true;
     corrupt_store.blob = encode_settings(customized_settings());
@@ -289,6 +342,7 @@ void test_file_store_restart()
 int main()
 {
     test_validation_and_codec();
+    test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();
     test_migration_corruption_and_storage_errors();
     test_degraded_feature_matrix();
