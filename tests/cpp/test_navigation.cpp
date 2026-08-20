@@ -60,8 +60,8 @@ int main()
     ready.logging_available = false;
     const auto degraded = present_ready(ready);
     assert(std::strcmp(degraded.selected_track.data(), "Synthetic Test Loop") == 0);
-    assert(std::strcmp(degraded.session_duration.data(), "30 MIN SESSION") == 0);
-    assert(std::strcmp(degraded.rest_duration.data(), "15 MIN REST") == 0);
+    assert(std::strcmp(degraded.session_duration.data(), "30:00 SESSION") == 0);
+    assert(std::strcmp(degraded.rest_duration.data(), "15:00 REST") == 0);
     assert(std::strcmp(degraded.timing_mode.data(), "TIMER ONLY - GPS UNAVAILABLE") == 0);
     assert(std::strcmp(degraded.storage.text.data(), "STORAGE DEGRADED") == 0);
 

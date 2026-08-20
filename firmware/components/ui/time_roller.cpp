@@ -87,14 +87,11 @@ void format_duration_value(char* const output, const std::size_t size,
     if (output == nullptr || size == 0) {
         return;
     }
-    const auto minutes = seconds / 60U;
-    const auto remainder = seconds % 60U;
-    if (remainder == 0U) {
-        std::snprintf(output, size, "%u MIN", static_cast<unsigned>(minutes));
-        return;
-    }
-    std::snprintf(output, size, "%u:%02u", static_cast<unsigned>(minutes),
-                  static_cast<unsigned>(remainder));
+    // Always minutes and seconds. Printing whole minutes as "20 MIN" put two different
+    // formats side by side on the dashboard the moment a value carried seconds, so a one
+    // minute session read "1 MIN SESSION" next to "0:12 REST".
+    std::snprintf(output, size, "%u:%02u", static_cast<unsigned>(seconds / 60U),
+                  static_cast<unsigned>(seconds % 60U));
 }
 
 void HoldToSave::begin(const std::uint32_t now_ms) noexcept

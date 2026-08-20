@@ -8,6 +8,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the start page kept the durations it read at boot, so a session or rest period changed in
+  the menu was obeyed by the timer but still shown at its old value until a restart
+- durations were written two ways at once, so a one minute session read "1 MIN SESSION"
+  beside a "0:12 REST"; every duration is now minutes and seconds
+
 - a session that ran out simply stopped: the rest period was modelled and tested but never
   routed to a screen, and overtime rendered identically to a session still running
 
