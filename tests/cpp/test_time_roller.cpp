@@ -213,19 +213,25 @@ void durations_round_trip_through_the_settings()
 }
 
 // Whole minutes keep the wording the device has always used, because most values still are.
-void formatting_keeps_whole_minutes_readable()
+void formatting_is_always_minutes_and_seconds()
 {
     std::array<char, 24> text{};
+    // One format for every value, so a whole-minute duration and one carrying seconds can
+    // sit next to each other on the dashboard without disagreeing.
     ui::format_duration_value(text.data(), text.size(), 20 * 60);
-    assert(std::strcmp(text.data(), "20 MIN") == 0);
+    assert(std::strcmp(text.data(), "20:00") == 0);
+    ui::format_duration_value(text.data(), text.size(), 60);
+    assert(std::strcmp(text.data(), "1:00") == 0);
     ui::format_duration_value(text.data(), text.size(), 20 * 60 + 30);
     assert(std::strcmp(text.data(), "20:30") == 0);
     ui::format_duration_value(text.data(), text.size(), 107);
     assert(std::strcmp(text.data(), "1:47") == 0);
     ui::format_duration_value(text.data(), text.size(), 0);
-    assert(std::strcmp(text.data(), "0 MIN") == 0);
+    assert(std::strcmp(text.data(), "0:00") == 0);
     ui::format_duration_value(text.data(), text.size(), 5);
     assert(std::strcmp(text.data(), "0:05") == 0);
+    ui::format_duration_value(text.data(), text.size(), 90 * 60);
+    assert(std::strcmp(text.data(), "90:00") == 0);
 }
 
 // LVGL calls a press "long" at 400 ms, which committed a value while the driver was still
@@ -293,7 +299,7 @@ int main()
     committing_clamps_into_the_validated_range();
     clearing_the_average_lap_resets_the_lower_display();
     durations_round_trip_through_the_settings();
-    formatting_keeps_whole_minutes_readable();
+    formatting_is_always_minutes_and_seconds();
     a_save_needs_a_deliberate_hold();
     a_hold_that_moves_is_not_a_save();
     hold_progress_ramps_from_nothing_to_full();

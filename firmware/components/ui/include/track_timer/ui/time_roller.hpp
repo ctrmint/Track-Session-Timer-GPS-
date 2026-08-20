@@ -31,8 +31,8 @@ struct TimeFieldSpec {
 [[nodiscard]] bool apply_time_field(SettingsField field, std::uint32_t seconds,
                                     settings::DeviceSettings& draft) noexcept;
 
-// "20 MIN" for a whole number of minutes, "20:30" otherwise. Whole minutes stay in the
-// wording the device has always used, because that is what most values still are.
+// Minutes and seconds, always: "20:00", "1:00", "0:12". One format everywhere, so two
+// durations shown together cannot disagree about how a time is written.
 void format_duration_value(char* output, std::size_t size, std::uint32_t seconds) noexcept;
 
 // How far the finger travels to advance one step, and how a flick decays. Tuned against

@@ -131,7 +131,7 @@ int main()
     assert(std::strcmp(lv_label_get_text(screen.settings_screen().field_label_object()),
                        "TRACK SESSION") == 0);
     assert(std::strcmp(lv_label_get_text(screen.settings_screen().value_label_object()),
-                       "20 MIN") == 0);
+                       "20:00") == 0);
     for (const auto action : {ui::SettingsScreenAction::previous_field,
                               ui::SettingsScreenAction::next_field,
                               ui::SettingsScreenAction::decrement,
