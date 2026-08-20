@@ -35,14 +35,27 @@ void only_a_hold_opens_the_menu()
     assert(shell.menu_item() == MenuItem::mode);
 }
 
-// Track sits between Mode and Setup: at a circuit it is the most frequently changed
-// thing, so it must not be buried under Setup.
+// Hops to a menu item by name. Counting swipes meant that inserting an item silently
+// pointed these tests at a different one.
+void to_menu(ShellNavigation& shell, const MenuItem item)
+{
+    for (std::size_t guard = 0; guard <= kMenuItemCount; ++guard) {
+        if (shell.menu_item() == item) {
+            return;
+        }
+        (void)shell.dispatch(InputAction::swipe_left);
+    }
+    assert(false && "menu item not reachable");
+}
+
+// Track and Trigger sit between Mode and Setup: at a circuit both are set before going
+// out, so neither should be buried under Setup with the rarely-touched options.
 void the_menu_offers_mode_then_track_and_wraps()
 {
     auto shell = opened();
     assert(shell.menu_item() == MenuItem::mode);
-    for (const auto expected : {MenuItem::track, MenuItem::setup, MenuItem::review,
-                                MenuItem::diagnostics, MenuItem::mode}) {
+    for (const auto expected : {MenuItem::track, MenuItem::trigger, MenuItem::setup,
+                                MenuItem::review, MenuItem::diagnostics, MenuItem::mode}) {
         (void)shell.dispatch(InputAction::swipe_left);
         assert(shell.menu_item() == expected);
     }
@@ -108,9 +121,9 @@ void a_mode_is_three_gestures_from_the_dashboard()
 void review_and_diagnostics_hand_over_to_the_destination_model()
 {
     auto shell = opened();
-    for (int i = 0; i < 3; ++i) {
-        (void)shell.dispatch(InputAction::swipe_left);   // mode -> track -> setup -> review
-    }
+    // Swiping to the item by name rather than by a count, so inserting a menu item does
+    // not silently point this test at a different one.
+    to_menu(shell, MenuItem::review);
     auto result = shell.dispatch(InputAction::press);
     assert(result.emits_action && result.action == NavigationAction::open_review);
     assert(result.state.level == ShellLevel::menu);
@@ -124,8 +137,7 @@ void review_and_diagnostics_hand_over_to_the_destination_model()
 void a_setting_value_is_reachable_by_descending_three_levels()
 {
     auto shell = opened();
-    (void)shell.dispatch(InputAction::swipe_left);            // TRACK
-    (void)shell.dispatch(InputAction::swipe_left);            // SETUP
+    to_menu(shell, MenuItem::setup);
     auto result = shell.dispatch(InputAction::press);
     assert(result.state.level == ShellLevel::section);
     assert(result.emits_action && result.action == NavigationAction::open_setup);
@@ -147,8 +159,7 @@ void a_setting_value_is_reachable_by_descending_three_levels()
 void every_level_climbs_back_out_one_at_a_time()
 {
     auto shell = opened();
-    (void)shell.dispatch(InputAction::swipe_left);
-    (void)shell.dispatch(InputAction::swipe_left);
+    to_menu(shell, MenuItem::setup);
     (void)shell.dispatch(InputAction::press);
     (void)shell.dispatch(InputAction::press);
     shell.set_value_count(4);
@@ -169,8 +180,7 @@ void every_level_climbs_back_out_one_at_a_time()
 void a_hold_anywhere_inside_the_menu_returns_to_the_timer()
 {
     auto shell = opened();
-    (void)shell.dispatch(InputAction::swipe_left);
-    (void)shell.dispatch(InputAction::swipe_left);
+    to_menu(shell, MenuItem::setup);
     (void)shell.dispatch(InputAction::press);
     (void)shell.dispatch(InputAction::press);
     assert(shell.state().level == ShellLevel::field);
@@ -202,8 +212,7 @@ void a_live_session_blocks_and_closes_the_menu()
 void changing_the_value_count_resets_an_out_of_range_index()
 {
     auto shell = opened();
-    (void)shell.dispatch(InputAction::swipe_left);
-    (void)shell.dispatch(InputAction::swipe_left);
+    to_menu(shell, MenuItem::setup);
     (void)shell.dispatch(InputAction::press);
     (void)shell.dispatch(InputAction::press);
     shell.set_value_count(10);
@@ -225,6 +234,45 @@ void names_are_stable_for_logging_and_replay()
     assert(std::strcmp(setup_item_name(SetupItem::track_selection), "track-selection") == 0);
 }
 
+// A menu that always opens on its first item cannot tell the driver what is set, only let
+// them change it. The value level already did this; the section level did not.
+void a_section_opens_on_the_item_in_force()
+{
+    auto shell = opened();
+    to_menu(shell, MenuItem::trigger);
+    (void)shell.dispatch(InputAction::press);
+    assert(shell.state().level == ShellLevel::section);
+    shell.set_section_count(3);
+
+    // Entering resets to the first item, which is what the caller then corrects.
+    assert(shell.state().section_index == 0);
+    shell.select_section(2);
+    assert(shell.state().section_index == 2);
+
+    // And it still moves from there rather than snapping back.
+    (void)shell.dispatch(InputAction::swipe_left);
+    assert(shell.state().section_index == 0);  // wrapped past the end of three
+    (void)shell.dispatch(InputAction::swipe_right);
+    assert(shell.state().section_index == 2);
+}
+
+// A stored track that is no longer on the card must not leave an index pointing past the
+// end of a shorter catalog.
+void an_out_of_range_section_falls_back_to_the_first()
+{
+    auto shell = opened();
+    to_menu(shell, MenuItem::track);
+    (void)shell.dispatch(InputAction::press);
+    shell.set_section_count(3);
+    shell.select_section(7);
+    assert(shell.state().section_index == 0);
+
+    // Shrinking the catalog under a valid selection has to be safe too.
+    shell.select_section(2);
+    shell.set_section_count(1);
+    assert(shell.state().section_index == 0);
+}
+
 }  // namespace
 
 int main()
@@ -241,6 +289,9 @@ int main()
     a_live_session_blocks_and_closes_the_menu();
     changing_the_value_count_resets_an_out_of_range_index();
     names_are_stable_for_logging_and_replay();
+
+    a_section_opens_on_the_item_in_force();
+    an_out_of_range_section_falls_back_to_the_first();
 
     std::cout << "Hold gate, Mode selection, descending editor levels, and session lock "
                  "passed\n";

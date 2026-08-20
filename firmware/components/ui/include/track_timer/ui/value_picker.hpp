@@ -28,13 +28,13 @@ struct ValueChoiceList {
 // The fields the gesture UI offers. operating_mode and trackday_mode are deliberately
 // absent: they are owned by the top-level Mode selection, and offering the same state in
 // two places invites the two disagreeing.
-inline constexpr std::array<SettingsField, 12> kPickerFields{
+inline constexpr std::array<SettingsField, 11> kPickerFields{
     SettingsField::session_duration,   SettingsField::rest_duration,
     SettingsField::average_lap,        SettingsField::lower_display,
-    SettingsField::lap_boundary,       SettingsField::pit_exit_auto_start,
-    SettingsField::pit_entry_auto_stop, SettingsField::launch_sensitivity,
-    SettingsField::day_brightness,     SettingsField::night_brightness,
-    SettingsField::auto_dim,           SettingsField::orientation,
+    SettingsField::lap_boundary,       SettingsField::pit_entry_auto_stop,
+    SettingsField::launch_sensitivity, SettingsField::day_brightness,
+    SettingsField::night_brightness,   SettingsField::auto_dim,
+    SettingsField::orientation,
 };
 
 [[nodiscard]] ValueChoiceList choices_for(SettingsField field,

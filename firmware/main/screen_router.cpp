@@ -24,6 +24,7 @@
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
 #include "track_timer/ui/rest_session.hpp"
+#include "track_timer/ui/session_trigger.hpp"
 #include "track_timer/ui/session_review.hpp"
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
@@ -150,9 +151,20 @@ constexpr std::uint32_t kRuby = 0xFF8FA3;
 constexpr ui::CarouselEntry kMenuEntries[] = {
     {LV_SYMBOL_POWER, "MODE", kRuby},
     {LV_SYMBOL_GPS, "TRACK", kAzure},
+    {LV_SYMBOL_CHARGE, "TRIGGER", kGreen},
     {LV_SYMBOL_SETTINGS, "SETUP", kAmber},
     {LV_SYMBOL_LIST, "REVIEW", kAzure},
     {LV_SYMBOL_EYE_OPEN, "DIAGNOSTICS", kGreen},
+};
+static_assert(std::size(kMenuEntries) == ui::kMenuItemCount,
+              "the carousel must offer exactly the items the shell can select");
+
+// Manual first: it is what the device did before a trigger existed, and what a driver
+// falls back to when a trigger cannot arm.
+constexpr ui::CarouselEntry kTriggerEntries[] = {
+    {LV_SYMBOL_PLAY, "MANUAL", kGreen},
+    {LV_SYMBOL_CHARGE, "IMU", kAmber},
+    {LV_SYMBOL_GPS, "GPS", kAzure},
 };
 
 // Track Day is first: it is the safe default, since it withholds the live lap times that
@@ -230,7 +242,15 @@ class ScreenRouter {
             session_was_active_ = active;
             lv_screen_load(active ? trackday_root_ : home_screen());
         }
-        if (!active || trackday_ == nullptr) {
+        if (!active) {
+            // Armed but not started: the screen stays, and the detail is re-evaluated
+            // because what it is waiting for can change - the IMU finishes calibrating.
+            if (armed_) {
+                update_armed();
+            }
+            return;
+        }
+        if (trackday_ == nullptr) {
             return;
         }
 
@@ -281,6 +301,17 @@ class ScreenRouter {
         const auto resolved = calibration_.resolve(sample);
         input.calibrating = input.sample_available &&
                             calibration_.state() != imu::CalibrationState::ready;
+
+        // Forward acceleration only: a launch is acceleration down the road, so braking,
+        // cornering and kerbs cannot start a session.
+        if (armed_ && armed_ready_ && armed_trigger_ == settings::SessionTrigger::imu &&
+            resolved.valid &&
+            ui::launch_detected(resolved.longitudinal_g,
+                                settings_.launch_sensitivity_milli_g)) {
+            ESP_LOGI("track_timer", "launch detected at %d milli-g",
+                     static_cast<int>(resolved.longitudinal_g * 1000.0F));
+            begin_session();
+        }
 
         // The meter divides its input by g and applies a display rotation, so the
         // resolved values are handed back in m/s2 on the axes it expects.
@@ -371,7 +402,7 @@ class ScreenRouter {
 
         carousel_ = new (carousel_storage_)
             ui::CarouselScreen(carousel_root_, on_input, this);
-        carousel_->set_entries(kMenuEntries, 4);
+        carousel_->set_entries(kMenuEntries, ui::kMenuItemCount);
 
         // A hold anywhere on the Ready dashboard opens the menu; the carousel screen
         // takes swipes, presses and the back gesture.
@@ -438,8 +469,89 @@ class ScreenRouter {
 
     // Only Track Day has a running-session screen so far. Race and G-Only still need
     // their own layouts, tracked on #132.
+    // START begins the session outright only under MANUAL. The other triggers arm the
+    // timer and show it pending, so the driver can see the device is ready and waiting
+    // rather than wondering whether the press registered.
     void start_session() noexcept
     {
+        const auto trigger = ui::trigger_from_settings(settings_);
+        if (trigger != settings::SessionTrigger::manual) {
+            arm_session(trigger);
+            return;
+        }
+        begin_session();
+    }
+
+    void arm_session(const settings::SessionTrigger trigger) noexcept
+    {
+        const auto readiness = ui::trigger_readiness(
+            trigger, settings_.launch_sensitivity_milli_g,
+            calibration_.state() == imu::CalibrationState::ready, gnss_available());
+        armed_trigger_ = trigger;
+        armed_ = true;
+        armed_ready_ = readiness.can_arm;
+        pending_detail_ = readiness.detail;
+        ESP_LOGI("track_timer", "armed on %s: %s (%s)", ui::session_trigger_name(trigger),
+                 readiness.can_arm ? "waiting" : "cannot arm", readiness.detail);
+        describe_mode();
+        refresh_pending();
+        lv_screen_load(trackday_root_);
+    }
+
+    void disarm_session() noexcept
+    {
+        if (!armed_) {
+            return;
+        }
+        armed_ = false;
+        armed_ready_ = false;
+        pending_detail_ = "";
+        ESP_LOGI("track_timer", "disarmed");
+        lv_screen_load(home_screen());
+    }
+
+    // There is no receiver and no driver yet, so the GPS trigger arms and waits on a
+    // crossing that cannot arrive. The path from the gate automation to begin_session is
+    // built and reachable, so landing GNSS lights it up rather than needing this again.
+    [[nodiscard]] static bool gnss_available() noexcept { return false; }
+
+    void refresh_pending() noexcept
+    {
+        if (!armed_ || trackday_ == nullptr) {
+            return;
+        }
+        domain::UiSnapshot ui_snapshot{};
+        ui_snapshot.session_active = true;
+        ui_snapshot.session_remaining_ms =
+            static_cast<std::int64_t>(settings_.session_duration_seconds) * 1'000;
+
+        ui::ActiveSessionDisplayConfig display{};
+        display.average_lap_seconds = settings_.average_lap_seconds;
+        display.trackday_mode_enabled = true;
+        display.session_duration_seconds = settings_.session_duration_seconds;
+        display.rest_duration_seconds = settings_.rest_duration_seconds;
+        display.phase = ui::RunningPhase::pending;
+        display.pending_detail = pending_detail_;
+
+        active_session_.update(ui_snapshot,
+                               static_cast<std::uint64_t>(esp_timer_get_time() / 1000),
+                               display);
+        trackday_->update(active_session_.view_model().trackday);
+    }
+
+    void update_armed() noexcept
+    {
+        const auto readiness = ui::trigger_readiness(
+            armed_trigger_, settings_.launch_sensitivity_milli_g,
+            calibration_.state() == imu::CalibrationState::ready, gnss_available());
+        armed_ready_ = readiness.can_arm;
+        pending_detail_ = readiness.detail;
+        refresh_pending();
+    }
+
+    void begin_session() noexcept
+    {
+        armed_ = false;
         const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
         session::SessionConfiguration configuration{};
         configuration.session_duration_ms =
@@ -454,23 +566,30 @@ class ScreenRouter {
         const auto started = session_.start(now_ms);
         ESP_LOGI("track_timer", "session start: %d over %u s", static_cast<int>(started),
                  static_cast<unsigned>(settings_.session_duration_seconds));
-        if (trackday_ != nullptr) {
-            trackday_->set_track_name(active_track_.name[0] != '\0'
-                                          ? active_track_.name.data()
-                                          : "TIMER ONLY");
-            switch (ui::mode_from_settings(settings_)) {
-            case ui::DeviceMode::track_day:
-                trackday_->set_mode_note("TRACK DAY  -  lap times available in Review");
-                break;
-            case ui::DeviceMode::race:
-                // Race wants lap times and a delta alongside the countdown. Neither
-                // exists without GNSS, so it borrows the countdown and says so.
-                trackday_->set_mode_note("RACE  -  lap times pending GNSS");
-                break;
-            case ui::DeviceMode::g_only:
-                trackday_->set_mode_note("G-ONLY  -  session timer");
-                break;
-            }
+        describe_mode();
+    }
+
+    // The track name and mode note are the same whether the session is running or waiting
+    // to be triggered, so both paths set them from here.
+    void describe_mode() noexcept
+    {
+        if (trackday_ == nullptr) {
+            return;
+        }
+        trackday_->set_track_name(active_track_.name[0] != '\0' ? active_track_.name.data()
+                                                               : "TIMER ONLY");
+        switch (ui::mode_from_settings(settings_)) {
+        case ui::DeviceMode::track_day:
+            trackday_->set_mode_note("TRACK DAY  -  lap times available in Review");
+            break;
+        case ui::DeviceMode::race:
+            // Race wants lap times and a delta alongside the countdown. Neither exists
+            // without GNSS, so it borrows the countdown and says so.
+            trackday_->set_mode_note("RACE  -  lap times pending GNSS");
+            break;
+        case ui::DeviceMode::g_only:
+            trackday_->set_mode_note("G-ONLY  -  session timer");
+            break;
         }
     }
 
@@ -599,7 +718,20 @@ class ScreenRouter {
         shell_.set_section_count(count == 0 ? 1 : count);
         carousel_->set_entries(track_entries_.data(), count);
         carousel_->set_title(count == 0 ? "NO TRACKS ON CARD" : "TRACK");
-        carousel_->set_position(state.section_index);
+        // Matched by identifier rather than by a remembered position: the catalog is
+        // rebuilt from the card at boot, so a position only means anything until the card
+        // changes. A circuit no longer on the card falls back to the first entry.
+        std::size_t selected = 0;
+        for (std::size_t index = 0; index < count; ++index) {
+            if (std::strncmp(view.definitions[index].track_id.data(),
+                             settings_.selected_track_id.data(),
+                             settings_.selected_track_id.size()) == 0) {
+                selected = index;
+                break;
+            }
+        }
+        shell_.select_section(selected);
+        carousel_->set_position(selected);
     }
 
     // Reads the chosen definition from the card, parses it and applies it to the timing
@@ -640,7 +772,7 @@ class ScreenRouter {
 
     void show_menu(const ui::ShellState& state) noexcept
     {
-        carousel_->set_entries(kMenuEntries, 4);
+        carousel_->set_entries(kMenuEntries, ui::kMenuItemCount);
         carousel_->set_title("MENU");
         carousel_->set_position(state.menu_index);
     }
@@ -652,14 +784,30 @@ class ScreenRouter {
             return;
         }
         shell_.set_section_count(ui::kSectionItemCount);
-        const auto mode = shell_.menu_item() == ui::MenuItem::mode;
-        carousel_->set_entries(mode ? kModeEntries : kSetupEntries, 3);
-        // Showing the live mode in the title means the driver can see what is selected
+        const auto item = shell_.menu_item();
+        const auto* entries = item == ui::MenuItem::mode      ? kModeEntries
+                              : item == ui::MenuItem::trigger ? kTriggerEntries
+                                                              : kSetupEntries;
+        carousel_->set_entries(entries, 3);
+        // Showing the live selection in the title means the driver can see what is set
         // before changing it, rather than having to remember.
-        carousel_->set_title(mode ? ui::device_mode_label(
-                                        ui::mode_from_settings(settings_))
-                                  : "SETUP");
-        carousel_->set_position(state.section_index);
+        carousel_->set_title(
+            item == ui::MenuItem::mode
+                ? ui::device_mode_label(ui::mode_from_settings(settings_))
+            : item == ui::MenuItem::trigger
+                ? ui::session_trigger_label(ui::trigger_from_settings(settings_))
+                : "SETUP");
+        // Open on what is in force. Setup has no "current" child, so it keeps wherever the
+        // driver last was.
+        if (item == ui::MenuItem::mode) {
+            shell_.select_section(
+                static_cast<std::size_t>(ui::mode_from_settings(settings_)));
+        }
+        else if (item == ui::MenuItem::trigger) {
+            shell_.select_section(
+                static_cast<std::size_t>(ui::trigger_from_settings(settings_)));
+        }
+        carousel_->set_position(shell_.state().section_index);
     }
 
     void show_fields(const ui::ShellState& state) noexcept
@@ -846,6 +994,10 @@ class ScreenRouter {
         }
         // While a clock is running the double tap belongs to the session, not the shell,
         // which refuses to open a menu then anyway.
+        if (armed_ && action == ui::InputAction::double_tap) {
+            disarm_session();
+            return;
+        }
         if (session_was_active_ && action == ui::InputAction::double_tap) {
             advance_session_phase();
             return;
@@ -887,6 +1039,16 @@ class ScreenRouter {
             shell_.close();
             lv_screen_load(home_screen());
             break;
+        case ui::ShellOutcome::trigger_selected: {
+            const auto chosen =
+                static_cast<settings::SessionTrigger>(result.state.section_index);
+            ui::apply_trigger(chosen, settings_);
+            persist_settings();
+            ESP_LOGI("track_timer", "trigger: %s", ui::session_trigger_name(chosen));
+            shell_.close();
+            lv_screen_load(home_screen());
+            break;
+        }
         case ui::ShellOutcome::track_selected:
             apply_selected_track(result.state.section_index);
             shell_.close();
@@ -1026,6 +1188,10 @@ class ScreenRouter {
     session::SessionController session_{};
     ui::ActiveSessionController active_session_{};
     bool session_was_active_{false};
+    bool armed_{false};
+    bool armed_ready_{false};
+    settings::SessionTrigger armed_trigger_{settings::SessionTrigger::manual};
+    const char* pending_detail_{""};
     ui::ImuMeterController imu_meter_{};
     track::TrackDefinition active_track_{};
     bool track_armed_{false};

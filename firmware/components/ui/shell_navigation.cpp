@@ -25,6 +25,7 @@ namespace {
         return NavigationAction::open_diagnostics;
     case MenuItem::mode:
     case MenuItem::track:
+    case MenuItem::trigger:
         break;
     }
     return NavigationAction::back;
@@ -83,7 +84,7 @@ void ShellNavigation::enter(ShellResult& result) noexcept
         const auto item = menu_item();
         state_.section_index = 0;
         if (item == MenuItem::mode || item == MenuItem::track ||
-            item == MenuItem::setup) {
+            item == MenuItem::trigger || item == MenuItem::setup) {
             state_.level = ShellLevel::section;
             result.outcome = ShellOutcome::entered;
             if (item == MenuItem::setup) {
@@ -107,6 +108,11 @@ void ShellNavigation::enter(ShellResult& result) noexcept
         }
         if (menu_item() == MenuItem::track) {
             result.outcome = ShellOutcome::track_selected;
+            return;
+        }
+        if (menu_item() == MenuItem::trigger) {
+            // Choosing a trigger is the whole interaction, as choosing a mode is.
+            result.outcome = ShellOutcome::trigger_selected;
             return;
         }
         if (state_.section_index == static_cast<std::size_t>(SetupItem::device_settings)) {
@@ -221,6 +227,11 @@ void ShellNavigation::set_value_count(const std::size_t count) noexcept
     }
 }
 
+void ShellNavigation::select_section(const std::size_t index) noexcept
+{
+    state_.section_index = index < section_count_ ? index : 0;
+}
+
 void ShellNavigation::select_value(const std::size_t index) noexcept
 {
     state_.value_index = index < value_count_ ? index : 0;
@@ -288,6 +299,8 @@ const char* shell_outcome_name(const ShellOutcome outcome) noexcept
         return "track-selected";
     case ShellOutcome::value_selected:
         return "value-selected";
+    case ShellOutcome::trigger_selected:
+        return "trigger-selected";
     }
     return "unknown";
 }
@@ -299,6 +312,8 @@ const char* menu_item_name(const MenuItem item) noexcept
         return "mode";
     case MenuItem::track:
         return "track";
+    case MenuItem::trigger:
+        return "trigger";
     case MenuItem::setup:
         return "setup";
     case MenuItem::review:

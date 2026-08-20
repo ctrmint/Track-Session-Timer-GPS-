@@ -7,7 +7,7 @@
 
 namespace track_timer::settings {
 
-inline constexpr std::uint16_t kCurrentSettingsVersion = 5;
+inline constexpr std::uint16_t kCurrentSettingsVersion = 6;
 inline constexpr std::size_t kSettingsBlobCapacity = 128;
 inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 
@@ -27,6 +27,13 @@ enum class OrientationMode : std::uint8_t {
 enum class LowerDisplayMode : std::uint8_t {
     elapsed,
     laps_remaining,
+};
+
+// What starts a session. Manual is the button; the other two arm the timer and wait.
+enum class SessionTrigger : std::uint8_t {
+    manual,
+    imu,
+    gps,
 };
 
 enum class LapBoundaryMode : std::uint8_t {
@@ -52,6 +59,10 @@ struct DeviceSettings {
     LapBoundaryMode lap_boundary{LapBoundaryMode::finish};
     bool pit_exit_auto_start_enabled{false};
     bool pit_entry_auto_stop_enabled{false};
+    // Appended, like every field before it: this struct is aggregate-initialised at call
+    // sites. Owns pit_exit_auto_start_enabled, which is derived from it rather than
+    // edited separately, so the two cannot disagree.
+    SessionTrigger session_trigger{SessionTrigger::manual};
 };
 
 struct LegacySettingsV1 {
@@ -86,6 +97,7 @@ enum class DecodeResult : std::uint8_t {
     migrated_v2,
     migrated_v3,
     migrated_v4,
+    migrated_v5,
     corrupt,
     unsupported_version,
 };
@@ -96,6 +108,7 @@ enum class SettingsSource : std::uint8_t {
     migrated_v2,
     migrated_v3,
     migrated_v4,
+    migrated_v5,
     defaults_missing,
     defaults_corrupt,
     defaults_unsupported,
@@ -145,6 +158,8 @@ struct FeatureAvailability {
 [[nodiscard]] SettingsBlob encode_legacy_settings_v1(
     const LegacySettingsV1& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v2(
+    const DeviceSettings& settings) noexcept;
+[[nodiscard]] SettingsBlob encode_legacy_settings_v5(
     const DeviceSettings& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v4(
     const DeviceSettings& settings) noexcept;

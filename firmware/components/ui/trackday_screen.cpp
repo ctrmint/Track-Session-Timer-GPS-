@@ -156,9 +156,13 @@ void TrackdayScreen::update(const TrackdayModeViewModel& model) noexcept
             0);
     }
 
-    lv_label_set_text(status_label_,
-                      model.phase == RunningPhase::session ? mode_note_
-                                                           : "DOUBLE TAP TO CONTINUE");
+    // Pending carries its own detail - what is being waited for - since "PENDING" alone
+    // does not separate a launch that has not happened from a receiver that does not exist.
+    const auto* footer = model.phase == RunningPhase::session ? mode_note_
+                         : model.phase == RunningPhase::pending
+                             ? (model.detail[0] != '\0' ? model.detail.data() : mode_note_)
+                             : "DOUBLE TAP TO CONTINUE";
+    lv_label_set_text(status_label_, footer);
     lv_obj_set_style_text_color(
         status_label_,
         lv_color_hex(model.phase == RunningPhase::session ? kMuted : colour), 0);

@@ -8,6 +8,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- section menus opened on their first item rather than the one in force, so Mode, Track and
+  Trigger could not tell the driver what was set, only let them change it
+- the menu carousel was told there were four items while the shell offered five, leaving
+  Diagnostics selectable but never drawn
+
 - the start page kept the durations it read at boot, so a session or rest period changed in
   the menu was obeyed by the timer but still shown at its old value until a restart
 - durations were written two ways at once, so a one minute session read "1 MIN SESSION"
@@ -58,6 +63,8 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- top-level TRIGGER selection: MANUAL starts on the button, IMU on a launch, GPS at the line
+- pending phase on the running screen for a session armed and waiting for its trigger
 - overrun timer counting up in deep purple once a session reaches 00:00, with the lap
   estimate replaced by OVER RUN
 - rest period shown on the running screen, counting down on the same ramp as a session

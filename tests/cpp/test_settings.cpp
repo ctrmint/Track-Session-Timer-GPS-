@@ -59,6 +59,7 @@ DeviceSettings customized_settings()
     settings.lap_boundary = LapBoundaryMode::start;
     settings.pit_exit_auto_start_enabled = true;
     settings.pit_entry_auto_stop_enabled = true;
+    settings.session_trigger = SessionTrigger::imu;
     std::strcpy(settings.selected_track_id.data(), "synthetic-test-loop");
     return settings;
 }
@@ -81,6 +82,9 @@ void test_validation_and_codec()
     assert(!valid_settings(invalid));
     invalid = settings;
     invalid.average_lap_seconds = 0;
+    assert(!valid_settings(invalid));
+    invalid = settings;
+    invalid.session_trigger = static_cast<SessionTrigger>(9);
     assert(!valid_settings(invalid));
     invalid = settings;
     invalid.lap_boundary = static_cast<LapBoundaryMode>(255);
@@ -176,6 +180,19 @@ void test_migration_corruption_and_storage_errors()
     assert(version_four.current().trackday_mode_enabled);
     assert(version_four.current().pit_exit_auto_start_enabled);
     assert(version_four.current().average_lap_seconds == 103);
+
+    MemorySettingsStore version_five_store;
+    version_five_store.found = true;
+    version_five_store.blob = encode_legacy_settings_v5(customized_settings());
+    SettingsManager version_five{version_five_store};
+    const auto version_five_migration = version_five.load();
+    assert(version_five_migration.source == SettingsSource::migrated_v5);
+    assert(version_five_migration.current_format_persisted);
+    // v5 held the durations exactly, seconds and all.
+    assert(version_five.current().session_duration_seconds == 30 * 60 + 30);
+    // Nothing before v6 had a trigger, so it defaults to manual, which is what those
+    // devices were doing.
+    assert(version_five.current().session_trigger == SessionTrigger::manual);
 
     MemorySettingsStore corrupt_store;
     corrupt_store.found = true;

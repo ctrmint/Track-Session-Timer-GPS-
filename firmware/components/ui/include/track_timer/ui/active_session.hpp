@@ -48,6 +48,9 @@ struct StopControlViewModel {
 // Which clock the running screen is showing. The session counts down, the overrun counts
 // up past zero, and rest counts down again through the configured break.
 enum class RunningPhase : std::uint8_t {
+    // Armed and waiting for a trigger. The clock shows the configured duration and does
+    // not move, because nothing has started yet.
+    pending,
     session,
     overrun,
     rest,
@@ -68,6 +71,9 @@ struct ActiveSessionDisplayConfig {
     std::int64_t overrun_ms{0};
     std::int64_t rest_remaining_ms{0};
     std::uint32_t rest_duration_seconds{0};
+    // What a pending session is waiting for. Owned by the caller, which is the only thing
+    // that knows whether the IMU has calibrated or a receiver exists.
+    const char* pending_detail{""};
 };
 
 // Urgency bands for the countdown. Named rather than raw colours so the thresholds are
@@ -84,6 +90,8 @@ enum class SessionUrgency : std::uint8_t {
 struct TrackdayModeViewModel {
     std::array<char, 32> countdown{};
     RunningPhase phase{RunningPhase::session};
+    // What a pending session is waiting for, or why it cannot arm.
+    std::array<char, 32> detail{};
     std::array<char, 24> estimated_laps{};
     // 1.0 at the start of a session falling to 0.0 at its end, for the decaying bar.
     float remaining_ratio{0.0F};
@@ -112,6 +120,9 @@ struct TrackdayModeViewModel {
 // literal "deep purple" #6A0DAD manages 2.27:1, where every other state here sits between
 // 5.9 and 10.5, and a 10 mm numeral at 2.27:1 is hard work in daylight.
 inline constexpr std::uint32_t kOverrunRgb = 0x9A4DFF;
+// Pending is not a countdown, so it does not take a point on the ramp: green would read as
+// "plenty of time left" on a clock that is not running.
+inline constexpr std::uint32_t kPendingRgb = 0x39B6FF;
 [[nodiscard]] std::uint32_t trackday_rgb(RunningPhase phase, SessionUrgency urgency) noexcept;
 [[nodiscard]] const char* session_urgency_name(SessionUrgency urgency) noexcept;
 
