@@ -73,6 +73,7 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- session records kept on the card, so a driver's sessions outlive a power cycle
 - a finished session leaves a record: duration, overrun and peak G on every axis, shown in
   Review
 - vertical G recorded alongside the horizontal pair, with kerbs and compressions kept apart
