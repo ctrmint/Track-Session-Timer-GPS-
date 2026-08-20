@@ -23,7 +23,7 @@
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
-#include "track_timer/logger/memory_summary_store.hpp"
+#include "track_timer/logger/file_summary_store.hpp"
 #include "track_timer/ui/rest_session.hpp"
 #include "track_timer/ui/session_trigger.hpp"
 #include "track_timer/ui/session_review.hpp"
@@ -151,6 +151,11 @@ constexpr std::uint32_t kRuby = 0xFF8FA3;
 }
 
 // Must stay in MenuItem order: the shell casts the carousel index straight to the enum.
+// At the card's root beside the track packs, so a driver can find and copy it. One file of
+// appended records rather than a directory per session: this is the Review index, and the
+// per-session logs that #38 will write are a separate thing.
+constexpr const char* kSummaryPath = "/sdcard/sessions.bin";
+
 constexpr ui::CarouselEntry kMenuEntries[] = {
     {LV_SYMBOL_LIST, "REVIEW", kAzure},
     {LV_SYMBOL_POWER, "MODE", kRuby},
@@ -453,7 +458,14 @@ class ScreenRouter {
         // Restore the track that was selected before the last reboot.
         restore_selected_track();
         refresh_ready();
-        // In memory for now: the card is where these belong, and that is the next step.
+        // Whatever is already on the card, so Review opens on the last session driven
+        // rather than on nothing after a power cycle.
+        const auto opened = summaries_.open(kSummaryPath);
+        const auto& scan = summaries_.scan_report();
+        ESP_LOGI("track_timer",
+                 "session summaries: open=%u recovered=%u skipped=%u truncated=%d",
+                 static_cast<unsigned>(opened), static_cast<unsigned>(scan.accepted),
+                 static_cast<unsigned>(scan.skipped), scan.truncated_tail ? 1 : 0);
         review_controller_.begin(&summaries_);
         review_->update(review_controller_.view_model());
         diagnostics_controller_.begin(device_snapshot());
@@ -1004,7 +1016,15 @@ class ScreenRouter {
         summary.peaks.down_g = peaks.down_g;
         summary.peaks.total_g = peaks.total_g;
 
-        if (!summaries_.record(summary)) {
+        // The card is not assumed to be there. A failed write costs the durability of this
+        // record and nothing else: the session stays in memory and Review shows it either
+        // way, because a session that has just been driven matters more than the record.
+        const auto stored = summaries_.append(summary);
+        if (!stored && !summaries_.persistent()) {
+            ESP_LOGW("track_timer", "session summary not written to card (%u failures)",
+                     static_cast<unsigned>(summaries_.write_failure_count()));
+        }
+        else if (!stored) {
             ESP_LOGW("track_timer", "session summary refused by its own validator");
             return;
         }
@@ -1270,7 +1290,7 @@ class ScreenRouter {
     session::SessionController session_{};
     ui::ActiveSessionController active_session_{};
     bool session_was_active_{false};
-    logger::MemorySummaryStore summaries_{};
+    logger::FileSummaryStore summaries_{};
     std::uint32_t session_ordinal_{0};
     bool armed_{false};
     bool armed_ready_{false};
