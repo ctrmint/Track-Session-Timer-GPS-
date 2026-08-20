@@ -19,6 +19,8 @@ const char* input_action_name(const InputAction action) noexcept
         return "swipe-down";
     case InputAction::swipe_up:
         return "swipe-up";
+    case InputAction::double_tap:
+        return "double-tap";
     }
     return "unknown";
 }

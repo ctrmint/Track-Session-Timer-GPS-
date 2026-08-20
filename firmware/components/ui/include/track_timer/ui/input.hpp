@@ -18,7 +18,12 @@ enum class InputAction : std::uint8_t {
     swipe_right,  // move to the previous item in a carousel
     swipe_down,   // back one level
     swipe_up,     // only meaningful where a screen drives a value with vertical gestures
+    double_tap,   // ends a running session; deliberately not a single touch
 };
+
+// Two taps inside this window are one double tap. Long enough to be comfortable with
+// gloves, short enough that two unrelated taps do not merge into one.
+inline constexpr std::uint32_t kDoubleTapWindowMs = 400;
 
 using InputCallback = void (*)(InputAction action, void* context) noexcept;
 

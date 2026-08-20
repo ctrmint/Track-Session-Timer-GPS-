@@ -164,6 +164,76 @@ int main()
     controls.confirm_stop(20'001);
     assert(!controls.consume_stop_request());
 
-    std::cout << "Deterministic lap feedback and hold-confirm stop controls passed\n";
+    // A session that runs out has to say so. The countdown field turns round and counts
+    // up, and the line that carried a lap estimate reports the state instead, because an
+    // estimate is meaningless once the session is over.
+    ui::ActiveSessionController phases;
+    auto running = active_snapshot();
+    running.session_remaining_ms = 4 * 60'000 + 30'000;
+    ui::ActiveSessionDisplayConfig config{};
+    config.average_lap_seconds = 90;
+    config.trackday_mode_enabled = true;
+    config.session_duration_seconds = 20 * 60;
+    config.rest_duration_seconds = 10 * 60;
+
+    phases.update(running, 0, config);
+    {
+        const auto& view = phases.view_model().trackday;
+        assert(view.phase == ui::RunningPhase::session);
+        assert(std::strcmp(view.countdown.data(), "04:30") == 0);
+        assert(ui::running_phase_caption(view.phase) == nullptr);  // the estimate shows
+        assert(view.estimate_available);
+        assert(ui::trackday_rgb(view.phase, view.urgency) == ui::urgency_rgb(view.urgency));
+    }
+
+    config.phase = ui::RunningPhase::overrun;
+    config.overrun_ms = 95'000;
+    phases.update(running, 100, config);
+    {
+        const auto& view = phases.view_model().trackday;
+        assert(view.phase == ui::RunningPhase::overrun);
+        // Counting up, and without a sign: the field is five fixed cells wide.
+        assert(std::strcmp(view.countdown.data(), "01:35") == 0);
+        assert(std::strcmp(ui::running_phase_caption(view.phase), "OVER RUN") == 0);
+        assert(!view.estimate_available);
+        assert(view.remaining_ratio == 0.0F);
+        assert(ui::trackday_rgb(view.phase, view.urgency) == ui::kOverrunRgb);
+    }
+
+    config.overrun_ms = 61 * 60'000 + 7'000;  // past an hour, still minutes and seconds
+    phases.update(running, 200, config);
+    assert(std::strcmp(phases.view_model().trackday.countdown.data(), "61:07") == 0);
+
+    // Rest counts down exactly as the session does, against its own duration.
+    config.phase = ui::RunningPhase::rest;
+    config.rest_remaining_ms = 10 * 60'000;
+    phases.update(running, 300, config);
+    {
+        const auto& view = phases.view_model().trackday;
+        assert(std::strcmp(view.countdown.data(), "10:00") == 0);
+        assert(std::strcmp(ui::running_phase_caption(view.phase), "REST") == 0);
+        assert(view.remaining_ratio > 0.99F);
+        assert(view.urgency == ui::SessionUrgency::ample);
+        assert(ui::trackday_rgb(view.phase, view.urgency) == ui::urgency_rgb(view.urgency));
+    }
+
+    config.rest_remaining_ms = 30'000;
+    phases.update(running, 400, config);
+    {
+        const auto& view = phases.view_model().trackday;
+        assert(std::strcmp(view.countdown.data(), "00:30") == 0);
+        assert(view.remaining_ratio < 0.1F);
+        assert(view.urgency == ui::SessionUrgency::critical);
+    }
+
+    // The overrun colour must not be mistakable for any point on the ramp.
+    for (const auto urgency : {ui::SessionUrgency::ample, ui::SessionUrgency::easing,
+                               ui::SessionUrgency::closing, ui::SessionUrgency::urgent,
+                               ui::SessionUrgency::critical}) {
+        assert(ui::urgency_rgb(urgency) != ui::kOverrunRgb);
+    }
+
+    std::cout << "Deterministic lap feedback, hold-confirm stop controls, and the "
+                 "overrun and rest phases passed\n";
     return 0;
 }

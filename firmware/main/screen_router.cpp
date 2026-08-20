@@ -23,6 +23,7 @@
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
+#include "track_timer/ui/rest_session.hpp"
 #include "track_timer/ui/session_review.hpp"
 #include "track_timer/ui/session_review_screen.hpp"
 #include "track_timer/ui/setup_menu_screen.hpp"
@@ -208,8 +209,11 @@ class ScreenRouter {
         const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
         (void)session_.advance(now_ms);
         const auto snapshot = session_.snapshot();
+        // Rest belongs on the running screen too: it is a clock the driver is watching,
+        // and dropping to the dashboard for it was why the rest period was invisible.
         const auto active = snapshot.state == session::SessionState::running ||
-                            snapshot.state == session::SessionState::overtime;
+                            snapshot.state == session::SessionState::overtime ||
+                            snapshot.state == session::SessionState::rest;
 
         shell_.synchronize_session(active);
         if (active != session_was_active_) {
@@ -228,6 +232,14 @@ class ScreenRouter {
         display.average_lap_seconds = settings_.average_lap_seconds;
         display.trackday_mode_enabled = true;
         display.session_duration_seconds = settings_.session_duration_seconds;
+        display.phase = snapshot.state == session::SessionState::overtime
+                            ? ui::RunningPhase::overrun
+                        : snapshot.state == session::SessionState::rest
+                            ? ui::RunningPhase::rest
+                            : ui::RunningPhase::session;
+        display.overrun_ms = snapshot.session_overrun_ms;
+        display.rest_remaining_ms = snapshot.rest_remaining_ms;
+        display.rest_duration_seconds = settings_.rest_duration_seconds;
 
         active_session_.update(ui_snapshot, static_cast<std::uint64_t>(now_ms), display);
         trackday_->update(active_session_.view_model().trackday);
@@ -769,6 +781,33 @@ class ScreenRouter {
         lv_screen_load(home_screen());
     }
 
+    // A double tap ends whatever clock is running: the session or its overrun give way to
+    // the rest period, and rest gives way to the dashboard. Two taps rather than one
+    // because this ends a session, and a stray touch on a moving car must not.
+    void advance_session_phase() noexcept
+    {
+        const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
+        const auto state = session_.snapshot().state;
+        if (session_.request_stop(now_ms) != session::TransitionResult::accepted) {
+            return;
+        }
+        if (session_.confirm_stop(now_ms) != session::TransitionResult::accepted) {
+            return;
+        }
+        if (state == session::SessionState::running ||
+            state == session::SessionState::overtime) {
+            // confirm_stop lands in review, which has no screen yet (#142). Carrying
+            // straight on keeps the tested path intact while the double tap does what it
+            // says; a review screen later inserts itself here rather than rearranging the
+            // state machine.
+            (void)session_.complete_review(now_ms);
+        }
+        ESP_LOGI("track_timer", "session phase: %s -> %s",
+                 ui::session_state_name(state),
+                 ui::session_state_name(session_.snapshot().state));
+        service_session();
+    }
+
     void handle_input(const ui::InputAction action) noexcept
     {
         if (roller_active_ && roller_ != nullptr) {
@@ -795,6 +834,13 @@ class ScreenRouter {
                 return;
             }
         }
+        // While a clock is running the double tap belongs to the session, not the shell,
+        // which refuses to open a menu then anyway.
+        if (session_was_active_ && action == ui::InputAction::double_tap) {
+            advance_session_phase();
+            return;
+        }
+
         const auto result = shell_.dispatch(action);
         switch (result.outcome) {
         case ui::ShellOutcome::menu_opened:

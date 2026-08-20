@@ -53,7 +53,7 @@ class TrackdayScreen {
     // which a single auto-sizing label cannot honour: a 1 is narrower than an 8.
     std::array<lv_obj_t*, 5> cells_{};
     std::array<char, 32> shown_countdown_{};
-    std::array<char, 24> shown_laps_{};
+    std::array<char, 32> shown_laps_{};
     std::uint32_t shown_colour_{0};
     std::int32_t shown_bar_width_{-1};
 };

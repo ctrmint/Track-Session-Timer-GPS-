@@ -324,7 +324,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-active-session-model
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Deterministic lap feedback and hold-confirm stop controls passed"
+            PASS_REGULAR_EXPRESSION "Deterministic lap feedback, hold-confirm stop controls, and the overrun and rest phases passed"
             TIMEOUT 20
     )
 
