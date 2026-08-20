@@ -25,14 +25,20 @@ enum class ShellLevel : std::uint8_t {
 
 // Track selection sits at the top level, between Mode and Setup: at a circuit it is the
 // thing most often changed, and burying it under Setup made it the deepest common task.
+// Order is position, and position is a statement about when each item is wanted: opening
+// the menu lands on the first one with no swipe at all, and everything else costs at least
+// one.
+//
+// Review comes first because it is wanted at the one moment the driver is definitely
+// stopped and definitely reaching for the device - just after a session. Mode, Track and
+// Trigger follow, in the order they are decided at the circuit before going out.
+// Diagnostics is last because it is the least often wanted.
 enum class MenuItem : std::uint8_t {
+    review,
     mode,
     track,
-    // What starts a session. Sits with the track because both are set at the circuit,
-    // before going out, rather than buried under Setup with the rarely-touched options.
     trigger,
     setup,
-    review,
     diagnostics,
 };
 inline constexpr std::size_t kMenuItemCount = 6;

@@ -32,7 +32,7 @@ void only_a_hold_opens_the_menu()
     const auto open = shell.dispatch(InputAction::long_press);
     assert(open.outcome == ShellOutcome::menu_opened);
     assert(open.state.level == ShellLevel::menu);
-    assert(shell.menu_item() == MenuItem::mode);
+    assert(shell.menu_item() == MenuItem::review);
 }
 
 // Hops to a menu item by name. Counting swipes meant that inserting an item silently
@@ -48,14 +48,16 @@ void to_menu(ShellNavigation& shell, const MenuItem item)
     assert(false && "menu item not reachable");
 }
 
-// Track and Trigger sit between Mode and Setup: at a circuit both are set before going
-// out, so neither should be buried under Setup with the rarely-touched options.
-void the_menu_offers_mode_then_track_and_wraps()
+// Opening the menu costs no swipe to reach the first item and at least one for everything
+// else, so Review leads: it is wanted the moment a session ends, when the driver is
+// stopped and already reaching for the device. Mode, Track and Trigger follow in the order
+// they are decided at the circuit, and Diagnostics is last.
+void the_menu_opens_on_review_and_wraps()
 {
     auto shell = opened();
-    assert(shell.menu_item() == MenuItem::mode);
-    for (const auto expected : {MenuItem::track, MenuItem::trigger, MenuItem::setup,
-                                MenuItem::review, MenuItem::diagnostics, MenuItem::mode}) {
+    assert(shell.menu_item() == MenuItem::review);
+    for (const auto expected : {MenuItem::mode, MenuItem::track, MenuItem::trigger,
+                                MenuItem::setup, MenuItem::diagnostics, MenuItem::review}) {
         (void)shell.dispatch(InputAction::swipe_left);
         assert(shell.menu_item() == expected);
     }
@@ -67,8 +69,7 @@ void the_menu_offers_mode_then_track_and_wraps()
 void the_track_list_is_sized_by_the_caller()
 {
     auto shell = opened();
-    (void)shell.dispatch(InputAction::swipe_left);      // TRACK
-    assert(shell.menu_item() == MenuItem::track);
+    to_menu(shell, MenuItem::track);
     auto result = shell.dispatch(InputAction::press);
     assert(result.outcome == ShellOutcome::entered);
     assert(result.state.level == ShellLevel::section);
@@ -102,20 +103,33 @@ void a_shorter_track_list_resets_an_out_of_range_index()
     assert(shell.state().section_index == 0);
 }
 
-// Choosing a mode is the entire interaction: enter Mode, swipe to it, press.
-void a_mode_is_three_gestures_from_the_dashboard()
+// Choosing a mode is still the whole interaction, and still shallow. Putting Review first
+// costs Mode one gesture - it is no longer what a hold lands on - which is the trade the
+// order makes: Review is wanted right after a session, Mode is set once and left.
+void a_mode_is_a_handful_of_gestures_from_the_dashboard()
 {
-    auto shell = opened();                      // 1: hold
-    auto result = shell.dispatch(InputAction::press);   // 2: enter Mode
+    auto shell = opened();                              // 1: hold
+    to_menu(shell, MenuItem::mode);                     // 2: swipe
+    auto result = shell.dispatch(InputAction::press);   // 3: enter Mode
     assert(result.outcome == ShellOutcome::entered);
     assert(result.state.level == ShellLevel::section);
-    assert(!result.emits_action);               // Mode has no destination screen
+    assert(!result.emits_action);                       // Mode has no destination screen
 
-    result = shell.dispatch(InputAction::swipe_left);   // 3: to Race
+    result = shell.dispatch(InputAction::swipe_left);   // 4: to Race
     assert(result.state.section_index == 1);
-    result = shell.dispatch(InputAction::press);        // 4: select
+    result = shell.dispatch(InputAction::press);        // 5: select
     assert(result.outcome == ShellOutcome::mode_selected);
     assert(result.state.section_index == 1);
+}
+
+// The other half of that trade: Review is now a hold and a press, where it used to be a
+// hold, four swipes and a press.
+void review_is_two_gestures_from_the_dashboard()
+{
+    auto shell = opened();
+    assert(shell.menu_item() == MenuItem::review);
+    const auto result = shell.dispatch(InputAction::press);
+    assert(result.emits_action && result.action == NavigationAction::open_review);
 }
 
 void review_and_diagnostics_hand_over_to_the_destination_model()
@@ -128,7 +142,7 @@ void review_and_diagnostics_hand_over_to_the_destination_model()
     assert(result.emits_action && result.action == NavigationAction::open_review);
     assert(result.state.level == ShellLevel::menu);
 
-    (void)shell.dispatch(InputAction::swipe_left);
+    to_menu(shell, MenuItem::diagnostics);
     result = shell.dispatch(InputAction::press);
     assert(result.emits_action && result.action == NavigationAction::open_diagnostics);
 }
@@ -201,6 +215,9 @@ void a_live_session_blocks_and_closes_the_menu()
 
     shell.synchronize_session(false);
     (void)shell.dispatch(InputAction::long_press);
+    // Review is a destination and stays at menu level, so descend into one that has
+    // children to prove a live session closes the menu from depth.
+    to_menu(shell, MenuItem::mode);
     (void)shell.dispatch(InputAction::press);
     assert(shell.state().level == ShellLevel::section);
 
@@ -278,10 +295,11 @@ void an_out_of_range_section_falls_back_to_the_first()
 int main()
 {
     only_a_hold_opens_the_menu();
-    the_menu_offers_mode_then_track_and_wraps();
+    the_menu_opens_on_review_and_wraps();
     the_track_list_is_sized_by_the_caller();
     a_shorter_track_list_resets_an_out_of_range_index();
-    a_mode_is_three_gestures_from_the_dashboard();
+    a_mode_is_a_handful_of_gestures_from_the_dashboard();
+    review_is_two_gestures_from_the_dashboard();
     review_and_diagnostics_hand_over_to_the_destination_model();
     a_setting_value_is_reachable_by_descending_three_levels();
     every_level_climbs_back_out_one_at_a_time();

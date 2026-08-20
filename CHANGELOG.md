@@ -68,6 +68,7 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- the gated menu opens on REVIEW, which is wanted the moment a session ends
 - top-level TRIGGER selection: MANUAL starts on the button, IMU on a launch, GPS at the line
 - pending phase on the running screen for a session armed and waiting for its trigger
 - overrun timer counting up in deep purple once a session reaches 00:00, with the lap

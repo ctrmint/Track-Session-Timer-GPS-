@@ -148,16 +148,40 @@ constexpr std::uint32_t kRuby = 0xFF8FA3;
     }
 }
 
+// Must stay in MenuItem order: the shell casts the carousel index straight to the enum.
 constexpr ui::CarouselEntry kMenuEntries[] = {
+    {LV_SYMBOL_LIST, "REVIEW", kAzure},
     {LV_SYMBOL_POWER, "MODE", kRuby},
     {LV_SYMBOL_GPS, "TRACK", kAzure},
     {LV_SYMBOL_CHARGE, "TRIGGER", kGreen},
     {LV_SYMBOL_SETTINGS, "SETUP", kAmber},
-    {LV_SYMBOL_LIST, "REVIEW", kAzure},
     {LV_SYMBOL_EYE_OPEN, "DIAGNOSTICS", kGreen},
 };
+// The shell casts the carousel index straight to MenuItem, so the array's order is the
+// menu's order. Checking the count alone would catch a missing entry but not a swapped
+// pair, which is the easier mistake to make and the harder one to notice.
+constexpr bool same_text(const char* left, const char* right) noexcept
+{
+    while (*left != '\0' && *left == *right) {
+        ++left;
+        ++right;
+    }
+    return *left == *right;
+}
+
+constexpr bool menu_entry_is(const ui::MenuItem item, const char* const label) noexcept
+{
+    return same_text(kMenuEntries[static_cast<std::size_t>(item)].label, label);
+}
+
 static_assert(std::size(kMenuEntries) == ui::kMenuItemCount,
               "the carousel must offer exactly the items the shell can select");
+static_assert(menu_entry_is(ui::MenuItem::review, "REVIEW"));
+static_assert(menu_entry_is(ui::MenuItem::mode, "MODE"));
+static_assert(menu_entry_is(ui::MenuItem::track, "TRACK"));
+static_assert(menu_entry_is(ui::MenuItem::trigger, "TRIGGER"));
+static_assert(menu_entry_is(ui::MenuItem::setup, "SETUP"));
+static_assert(menu_entry_is(ui::MenuItem::diagnostics, "DIAGNOSTICS"));
 
 // Manual first: it is what the device did before a trigger existed, and what a driver
 // falls back to when a trigger cannot arm.
