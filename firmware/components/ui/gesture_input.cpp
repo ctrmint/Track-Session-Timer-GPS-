@@ -11,6 +11,10 @@ struct Binding {
     // before LV_EVENT_SHORT_CLICKED, so clearing on release let the click through and
     // every swipe also fired a spurious press.
     bool handled_this_touch{false};
+    // When the previous short click landed, so a second one inside the window can be
+    // reported as a double tap.
+    std::uint32_t last_click_ms{0};
+    bool has_last_click{false};
 };
 
 // One binding per attached screen. Fixed storage keeps the no-dynamic-allocation rule.
@@ -68,8 +72,19 @@ void handle(lv_event_t* event) noexcept
             ++counters.suppressed;
             return;
         }
-        ++counters.dispatched;
-        binding->callback(InputAction::press, binding->context);
+        {
+            const auto now_ms = lv_tick_get();
+            const auto doubled = binding->has_last_click &&
+                                 now_ms - binding->last_click_ms <= kDoubleTapWindowMs;
+            // The first tap is still reported. Suppressing it pending a possible second
+            // would delay every press by the window, and the screens that act on a double
+            // tap ignore single presses anyway.
+            binding->has_last_click = !doubled;
+            binding->last_click_ms = now_ms;
+            ++counters.dispatched;
+            binding->callback(doubled ? InputAction::double_tap : InputAction::press,
+                              binding->context);
+        }
         break;
     case LV_EVENT_PRESSED:
         ++counters.pressed;

@@ -195,6 +195,8 @@ ShellResult ShellNavigation::dispatch(const InputAction action) noexcept
     case InputAction::swipe_up:
         // Vertical gestures belong to the screen that draws a value, not to navigation.
         // The shell has nothing above the current level to move to.
+    case InputAction::double_tap:
+        // Owned by the running screen, which ends a session with it.
     case InputAction::none:
         break;
     }

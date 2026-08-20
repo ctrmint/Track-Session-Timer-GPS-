@@ -8,6 +8,9 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- a session that ran out simply stopped: the rest period was modelled and tested but never
+  routed to a screen, and overtime rendered identically to a session still running
+
 - time settings could not reach most of their own range: the average lap picker stopped at
   3:00 against a field holding 59:59, and the durations at 60 minutes against 24 hours
 - saving on the roller used LVGL's 400 ms long press, which committed a value while it was
@@ -50,6 +53,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- overrun timer counting up in deep purple once a session reaches 00:00, with the lap
+  estimate replaced by OVER RUN
+- rest period shown on the running screen, counting down on the same ramp as a session
+- double tap to end a session or its overrun for the rest period, and rest for the
+  dashboard
 - two-column minutes-and-seconds roller for average lap, session and rest duration, with
   drag, flick momentum, and a deliberate hold to save
 - session and rest durations stored as seconds rather than whole minutes

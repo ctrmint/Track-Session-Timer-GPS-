@@ -34,6 +34,20 @@ void format_delta(std::array<char, 32>& output, const std::int64_t delta_ms,
                   static_cast<unsigned long long>(absolute_ms % 1'000), suffix);
 }
 
+void format_running_clock(std::array<char, 32>& output, const std::int64_t value_ms) noexcept
+{
+    if (value_ms == domain::kUnavailableTime) {
+        std::snprintf(output.data(), output.size(), "--:--");
+        return;
+    }
+    const auto absolute_ms = static_cast<std::uint64_t>(std::max<std::int64_t>(0, value_ms));
+    // No sign: the field is five fixed cells wide and a sixth would not fit the panel, and
+    // the deep purple plus the OVER RUN caption already say the clock is running up.
+    std::snprintf(output.data(), output.size(), "%02llu:%02llu",
+                  static_cast<unsigned long long>(absolute_ms / 60'000),
+                  static_cast<unsigned long long>((absolute_ms / 1'000) % 60));
+}
+
 void format_estimated_laps(TrackdayModeViewModel& model,
                            const std::int64_t remaining_ms,
                            const std::uint16_t average_lap_seconds) noexcept
@@ -139,6 +153,24 @@ std::uint32_t urgency_rgb(const SessionUrgency urgency) noexcept
     return 0xFFFFFF;
 }
 
+const char* running_phase_caption(const RunningPhase phase) noexcept
+{
+    switch (phase) {
+    case RunningPhase::overrun:
+        return "OVER RUN";
+    case RunningPhase::rest:
+        return "REST";
+    case RunningPhase::session:
+        break;
+    }
+    return nullptr;
+}
+
+std::uint32_t trackday_rgb(const RunningPhase phase, const SessionUrgency urgency) noexcept
+{
+    return phase == RunningPhase::overrun ? kOverrunRgb : urgency_rgb(urgency);
+}
+
 const char* session_urgency_name(const SessionUrgency urgency) noexcept
 {
     switch (urgency) {
@@ -182,15 +214,44 @@ void ActiveSessionController::update(const domain::UiSnapshot& snapshot,
     if (display.trackday_mode_enabled) {
         view_.feedback = {};
         view_.trackday.visible = true;
-        view_.trackday.countdown = view_.timing.session_remaining;
-        format_estimated_laps(view_.trackday, snapshot.session_remaining_ms,
-                              display.average_lap_seconds);
-        const auto total_ms =
-            static_cast<std::int64_t>(display.session_duration_seconds) * 1'000;
-        view_.trackday.remaining_ratio =
-            session_remaining_ratio(snapshot.session_remaining_ms, total_ms);
-        view_.trackday.urgency =
-            session_urgency(snapshot.session_remaining_ms, total_ms);
+        view_.trackday.phase = display.phase;
+        switch (display.phase) {
+        case RunningPhase::overrun: {
+            // Counting up, so there is no proportion left to show and the bar is spent.
+            format_running_clock(view_.trackday.countdown, display.overrun_ms);
+            format_estimated_laps(view_.trackday, domain::kUnavailableTime,
+                                  display.average_lap_seconds);
+            view_.trackday.remaining_ratio = 0.0F;
+            view_.trackday.urgency = SessionUrgency::overtime;
+            break;
+        }
+        case RunningPhase::rest: {
+            // Rest counts down exactly as the session does, against its own duration.
+            const auto rest_total_ms =
+                static_cast<std::int64_t>(display.rest_duration_seconds) * 1'000;
+            format_running_clock(view_.trackday.countdown, display.rest_remaining_ms);
+            format_estimated_laps(view_.trackday, domain::kUnavailableTime,
+                                  display.average_lap_seconds);
+            view_.trackday.remaining_ratio =
+                session_remaining_ratio(display.rest_remaining_ms, rest_total_ms);
+            view_.trackday.urgency =
+                session_urgency(display.rest_remaining_ms, rest_total_ms);
+            break;
+        }
+        case RunningPhase::session:
+        default: {
+            const auto total_ms =
+                static_cast<std::int64_t>(display.session_duration_seconds) * 1'000;
+            format_running_clock(view_.trackday.countdown, snapshot.session_remaining_ms);
+            format_estimated_laps(view_.trackday, snapshot.session_remaining_ms,
+                                  display.average_lap_seconds);
+            view_.trackday.remaining_ratio =
+                session_remaining_ratio(snapshot.session_remaining_ms, total_ms);
+            view_.trackday.urgency =
+                session_urgency(snapshot.session_remaining_ms, total_ms);
+            break;
+        }
+        }
         view_.timing.lap_label.fill('\0');
         view_.timing.current_lap.fill('\0');
         view_.timing.previous_lap.fill('\0');

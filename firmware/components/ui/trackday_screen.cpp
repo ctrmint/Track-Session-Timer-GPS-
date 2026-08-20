@@ -117,7 +117,7 @@ void TrackdayScreen::update(const TrackdayModeViewModel& model) noexcept
         }
     }
 
-    const auto colour = urgency_rgb(model.urgency);
+    const auto colour = trackday_rgb(model.phase, model.urgency);
     if (colour != shown_colour_) {
         shown_colour_ = colour;
         for (auto* cell : cells_) {
@@ -139,24 +139,29 @@ void TrackdayScreen::update(const TrackdayModeViewModel& model) noexcept
         }
     }
 
-    if (std::strncmp(shown_laps_.data(), model.estimated_laps.data(),
-                     shown_laps_.size()) == 0 && model.estimate_available) {
-        return;
+    // Once the session is over a lap estimate says nothing, so the line under the counter
+    // reports what the timer is doing instead.
+    const auto* caption = running_phase_caption(model.phase);
+    const auto* line = caption != nullptr           ? caption
+                       : model.estimate_available   ? model.estimated_laps.data()
+                                                    : "SET AVERAGE LAP FOR ESTIMATE";
+    if (std::strncmp(shown_laps_.data(), line, shown_laps_.size()) != 0) {
+        std::snprintf(shown_laps_.data(), shown_laps_.size(), "%s", line);
+        lv_label_set_text(laps_label_, line);
+        lv_obj_set_style_text_color(
+            laps_label_,
+            lv_color_hex(caption != nullptr        ? colour
+                         : model.estimate_available ? 0xFFFFFF
+                                                    : kMuted),
+            0);
     }
-    std::snprintf(shown_laps_.data(), shown_laps_.size(), "%s",
-                  model.estimated_laps.data());
-    lv_label_set_text(laps_label_, model.estimate_available
-                                       ? model.estimated_laps.data()
-                                       : "SET AVERAGE LAP FOR ESTIMATE");
-    lv_obj_set_style_text_color(
-        laps_label_, lv_color_hex(model.estimate_available ? 0xFFFFFF : kMuted), 0);
 
-    lv_label_set_text(status_label_, model.urgency == SessionUrgency::overtime
-                                         ? "OVERTIME"
-                                         : mode_note_);
+    lv_label_set_text(status_label_,
+                      model.phase == RunningPhase::session ? mode_note_
+                                                           : "DOUBLE TAP TO CONTINUE");
     lv_obj_set_style_text_color(
         status_label_,
-        lv_color_hex(model.urgency == SessionUrgency::overtime ? colour : kMuted), 0);
+        lv_color_hex(model.phase == RunningPhase::session ? kMuted : colour), 0);
 }
 
 void TrackdayScreen::set_mode_note(const char* const note) noexcept
