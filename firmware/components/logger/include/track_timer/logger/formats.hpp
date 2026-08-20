@@ -14,9 +14,14 @@ namespace track_timer::logger {
 // 2: session and rest durations widened from uint16 minutes to uint32 seconds, which
 // changes both the meaning and the size of every meta record. Logs written before this
 // are rejected by their version rather than silently misread as very short sessions.
-inline constexpr std::uint16_t kLogFormatVersion = 2;
+// 3: peak G on the session summary. Peaks recorded before the gravity reference was
+// tracked with the gyroscope latched tilt as acceleration and had left and right swapped,
+// so older summaries are refused by version rather than migrated - they are wrong, not old.
+inline constexpr std::uint16_t kLogFormatVersion = 3;
 inline constexpr std::int64_t kUnavailableUtcNs = -1;
 inline constexpr std::size_t kSessionIdentifierCapacity = 32;
+// Well beyond a road car on a circuit, and far short of anything a working sensor reports.
+inline constexpr float kMaximumCrediblePeakG = 10.0F;
 inline constexpr std::size_t kFirmwareCommitCapacity = 41;
 inline constexpr std::size_t kProfileNameCapacity = 32;
 inline constexpr std::size_t kTrackFingerprintCapacity = 17;
@@ -155,6 +160,18 @@ struct EventRecordV1 {
     std::int64_t session_overrun_ms{domain::kUnavailableTime};
 };
 
+// What the car pulled during a session. Vertical is kept apart from the horizontal pair,
+// and up from down, because a kerb strike and a compression are different events.
+struct SummaryPeakG {
+    float acceleration_g{0.0F};
+    float braking_g{0.0F};
+    float left_g{0.0F};
+    float right_g{0.0F};
+    float up_g{0.0F};
+    float down_g{0.0F};
+    float total_g{0.0F};
+};
+
 struct SessionSummaryV1 {
     std::uint16_t schema_version{kLogFormatVersion};
     std::uint16_t record_size_bytes{0};
@@ -175,6 +192,7 @@ struct SessionSummaryV1 {
     std::uint32_t source_event_record_count{0};
     std::uint32_t logger_dropped_record_count{0};
     std::uint32_t logger_write_failure_count{0};
+    SummaryPeakG peaks{};
 };
 
 struct SummaryLapRecordV1 {

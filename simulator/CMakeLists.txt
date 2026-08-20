@@ -274,7 +274,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-imu-meter-model
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Bounded G-meter peaks, orientation, reset guard, and IMU states passed"
+            PASS_REGULAR_EXPRESSION "Bounded G-meter peaks, orientation, reset guard, IMU states, and session-scoped vertical peaks passed"
             TIMEOUT 20
     )
 

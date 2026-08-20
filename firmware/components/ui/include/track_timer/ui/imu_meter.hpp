@@ -9,7 +9,10 @@
 
 namespace track_timer::ui {
 
-inline constexpr std::uint32_t kImuMeterSchemaVersion = 1;
+// 2: the vertical axis. Peaks recorded before the gravity reference was tracked with the
+// gyroscope latched tilt as acceleration and had left and right swapped, so they are wrong
+// rather than merely old and are not migrated.
+inline constexpr std::uint32_t kImuMeterSchemaVersion = 2;
 inline constexpr std::size_t kImuTrailCapacity = 24;
 inline constexpr float kStandardGravityMps2 = 9.80665F;
 inline constexpr float kImuDisplayLimitG = 2.0F;
@@ -31,6 +34,8 @@ struct ImuMeterInput {
     bool x_axis_valid{false};
     bool y_axis_valid{false};
     bool calibrating{false};
+    // Appended: the vertical axis arrives on the sample's z component.
+    bool z_axis_valid{false};
 };
 
 struct PlanarAcceleration {
@@ -47,6 +52,10 @@ struct ImuPeakSummary {
     float right_g{0.0F};
     float total_g{0.0F};
     PlanarAcceleration total_position{};
+    // Kept apart from the horizontal pair and from each other: a kerb strike throws the car
+    // up and a compression loads it down, and they are different events to a driver.
+    float up_g{0.0F};
+    float down_g{0.0F};
 };
 
 struct ImuMeterSnapshot {
@@ -54,6 +63,9 @@ struct ImuMeterSnapshot {
     ImuMeterState state{ImuMeterState::unavailable};
     board::DisplayOrientation orientation{board::DisplayOrientation::degrees_0};
     PlanarAcceleration current{};
+    // Unaffected by the display rotation: up is up however the unit is mounted.
+    float vertical_g{0.0F};
+    bool vertical_valid{false};
     ImuPeakSummary peaks{};
     std::array<PlanarAcceleration, kImuTrailCapacity> trail{};
     std::size_t trail_count{0};

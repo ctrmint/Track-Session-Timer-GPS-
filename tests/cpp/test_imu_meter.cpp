@@ -27,6 +27,17 @@ track_timer::ui::ImuMeterInput sample(const float lateral_g, const float longitu
     return input;
 }
 
+// Vertical arrives on the sample's z component and, unlike the horizontal pair, does not
+// rotate with the display: up is up however the unit is mounted.
+track_timer::ui::ImuMeterInput vertical_sample(const float vertical_g,
+                                               const std::uint64_t now_ms)
+{
+    auto input = sample(0.0F, 0.0F, now_ms);
+    input.sample.acceleration_z_mps2 = vertical_g * track_timer::ui::kStandardGravityMps2;
+    input.z_axis_valid = true;
+    return input;
+}
+
 }  // namespace
 
 int main()
@@ -117,6 +128,45 @@ int main()
     assert(rotated.snapshot().trail_count == 0);
     assert(near(rotated.snapshot().peaks.total_g, 0.0F));
 
-    std::cout << "Bounded G-meter peaks, orientation, reset guard, and IMU states passed\n";
+    // A kerb throws the car up and a compression loads it down. Recording only a magnitude
+    // would lose which happened, so the two are held apart.
+    ui::ImuMeterController vertical;
+    (void)vertical.update(vertical_sample(0.8F, 0), false);
+    (void)vertical.update(vertical_sample(-1.3F, 100), false);
+    (void)vertical.update(vertical_sample(0.2F, 200), false);
+    assert(near(vertical.snapshot().peaks.up_g, 0.8F));
+    assert(near(vertical.snapshot().peaks.down_g, 1.3F));
+    assert(near(vertical.snapshot().vertical_g, 0.2F));
+    assert(vertical.snapshot().vertical_valid);
+
+    // Without the axis the peaks must stay put rather than collapsing to zero.
+    (void)vertical.update(sample(0.0F, 0.0F, 300), false);
+    assert(!vertical.snapshot().vertical_valid);
+    assert(near(vertical.snapshot().peaks.up_g, 0.8F));
+    assert(near(vertical.snapshot().peaks.down_g, 1.3F));
+
+    // Peaks belong to a session. Starting one clears what came before, so a summary reports
+    // what the car did on track rather than everything since boot - including whatever
+    // happened carrying the device to the car.
+    ui::ImuMeterController scoped;
+    (void)scoped.update(sample(1.5F, 0.0F, 0), false);
+    (void)scoped.update(vertical_sample(2.0F, 100), false);
+    assert(scoped.snapshot().peaks.left_g > 1.0F || scoped.snapshot().peaks.right_g > 1.0F);
+    assert(near(scoped.snapshot().peaks.up_g, 2.0F));
+
+    (void)scoped.update(sample(0.4F, 0.0F, 200), true);   // session starts
+    assert(near(scoped.snapshot().peaks.up_g, 0.0F));
+    assert(!scoped.snapshot().reset_allowed);             // and cannot be cleared by hand
+
+    (void)scoped.update(vertical_sample(0.5F, 300), true);
+    assert(near(scoped.snapshot().peaks.up_g, 0.5F));
+
+    // Ending the session leaves the peaks standing, because that is when they are read.
+    (void)scoped.update(sample(0.0F, 0.0F, 400), false);
+    assert(near(scoped.snapshot().peaks.up_g, 0.5F));
+    assert(scoped.snapshot().reset_allowed);
+
+    std::cout << "Bounded G-meter peaks, orientation, reset guard, IMU states, and "
+                 "session-scoped vertical peaks passed\n";
     return 0;
 }
