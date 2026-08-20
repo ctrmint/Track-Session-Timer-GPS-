@@ -8,6 +8,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- G peaks were never scoped to a session, so they described everything since boot; the meter
+  was still being told no session was ever running
+- the vertical axis was computed and then dropped before it reached the meter
+- Review rendered its summary rows at 0.82 mm, which on this panel reads as an empty screen
+
 - the launch sensitivity ladder ran to 4 g, which a car cannot reach as forward
   acceleration, so six of its ten choices could never fire and nothing was offered below
   0.5 g where a deliberate pit exit sits; stored values are snapped onto the new ladder
@@ -68,6 +73,9 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- a finished session leaves a record: duration, overrun and peak G on every axis, shown in
+  Review
+- vertical G recorded alongside the horizontal pair, with kerbs and compressions kept apart
 - the gated menu opens on REVIEW, which is wanted the moment a session ends
 - top-level TRIGGER selection: MANUAL starts on the button, IMU on a launch, GPS at the line
 - pending phase on the running screen for a session armed and waiting for its trigger

@@ -23,6 +23,7 @@
 #include "track_timer/ui/navigation.hpp"
 #include "track_timer/ui/presenter.hpp"
 #include "track_timer/ui/ready_screen.hpp"
+#include "track_timer/logger/memory_summary_store.hpp"
 #include "track_timer/ui/rest_session.hpp"
 #include "track_timer/ui/session_trigger.hpp"
 #include "track_timer/ui/session_review.hpp"
@@ -39,6 +40,7 @@
 #include <lvgl.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <new>
 #include <string_view>
@@ -345,15 +347,21 @@ class ScreenRouter {
             resolved.lateral_g * imu::kStandardGravityMps2;
         resolved_sample.acceleration_y_mps2 =
             resolved.longitudinal_g * imu::kStandardGravityMps2;
+        // Kerbs and compressions are the events this axis exists for, and it was being
+        // computed and thrown away here.
+        resolved_sample.acceleration_z_mps2 =
+            resolved.vertical_g * imu::kStandardGravityMps2;
         resolved_sample.valid = resolved.valid;
         input.sample = resolved_sample;
         input.sample_available = resolved.valid;
         input.x_axis_valid = resolved.valid;
         input.y_axis_valid = resolved.valid;
-        // No session is wired on the device yet, so peaks are not session-scoped here.
-        // Session-scoped peaks for Review are tracked in #137.
+        input.z_axis_valid = resolved.valid;
         service_session();
-        const auto& snapshot = imu_meter_.update(input, false);
+        // Peaks are scoped to the session so a summary can report what happened during it
+        // rather than everything since boot. Arming counts: a driver waiting on a launch
+        // has not started yet, and whatever they did getting to the line is not the session.
+        const auto& snapshot = imu_meter_.update(input, session_was_active_);
         // Only when the radar is the visible screen. Repositioning 26 objects and
         // reformatting five labels on every LVGL iteration is wasted work off-screen,
         // and it invalidates areas nobody is looking at.
@@ -445,7 +453,8 @@ class ScreenRouter {
         // Restore the track that was selected before the last reboot.
         restore_selected_track();
         refresh_ready();
-        review_controller_.begin(nullptr);  // no storage backend yet
+        // In memory for now: the card is where these belong, and that is the next step.
+        review_controller_.begin(&summaries_);
         review_->update(review_controller_.view_model());
         diagnostics_controller_.begin(device_snapshot());
         diagnostics_->update(diagnostics_controller_.view_model());
@@ -966,10 +975,59 @@ class ScreenRouter {
     // A double tap ends whatever clock is running: the session or its overrun give way to
     // the rest period, and rest gives way to the dashboard. Two taps rather than one
     // because this ends a session, and a stray touch on a moving car must not.
+    // What the car actually did, taken at the moment the session ends and before anything
+    // resets. Peaks come from the meter, which has been scoped to the session since it
+    // started, so they describe this session rather than everything since boot.
+    void capture_summary() noexcept
+    {
+        const auto snapshot = session_.snapshot();
+        const auto& peaks = imu_meter_.snapshot().peaks;
+
+        logger::SessionSummaryV1 summary{};
+        summary.record_size_bytes = static_cast<std::uint16_t>(sizeof(summary));
+        std::snprintf(summary.session_id.data(), summary.session_id.size(), "S%03u",
+                      static_cast<unsigned>(++session_ordinal_));
+        // Duration is the whole elapsed session, overrun the part of it past the configured
+        // end, which is why one is never greater than the other.
+        summary.session_duration_ms = std::max<std::int64_t>(0, snapshot.session_elapsed_ms);
+        summary.session_overrun_ms = std::max<std::int64_t>(0, snapshot.session_overrun_ms);
+        summary.completion_reason = logger::SessionCompletionReason::driver_stop;
+        summary.integrity = logger::SummaryIntegrity::complete;
+        // Honest rather than flattering: there is no receiver, so every session so far is
+        // recorded without the lap data a driver would expect.
+        summary.degraded_subsystems = logger::degraded_gnss;
+        summary.peaks.acceleration_g = peaks.acceleration_g;
+        summary.peaks.braking_g = peaks.braking_g;
+        summary.peaks.left_g = peaks.left_g;
+        summary.peaks.right_g = peaks.right_g;
+        summary.peaks.up_g = peaks.up_g;
+        summary.peaks.down_g = peaks.down_g;
+        summary.peaks.total_g = peaks.total_g;
+
+        if (!summaries_.record(summary)) {
+            ESP_LOGW("track_timer", "session summary refused by its own validator");
+            return;
+        }
+        ESP_LOGI("track_timer",
+                 "session summary %s: ran %lld ms (%lld overrun), peak %d milli-g",
+                 summary.session_id.data(),
+                 static_cast<long long>(summary.session_duration_ms),
+                 static_cast<long long>(summary.session_overrun_ms),
+                 static_cast<int>(summary.peaks.total_g * 1000.0F));
+        review_controller_.begin(&summaries_);
+        if (review_ != nullptr) {
+            review_->update(review_controller_.view_model());
+        }
+    }
+
     void advance_session_phase() noexcept
     {
         const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
         const auto state = session_.snapshot().state;
+        if (state == session::SessionState::running ||
+            state == session::SessionState::overtime) {
+            capture_summary();
+        }
         if (session_.request_stop(now_ms) != session::TransitionResult::accepted) {
             return;
         }
@@ -1212,6 +1270,8 @@ class ScreenRouter {
     session::SessionController session_{};
     ui::ActiveSessionController active_session_{};
     bool session_was_active_{false};
+    logger::MemorySummaryStore summaries_{};
+    std::uint32_t session_ordinal_{0};
     bool armed_{false};
     bool armed_ready_{false};
     settings::SessionTrigger armed_trigger_{settings::SessionTrigger::manual};

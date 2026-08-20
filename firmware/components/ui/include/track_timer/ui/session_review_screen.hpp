@@ -52,6 +52,11 @@ class SessionReviewScreen {
     lv_obj_t* completion_{nullptr};
     lv_obj_t* integrity_{nullptr};
     lv_obj_t* message_{nullptr};
+    lv_obj_t* peak_caption_{nullptr};
+    lv_obj_t* peak_total_{nullptr};
+    lv_obj_t* peak_longitudinal_{nullptr};
+    lv_obj_t* peak_lateral_{nullptr};
+    lv_obj_t* peak_vertical_{nullptr};
     std::array<lv_obj_t*, logger::kSummaryLapPageCapacity> lap_panels_{};
     std::array<lv_obj_t*, logger::kSummaryLapPageCapacity> lap_labels_{};
     std::array<lv_obj_t*, logger::kSummaryLapPageCapacity> lap_durations_{};

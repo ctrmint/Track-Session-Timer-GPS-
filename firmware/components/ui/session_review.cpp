@@ -237,6 +237,10 @@ void SessionReviewController::update_view() noexcept
     view_.completion.fill('\0');
     view_.integrity.fill('\0');
     view_.message.fill('\0');
+    view_.peak_total.fill('\0');
+    view_.peak_longitudinal.fill('\0');
+    view_.peak_lateral.fill('\0');
+    view_.peak_vertical.fill('\0');
     for (auto& row : view_.laps) {
         row = {};
     }
@@ -288,6 +292,22 @@ void SessionReviewController::update_view() noexcept
                   formatted.data());
     std::snprintf(view_.completion.data(), view_.completion.size(), "ENDED %s",
                   completion_name(summary_.completion_reason));
+
+    // Two decimals, because the difference between 0.94 and 1.02 g is the difference
+    // between a good corner and a very good one.
+    const auto& peaks = summary_.peaks;
+    std::snprintf(view_.peak_total.data(), view_.peak_total.size(), "%.2f",
+                  static_cast<double>(peaks.total_g));
+    std::snprintf(view_.peak_longitudinal.data(), view_.peak_longitudinal.size(),
+                  "ACC %.2f   BRK %.2f", static_cast<double>(peaks.acceleration_g),
+                  static_cast<double>(peaks.braking_g));
+    std::snprintf(view_.peak_lateral.data(), view_.peak_lateral.size(),
+                  "LEFT %.2f   RIGHT %.2f", static_cast<double>(peaks.left_g),
+                  static_cast<double>(peaks.right_g));
+    // Up and down kept apart: a kerb and a compression are different events.
+    std::snprintf(view_.peak_vertical.data(), view_.peak_vertical.size(),
+                  "UP %.2f   DOWN %.2f", static_cast<double>(peaks.up_g),
+                  static_cast<double>(peaks.down_g));
 
     if (view_.status == SessionReviewStatus::partial_log) {
         set_text(view_.integrity, "PARTIAL LOG - RESULTS MAY BE INCOMPLETE");

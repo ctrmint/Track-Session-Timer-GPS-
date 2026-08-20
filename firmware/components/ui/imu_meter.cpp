@@ -76,6 +76,13 @@ const ImuMeterSnapshot& ImuMeterController::update(const ImuMeterInput& input,
     const auto point = rotate_sample(input);
     snapshot_.current = point;
     append(point);
+    // Vertical does not rotate with the display: up is up however the unit is mounted.
+    snapshot_.vertical_valid = input.sample_available && input.z_axis_valid;
+    snapshot_.vertical_g =
+        snapshot_.vertical_valid
+            ? clamp_g(input.sample.acceleration_z_mps2 / kStandardGravityMps2)
+            : 0.0F;
+
     update_peaks(point);
     increment_saturated(snapshot_.accepted_samples);
 
@@ -130,6 +137,8 @@ PlanarAcceleration ImuMeterController::trail_point(
 void ImuMeterController::clear_measurements() noexcept
 {
     snapshot_.current = {};
+    snapshot_.vertical_g = 0.0F;
+    snapshot_.vertical_valid = false;
     snapshot_.peaks = {};
     snapshot_.trail.fill({});
     snapshot_.trail_count = 0;
@@ -147,6 +156,10 @@ void ImuMeterController::append(const PlanarAcceleration point) noexcept
 
 void ImuMeterController::update_peaks(const PlanarAcceleration& point) noexcept
 {
+    if (snapshot_.vertical_valid) {
+        snapshot_.peaks.up_g = std::max(snapshot_.peaks.up_g, snapshot_.vertical_g);
+        snapshot_.peaks.down_g = std::max(snapshot_.peaks.down_g, -snapshot_.vertical_g);
+    }
     if (point.longitudinal_valid) {
         snapshot_.peaks.acceleration_g =
             std::max(snapshot_.peaks.acceleration_g, point.longitudinal_g);

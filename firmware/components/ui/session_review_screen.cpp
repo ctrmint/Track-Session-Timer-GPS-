@@ -34,31 +34,56 @@ SessionReviewScreen::SessionReviewScreen(lv_obj_t* root,
     buttons_[1] = make_button(1, SessionReviewAction::older_session,
                               "OLDER " LV_SYMBOL_RIGHT, 460, 8, 120, 56, color::surface);
 
-    duration_ = create_label(root_, Typography::caption, color::text_primary,
+    duration_ = create_label(root_, Typography::timer_secondary, color::text_primary,
                              LV_TEXT_ALIGN_LEFT);
-    lv_obj_set_pos(duration_, 20, 72);
-    lv_obj_set_size(duration_, 185, 24);
-    overrun_ = create_label(root_, Typography::caption, color::caution_bright);
-    lv_obj_set_pos(overrun_, 205, 72);
-    lv_obj_set_size(overrun_, 175, 24);
-    completion_ = create_label(root_, Typography::caption, color::text_primary,
-                               LV_TEXT_ALIGN_RIGHT);
-    lv_obj_set_pos(completion_, 380, 72);
-    lv_obj_set_size(completion_, 200, 24);
+    lv_obj_set_pos(duration_, 20, 62);
+    lv_obj_set_size(duration_, 300, 34);
+    overrun_ = create_label(root_, Typography::timer_secondary, color::caution_bright,
+                            LV_TEXT_ALIGN_RIGHT);
+    lv_obj_set_pos(overrun_, 320, 62);
+    lv_obj_set_size(overrun_, 260, 34);
+    completion_ = create_label(root_, Typography::body, color::text_primary,
+                               LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_pos(completion_, 20, 100);
+    lv_obj_set_size(completion_, 300, 26);
 
-    integrity_ = create_label(root_, Typography::caption, color::text_secondary,
-                              LV_TEXT_ALIGN_LEFT);
-    lv_obj_set_pos(integrity_, 20, 102);
-    lv_obj_set_size(integrity_, 560, 24);
-    message_ = create_label(root_, Typography::caption, color::caution_bright,
+    integrity_ = create_label(root_, Typography::body, color::text_secondary,
+                              LV_TEXT_ALIGN_RIGHT);
+    lv_obj_set_pos(integrity_, 320, 100);
+    lv_obj_set_size(integrity_, 260, 26);
+    message_ = create_label(root_, Typography::body, color::caution_bright,
                             LV_TEXT_ALIGN_LEFT);
-    lv_obj_set_pos(message_, 20, 128);
-    lv_obj_set_size(message_, 560, 24);
+    lv_obj_set_pos(message_, 20, 288);
+    lv_obj_set_size(message_, 560, 26);
+
+    // The peaks occupy the space the lap rows will take once there is a receiver, so they
+    // are shown only when a session has no laps to list - which is every session today.
+    peak_caption_ = create_label(root_, Typography::body, color::text_secondary,
+                                 LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_pos(peak_caption_, 20, 138);
+    lv_obj_set_size(peak_caption_, 200, 26);
+    lv_label_set_text(peak_caption_, "PEAK G");
+    peak_total_ = create_label(root_, Typography::timer_primary, color::text_primary,
+                               LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_pos(peak_total_, 20, 160);
+    lv_obj_set_size(peak_total_, 250, 56);
+    peak_longitudinal_ = create_label(root_, Typography::body, color::text_primary,
+                                      LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_pos(peak_longitudinal_, 290, 152);
+    lv_obj_set_size(peak_longitudinal_, 290, 26);
+    peak_lateral_ = create_label(root_, Typography::body, color::text_primary,
+                                 LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_pos(peak_lateral_, 290, 180);
+    lv_obj_set_size(peak_lateral_, 290, 26);
+    peak_vertical_ = create_label(root_, Typography::body, color::text_primary,
+                                  LV_TEXT_ALIGN_LEFT);
+    lv_obj_set_pos(peak_vertical_, 290, 208);
+    lv_obj_set_size(peak_vertical_, 290, 26);
 
     for (std::size_t index = 0; index < lap_panels_.size(); ++index) {
         auto* panel = lv_obj_create(root_);
         style_flat_panel(panel, color::surface, 8);
-        lv_obj_set_pos(panel, 20, 156 + static_cast<std::int32_t>(index * 40));
+        lv_obj_set_pos(panel, 20, 152 + static_cast<std::int32_t>(index * 40));
         lv_obj_set_size(panel, 560, 36);
         lap_panels_[index] = panel;
         lap_labels_[index] = create_label(panel, Typography::caption, color::text_primary,
@@ -99,6 +124,23 @@ void SessionReviewScreen::update(const SessionReviewViewModel& model) noexcept
                          ? color::caution_bright
                          : color::text_secondary),
         0);
+
+    lv_label_set_text(peak_total_, model.peak_total.data());
+    lv_label_set_text(peak_longitudinal_, model.peak_longitudinal.data());
+    lv_label_set_text(peak_lateral_, model.peak_lateral.data());
+    lv_label_set_text(peak_vertical_, model.peak_vertical.data());
+
+    // Peaks and lap rows share the same space, so only one of them is ever up.
+    const auto show_peaks = model.lap_count == 0 && model.peak_total[0] != '\0';
+    for (auto* label : {peak_caption_, peak_total_, peak_longitudinal_, peak_lateral_,
+                        peak_vertical_}) {
+        if (show_peaks) {
+            lv_obj_remove_flag(label, LV_OBJ_FLAG_HIDDEN);
+        }
+        else {
+            lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 
     for (std::size_t index = 0; index < model.laps.size(); ++index) {
         const auto& row = model.laps[index];

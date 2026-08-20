@@ -35,6 +35,12 @@ struct SessionReviewViewModel {
     std::array<char, 32> completion{};
     std::array<char, 64> integrity{};
     std::array<char, 96> message{};
+    // What the car pulled. Recorded on the summary since the peaks landed there, and shown
+    // here because a session without lap times still has this much to say about itself.
+    std::array<char, 16> peak_total{};
+    std::array<char, 32> peak_longitudinal{};
+    std::array<char, 32> peak_lateral{};
+    std::array<char, 32> peak_vertical{};
     std::array<SessionReviewLapRow, logger::kSummaryLapPageCapacity> laps{};
     bool newer_session_enabled{false};
     bool older_session_enabled{false};

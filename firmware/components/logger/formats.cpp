@@ -290,8 +290,21 @@ bool valid_event_record(const EventRecordV1& record) noexcept
            record.session_overrun_ms <= record.session_elapsed_ms;
 }
 
+// A peak is a magnitude, so it cannot be negative, and anything beyond what a car can
+// physically pull says the reading is wrong rather than remarkable.
+bool valid_peak(const float value) noexcept
+{
+    return value >= 0.0F && value <= kMaximumCrediblePeakG;
+}
+
 bool valid_summary(const SessionSummaryV1& record) noexcept
 {
+    if (!valid_peak(record.peaks.acceleration_g) || !valid_peak(record.peaks.braking_g) ||
+        !valid_peak(record.peaks.left_g) || !valid_peak(record.peaks.right_g) ||
+        !valid_peak(record.peaks.up_g) || !valid_peak(record.peaks.down_g) ||
+        !valid_peak(record.peaks.total_g)) {
+        return false;
+    }
     if (record.schema_version != kLogFormatVersion ||
         record.record_size_bytes != sizeof(SessionSummaryV1) || !non_empty(record.session_id) ||
         record.session_duration_ms < 0 || record.session_overrun_ms < 0 ||
