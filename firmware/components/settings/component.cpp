@@ -18,6 +18,8 @@ constexpr std::size_t kLegacyV4PayloadSize = 66;
 // v5 ignores them in favour of the appended values.
 constexpr std::size_t kLegacyV5PayloadSize = 74;
 // v6 appends the session trigger, which nothing before it had.
+// v7 changed what the launch field may hold, not the shape of the payload.
+constexpr std::size_t kLegacyV6PayloadSize = 75;
 constexpr std::size_t kCurrentPayloadSize = 75;
 
 inline constexpr std::uint32_t kMaximumDurationSeconds = 24U * 60U * 60U;
@@ -26,13 +28,6 @@ inline constexpr std::uint32_t kMinimumSessionSeconds = 60U;
 bool valid_brightness(const std::uint8_t percent) noexcept
 {
     return percent == 25 || percent == 50 || percent == 75 || percent == 100;
-}
-
-bool valid_launch_sensitivity(const std::uint16_t milli_g) noexcept
-{
-    constexpr std::array<std::uint16_t, 10> values{0, 500, 1'000, 1'250, 1'500,
-                                                   1'750, 2'000, 2'500, 3'500, 4'000};
-    return std::find(values.begin(), values.end(), milli_g) != values.end();
 }
 
 bool valid_track_identifier(
@@ -136,6 +131,32 @@ bool valid_legacy_settings(const LegacySettingsV1& settings) noexcept
 
 }  // namespace
 
+bool valid_launch_sensitivity(const std::uint16_t milli_g) noexcept
+{
+    return std::find(kLaunchSensitivityMilliG.begin(), kLaunchSensitivityMilliG.end(),
+                     milli_g) != kLaunchSensitivityMilliG.end();
+}
+
+std::uint16_t nearest_launch_sensitivity(const std::uint16_t milli_g) noexcept
+{
+    if (milli_g == 0) {
+        // Zero meant "off", which as a trigger threshold is a device that never starts a
+        // session. The trigger itself is the on/off now, so off becomes the default rather
+        // than the lowest setting, which would be the most trigger-happy of all.
+        return kDefaultLaunchSensitivityMilliG;
+    }
+    auto best = kLaunchSensitivityMilliG.front();
+    auto best_distance = milli_g > best ? milli_g - best : best - milli_g;
+    for (const auto candidate : kLaunchSensitivityMilliG) {
+        const auto distance = milli_g > candidate ? milli_g - candidate : candidate - milli_g;
+        if (distance < best_distance) {
+            best = candidate;
+            best_distance = distance;
+        }
+    }
+    return best;
+}
+
 bool valid_settings(const DeviceSettings& settings) noexcept
 {
     return settings.session_duration_seconds >= kMinimumSessionSeconds &&
@@ -238,15 +259,26 @@ SettingsBlob encode_legacy_settings_v5(const DeviceSettings& settings) noexcept
     return make_blob(5, payload.data(), payload.size());
 }
 
-SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+SettingsBlob encode_legacy_settings_v6(const DeviceSettings& settings) noexcept
 {
     const auto legacy = encode_legacy_settings_v5(settings);
     if (legacy.size == 0) {
         return {};
     }
-    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::array<std::uint8_t, kLegacyV6PayloadSize> payload{};
     std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV5PayloadSize, payload.data());
     payload[74] = static_cast<std::uint8_t>(settings.session_trigger);
+    return make_blob(6, payload.data(), payload.size());
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    const auto legacy = encode_legacy_settings_v6(settings);
+    if (legacy.size == 0) {
+        return {};
+    }
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV6PayloadSize, payload.data());
     return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
 }
 
@@ -289,7 +321,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         settings = candidate;
         return DecodeResult::migrated_v1;
     }
-    if (version != 2 && version != 3 && version != 4 && version != 5 &&
+    if (version != 2 && version != 3 && version != 4 && version != 5 && version != 6 &&
         version != kCurrentSettingsVersion) {
         return DecodeResult::unsupported_version;
     }
@@ -298,6 +330,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         : version == 3 ? kLegacyV3PayloadSize
         : version == 4 ? kLegacyV4PayloadSize
         : version == 5 ? kLegacyV5PayloadSize
+        : version == 6 ? kLegacyV6PayloadSize
                        : kCurrentPayloadSize;
     if (payload_size != expected_payload_size) {
         return DecodeResult::corrupt;
@@ -329,8 +362,15 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         candidate.session_duration_seconds = get_u32(payload + 66);
         candidate.rest_duration_seconds = get_u32(payload + 70);
     }
-    if (version == kCurrentSettingsVersion) {
+    if (version >= 6) {
         candidate.session_trigger = static_cast<SessionTrigger>(payload[74]);
+    }
+    if (version < kCurrentSettingsVersion) {
+        // Before v7 the ladder ran to 4 g and offered zero as "off". Snapping keeps the
+        // rest of the blob rather than failing validation over one field and taking every
+        // unrelated setting back to defaults.
+        candidate.launch_sensitivity_milli_g =
+            nearest_launch_sensitivity(candidate.launch_sensitivity_milli_g);
     }
     // Everything before v6 predates the trigger, so it defaults to manual, which is what
     // those devices were doing.
@@ -339,8 +379,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         (version >= 4 &&
          (payload[63] > static_cast<std::uint8_t>(LapBoundaryMode::finish) ||
           payload[64] > 1 || payload[65] > 1)) ||
-        (version == kCurrentSettingsVersion &&
-         payload[74] > static_cast<std::uint8_t>(SessionTrigger::gps)) ||
+        (version >= 6 && payload[74] > static_cast<std::uint8_t>(SessionTrigger::gps)) ||
         !valid_settings(candidate)) {
         return DecodeResult::corrupt;
     }
@@ -349,6 +388,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
            : version == 3 ? DecodeResult::migrated_v3
            : version == 4 ? DecodeResult::migrated_v4
            : version == 5 ? DecodeResult::migrated_v5
+           : version == 6 ? DecodeResult::migrated_v6
                           : DecodeResult::current;
 }
 
@@ -402,6 +442,9 @@ SettingsLoadReport SettingsManager::load() noexcept
     case DecodeResult::migrated_v5:
         current_ = decoded;
         return {SettingsSource::migrated_v5, persist(current_)};
+    case DecodeResult::migrated_v6:
+        current_ = decoded;
+        return {SettingsSource::migrated_v6, persist(current_)};
     case DecodeResult::corrupt:
         current_ = {};
         return {SettingsSource::defaults_corrupt, persist(current_)};

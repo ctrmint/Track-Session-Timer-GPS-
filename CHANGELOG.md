@@ -8,6 +8,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the launch sensitivity ladder ran to 4 g, which a car cannot reach as forward
+  acceleration, so six of its ten choices could never fire and nothing was offered below
+  0.5 g where a deliberate pit exit sits; stored values are snapped onto the new ladder
+  rather than failing validation and resetting every other setting
+
 - section menus opened on their first item rather than the one in force, so Mode, Track and
   Trigger could not tell the driver what was set, only let them change it
 - the menu carousel was told there were four items while the shell offered five, leaving
