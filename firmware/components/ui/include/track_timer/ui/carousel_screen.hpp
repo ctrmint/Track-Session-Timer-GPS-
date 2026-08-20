@@ -21,6 +21,11 @@ struct CarouselEntry {
     const char* icon{nullptr};   // LV_SYMBOL_*
     const char* label{nullptr};
     std::uint32_t icon_rgb{0xFFFFFF};  // colour-coded by function
+    // A second line under the label, for when the label alone does not say what it is: a
+    // record value needs its name, and a choice benefits from a word on what it does.
+    // Appended, because this struct is aggregate-initialised at every call site and a field
+    // in the middle silently reassigns positional initialisers.
+    const char* caption{nullptr};
 };
 
 // One choice fills the panel: a large icon, a large label, pressable chevrons and a
@@ -53,6 +58,7 @@ class CarouselScreen {
     lv_obj_t* title_{nullptr};
     lv_obj_t* icon_{nullptr};
     lv_obj_t* label_{nullptr};
+    lv_obj_t* caption_{nullptr};
     lv_obj_t* hint_{nullptr};
     std::array<lv_obj_t*, 2> chevrons_{};
     std::array<lv_obj_t*, kCarouselMaximumDots> dots_{};

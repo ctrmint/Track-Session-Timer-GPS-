@@ -66,6 +66,11 @@ CarouselScreen::CarouselScreen(lv_obj_t* const root, const InputCallback callbac
     lv_obj_set_style_text_font(label_, &lv_font_montserrat_36, 0);
     lv_obj_align(label_, LV_ALIGN_CENTER, 0, kLabelOffsetY);
 
+    // Under the label, in the roller's arrangement: the value is what you read, and the
+    // name beneath tells you how to read it.
+    caption_ = create_label(root_, Typography::body, kMutedRgb);
+    lv_obj_align(caption_, LV_ALIGN_CENTER, 0, kLabelOffsetY + 44);
+
     hint_ = create_label(root_, Typography::caption, kMutedRgb);
     lv_label_set_text(hint_, "swipe to change  -  press to select  -  swipe down to go back");
     lv_obj_align(hint_, LV_ALIGN_BOTTOM_MID, 0, -12);
@@ -142,12 +147,14 @@ void CarouselScreen::refresh() noexcept
     if (count_ == 0) {
         lv_label_set_text(icon_, "");
         lv_label_set_text(label_, "");
+        lv_label_set_text(caption_, "");
         return;
     }
     const auto& entry = entries_[index_];
     lv_label_set_text(icon_, entry.icon == nullptr ? "" : entry.icon);
     lv_obj_set_style_text_color(icon_, lv_color_hex(entry.icon_rgb), 0);
     lv_label_set_text(label_, entry.label == nullptr ? "" : entry.label);
+    lv_label_set_text(caption_, entry.caption == nullptr ? "" : entry.caption);
 
     // A long list gets a counter; dots stop conveying position once there are too many
     // to distinguish at a glance.
