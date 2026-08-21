@@ -12,14 +12,14 @@ Prices and stock below are a point-in-time reference only and must be rechecked 
 |---|---:|---|---|---|---|---:|---|---|
 | H1 | 1 | Waveshare ESP32-S3 2.41 inch AMOLED Touch Display Dev Board **with case** | `ESP32-S3-Touch-AMOLED-2.41-B` | The Pi Hut | `WAV-30589` | **£51.90 inc VAT** | https://thepihut.com/collections/waveshare/products/esp32-s3-2-41-amoled-touch-display-dev-board-with-case-600x450 | **Selected**. 600 x 450 AMOLED, 800 cd/m2 stated brightness, touch, ESP32-S3R8, 8 MB PSRAM, 16 MB flash, QMI8658 IMU, RTC, microSD/TF and supplied protective case. |
 | H2 | 1 | SparkFun GPS Breakout, u-blox NEO-M9N, **SMA** (Qwiic) | `GPS-17285` / manufacturer part `17285` | DigiKey UK | `1568-17285-ND` | **£57.99 ex VAT / £69.59 inc VAT** | https://www.digikey.co.uk/en/products/detail/sparkfun-electronics/GPS-17285/13561758 | **Selected**. Genuine NEO-M9N breakout, 25 Hz max navigation rate, 3.3 V logic, UART/I2C, UBX support and integrated SMA antenna connector. |
-| H3 | 1 | Active GNSS antenna, SMA male | To be selected | UK supplier required | TBD | TBD | TBD | **Required before vehicle testing**. Must be appropriate for the M9N L1 GNSS bands, active-antenna bias and external automotive mounting. |
+| H3 | 1 | Taoglas Magma X active GNSS antenna, magnetic mount, 3 m RG-174, SMA(M) | `AA.170.301111` | RS Components UK | `2857133` | **£22.15 ex VAT / £26.58 inc VAT** | https://uk.rs-online.com/web/p/gps-antennas/2857133 | **Selected**. Covers all four constellations the M9N tracks concurrently, including BeiDou at 1561 MHz, which the common 1575-1610 MHz antennas miss. 1.8-5.5 V suits the breakout's 3.3 V bias; 26-32 dB LNA; IP67; automotive-grade manufacture. |
 | H4 | 1 | High-endurance microSD | 8 to 32 GB | UK supplier | TBD | TBD | TBD | Session trace and event logging. FAT32 during development. |
 | H5 | 1 | USB-C data/power cable | quality short cable | UK supplier | TBD | TBD | TBD | Programming and bench power. |
 | H6 | 1 | 5 V vehicle USB supply | fused, good-quality automotive adaptor | UK supplier | TBD | TBD | TBD | Prototype vehicle power path. Do not connect raw vehicle 12 V to the Waveshare board. |
 | H7 | 1 | Rear GNSS enclosure/pod | 3D printed prototype | UK fabrication / in-house | custom | TBD | n/a | Holds the GPS-17285 securely and exposes/protects the SMA antenna connection. |
 | H8 | as needed | M2/M3 fasteners, threaded inserts and spacers | stainless/brass | UK supplier | TBD | TBD | TBD | Vibration-resistant assembly. |
 
-**Known selected-electronics subtotal:** **£121.49 inc VAT** for H1 + H2 at the checked single-unit prices. This excludes antenna, microSD, power, enclosure fabrication and delivery.
+**Known selected-electronics subtotal:** **£148.07 inc VAT** for H1 + H2 + H3 at the checked single-unit prices. This excludes microSD, power, enclosure fabrication and delivery.
 
 ### Procurement notes
 
@@ -101,6 +101,103 @@ Key characteristics relevant to this project:
 - onboard backup battery for warm/hot-start assistance
 
 The firmware acceptance requirement remains **20 Hz minimum**. Development should establish reliable 20 Hz operation first, then evaluate 25 Hz with the display, SD logging and all normal tasks running concurrently.
+
+## D. GNSS antenna
+
+### Selected: Taoglas Magma X `AA.170.301111`, RS Components `2857133`, £26.58 inc VAT
+
+Chosen 2026-08-21, filling the last unspecified item in the reception chain.
+
+### Band coverage is what decides this, and it is easy to get wrong
+
+The M9N tracks four constellations concurrently, and they do not share a frequency:
+
+| Constellation | Frequency |
+|---|---:|
+| GPS and Galileo | 1575.42 MHz |
+| **BeiDou B1** | **1561.098 MHz** |
+| GLONASS L1 | 1602 +/- 8 MHz |
+
+Many antennas sold as "GPS/GNSS" are tuned **1575-1610 MHz**, which covers GPS, Galileo and
+GLONASS but sits **above BeiDou**. SparkFun's own `GPS-14986` at around GBP 18 is one of them.
+Fitting one costs a quarter of the receiver's constellations, and it does so **silently**:
+nothing reports an error, there are simply fewer satellites and worse geometry, which is
+exactly what hurts at a circuit surrounded by grandstands and pit buildings.
+
+The AA.170 covers all three bands explicitly.
+
+### Electrical fit
+
+- **1.8 V min, 3.0 V typ, 5.5 V max** - works on the `GPS-17285`'s 3.3 V antenna bias
+- **26-32 dB LNA** - covers the roughly 3 dB loss of its 3 m RG-174 without over-driving the
+  M9N front end
+- **SMA(M)** - mates directly with the breakout's SMA, with no adaptor and no U.FL pigtail
+- **IP67**, manufactured to IATF 16949
+
+### Mounting matters more than the antenna does
+
+- **It needs a ground plane**, which is what the magnet mount uses the steel roof for. Mount it
+  on the roof, centred, with a clear view of the sky.
+- **Do not mount it inside the cabin.** An antenna on the dash under the windscreen loses
+  signal to the glass and gains multipath from the screen and A-pillars, which is the error
+  this whole selection exists to reduce.
+- **Retention at track speed.** These magnets are strong and the part is used on commercial
+  vehicles, but an antenna leaving a car at 120 mph is a hazard to everyone else on circuit.
+  Fit a safety tether, or use the **AA.171**, the same antenna in an adhesive and screw-mount
+  body, once the pod is a permanent fit.
+
+### Considered and rejected
+
+| Candidate | Coverage | UK price inc VAT | Outcome |
+|---|---|---:|---|
+| **Taoglas AA.170** | 1561 / 1575 / 1602 | **£26.58** | **Selected** |
+| SparkFun `GPS-14986` | 1575-1610 | ~£18 | Rejected: misses BeiDou |
+| SparkFun `GPS-15192` / u-blox ANN-MB-00 | 1559-1606 and 1197-1249 | £98.84 | Rejected: L2 band unusable on an L1 receiver, four times the price |
+
+### Alternatives considered and rejected, 2026-08-21
+
+Re-examined against the possibility of better reception. The M9N was retained. Recorded here
+so the question is not reopened from scratch.
+
+| Candidate | Bands | Max navigation rate | Protocol | UK price inc VAT | Outcome |
+|---|---|---|---|---|---|
+| **NEO-M9N `GPS-17285`** | L1 | **25 Hz, four constellations** | UBX | **£69.59** | **Retained** |
+| NEO-F10N | L1 + L5 | 10 Hz | UBX | ~£60 | Rejected: rate |
+| SparkFun LG290P quad-band RTK | quad | 20 Hz | NMEA 0183 / RTCM | £182.40 | Rejected: protocol, RTK |
+| u-blox ZED-F9P `GPS-16481` | L1 + L2 | 9 to 25 Hz, configuration-dependent | UBX | ~£205 | Not proven to meet the rate requirement |
+
+**NEO-F10N** is dual-band and inexpensive, and fails outright at **10 Hz** against a 20 Hz
+minimum.
+
+**LG290P** fails on two counts. It speaks NMEA 0183 and RTCM but **not UBX**, and standard NMEA
+carries time to 10 ms where UBX carries it to the nanosecond - the crossing-time interpolation
+in `crossing_time.cpp` exists specifically to avoid quantising a lap to the update grid, and a
+10 ms timestamp reintroduces a large part of what it removes. Separately, its headline feature
+is RTK, which this project lists as an explicit non-goal and could not use anyway: RTK needs a
+correction stream, and the device must work fully offline with no dependency on Wi-Fi or a
+phone.
+
+**ZED-F9P** is the only genuinely tempting one: multi-band L1/L2, native UBX, and real
+multipath rejection, which is the dominant position error at a circuit. It is **not confirmed
+to meet the rate requirement**. Its data sheet quotes the maximum navigation rate as a table of
+six values by constellation configuration - PVT 9 / 10 / 20 / 20 / 16 / 25 Hz, RTK 7 / 10 / 15 /
+14 / 13 / 20 Hz - and the pattern indicates that the higher rates come from running fewer
+constellations. If 25 Hz means GPS alone, then at full four-constellation concurrency the rate
+may fall below the 20 Hz minimum, and the concurrency being given up is itself a reception
+benefit. **Anyone revisiting this must confirm which configuration yields which rate before
+ordering.**
+
+## The open reception decision is the antenna, not the receiver
+
+Line H3 is still "to be selected", and it is now the highest-value reception decision left.
+Multipath dominates position error at circuits, and antenna quality, ground plane and mounting
+position dominate multipath. A good active L1 antenna properly mounted will improve reception
+more per pound than any receiver in the table above, and a poor one would waste a £205 module
+entirely.
+
+If trace logging later shows multipath limiting lap repeatability, the ZED-F9P or the
+dead-reckoning ZED-F9R become evidence-backed upgrades rather than guesses - the logging needed
+to make that judgement already exists.
 
 ### Why the SMA variant is now the baseline
 
