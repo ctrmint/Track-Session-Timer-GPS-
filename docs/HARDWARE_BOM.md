@@ -100,6 +100,42 @@ Key characteristics relevant to this project:
 - receiver timepulse capability
 - onboard backup battery for warm/hot-start assistance
 
+### The 25 Hz figure, verified against the data sheet
+
+Checked 2026-08-21 rather than taken on trust, because every alternative examined turned out
+to trade update rate against the number of constellations, and it would have been careless to
+apply that scrutiny only to the alternatives.
+
+`NEO-M9N-00B_DataSheet_UBX-19014285` gives the maximum navigation update rate per constellation
+configuration:
+
+| GNSS configuration | Max PVT update rate |
+|---|---:|
+| **GPS + GLONASS + Galileo + BeiDou** | **25 Hz** |
+| GPS + GLONASS + Galileo | 25 Hz |
+| GPS + GLONASS | 25 Hz |
+| GPS + BeiDou | 25 Hz |
+| GPS + Galileo | 25 Hz |
+
+The rate does not fall as constellations are added. **25 Hz is available with all four
+concurrently**, which is what this project needs and what makes the M9N unusually well suited
+to it.
+
+### Why the newer u-blox parts are a downgrade here
+
+This is the substitution most likely to be proposed again, so it is recorded with figures.
+
+| Part | Four constellations | Best case |
+|---|---:|---|
+| **NEO-M9N** (M9) | **25 Hz** | 25 Hz |
+| MAX-M10S (M10) | 10 Hz | 20 Hz, and only with three constellations and a raised CPU clock |
+| ZED-F9P (F9) | ~9 Hz indicated | 25 Hz, and the table indicates that is a reduced configuration |
+
+The M10 platform is newer and worse for this application. It is optimised for low power, and
+its default clock rate supports only 10 Hz with four constellations; higher rates require
+reconfiguring the clock and dropping a constellation. This device runs from vehicle USB, so
+the power saving buys nothing and the rate ceiling costs everything.
+
 The firmware acceptance requirement remains **20 Hz minimum**. Development should establish reliable 20 Hz operation first, then evaluate 25 Hz with the display, SD logging and all normal tasks running concurrently.
 
 ## D. GNSS antenna
@@ -153,6 +189,25 @@ The AA.170 covers all three bands explicitly.
 | **Taoglas AA.170** | 1561 / 1575 / 1602 | **£26.58** | **Selected** |
 | SparkFun `GPS-14986` | 1575-1610 | ~£18 | Rejected: misses BeiDou |
 | SparkFun `GPS-15192` / u-blox ANN-MB-00 | 1559-1606 and 1197-1249 | £98.84 | Rejected: L2 band unusable on an L1 receiver, four times the price |
+
+### Receiver packaging: why the MicroMod and MAX-M10S boards are not substitutes
+
+Both are stocked by The Pi Hut and are easier to buy than the selected part. Neither works here.
+
+**SparkFun MicroMod GNSS Function Board, NEO-M9N, £41.30.** Same receiver, wrong packaging. It
+terminates in an **M.2 edge connector** and its listing states it does not include a MicroMod
+Main Board, so it cannot reach the Waveshare board without buying a carrier whose purpose is to
+host a MicroMod processor. Its antenna connector is **U.FL**, which reintroduces exactly what
+selecting the SMA variant removed: a fragile joint, rated for few mating cycles, in a
+vibrating car, plus a U.FL-to-SMA pigtail to reach the selected antenna. With a carrier and a
+pigtail it costs about the same as `GPS-17285` and adds two failure points.
+
+**SparkFun MAX-M10S breakout.** Has the SMA connector and Qwiic, and fails on rate: **10 Hz
+with four constellations**, half the minimum. See the table above.
+
+**Availability.** Pimoroni no longer stock `GPS-17285`, and The Pi Hut do not carry it. DigiKey
+UK remains the source, with SparkFun direct as the alternative.
+
 
 ### Alternatives considered and rejected, 2026-08-21
 
