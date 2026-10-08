@@ -87,5 +87,7 @@ extern "C" void app_main(void)
 
     track_timer::display::set_service_callback(track_timer::main_app::service_screen_router);
     ESP_LOGI(kTag, "ready screen presented on the 600x450 panel");
-    ESP_LOGI(kTag, "GNSS, storage and IMU drivers are not implemented yet");
+    // Storage and the IMU report their own state above; only GNSS is still unwired, and
+    // the parser exists without a transport to feed it.
+    ESP_LOGI(kTag, "no GNSS transport yet: timer-only operation");
 }

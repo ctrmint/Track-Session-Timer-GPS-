@@ -11,11 +11,17 @@ This repository is a clean hardware and firmware rebuild of the ideas proven in 
 **Hardware bring-up in progress.**
 
 Running on the Waveshare board: the RM690B0 AMOLED panel over QSPI, FT6336 touch, the
-microSD card, and a gesture-driven UI whose track catalog is read from the card at boot.
+microSD card, the QMI8658 IMU with gyro-tracked attitude, and a gesture-driven UI whose
+track catalog is read from the card at boot. A session runs end to end - countdown,
+overrun and rest - records its duration and peak G on every axis, writes that to the card
+and survives a power cycle.
 
-Not yet implemented: **GNSS**, which is the critical path. There is no receiver driver, so
-the timing engine, lap state machine and logger are exercised only by host tests and have
-never seen a real fix. The IMU and RTC are also not driven yet.
+Not yet implemented: **GNSS**, which is the critical path. The UBX parser exists and is
+host tested, but nothing feeds it: there is no transport, so the timing engine, lap state
+machine and logger have still never seen a real fix. The receiver and antenna are selected
+and in hand; see
+[ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan. The
+RTC is not driven yet.
 
 The repository additionally holds the project plan, architecture, hardware bill of
 materials, GNSS timing design, UI requirements, test plan and issue backlog.

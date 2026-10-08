@@ -153,9 +153,17 @@ Expected bootstrap messages include:
 
 ```text
 TrackSessionTimer GPS bootstrap
-GNSS fix queue capacity: 64
-Hardware bring-up not yet implemented
+sd-card: mounted
+settings: source=0 current-format=1, mode track-day
+track catalog: built (25 discovered, 25 loaded, 0 rejected, cap 32)
+imu: ready
+ready screen presented on the 600x450 panel
+no GNSS transport yet: timer-only operation
 ```
+
+The track counts depend on what is on the card. The settings source reports where the
+stored configuration came from, and a non-zero value means it was migrated from an older
+format on this boot.
 
 If flashing waits for download, use the board's documented BOOT/RESET sequence. Do
 not freeze board GPIO assignments until the exact 2.41-B schematic and physical board

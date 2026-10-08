@@ -73,6 +73,8 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - vertical G alongside the lateral and longitudinal pair, for kerbs and compressions
 - gyroscope zero-rate offset measured at rest and removed, 4.4 dps on this board
 - device settings persisted in NVS, so Mode survives a reboot
+- bounded UBX parser behind a byte-stream transport seam, with NAV-PVT decoded into the
+  existing fix model and offsets verified against the u-blox interface description
 - Review presents a session as a carousel, one value per screen, in the same visual
   language as the configuration menus
 - a caption line on carousel entries, for when a label alone does not say what it is
