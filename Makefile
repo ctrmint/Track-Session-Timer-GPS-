@@ -46,15 +46,16 @@ SESSION_TRIGGER_TEST_BINARY := build/host/session_trigger_test
 SUMMARY_STORE_TEST_BINARY := build/host/summary_store_test
 SUMMARY_FILE_TEST_BINARY := build/host/summary_file_test
 REVIEW_CARDS_TEST_BINARY := build/host/review_cards_test
+UBX_PARSER_TEST_BINARY := build/host/ubx_parser_test
 GATE_CAPTURE_TEST_BINARY := build/host/gate_capture_test
 GATE_SESSION_AUTOMATION_TEST_BINARY := build/host/gate_session_automation_test
 SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
+.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
 
-check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
+check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
 
 test:
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
@@ -426,6 +427,15 @@ gate-session-automation-test:
 		tests/cpp/test_gate_session_automation.cpp \
 		-o $(GATE_SESSION_AUTOMATION_TEST_BINARY)
 	$(GATE_SESSION_AUTOMATION_TEST_BINARY)
+
+ubx-parser-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/gnss/include \
+		firmware/components/gnss/ubx.cpp \
+		tests/cpp/test_ubx_parser.cpp -o $(UBX_PARSER_TEST_BINARY)
+	$(UBX_PARSER_TEST_BINARY)
 
 review-cards-test:
 	mkdir -p build/host
