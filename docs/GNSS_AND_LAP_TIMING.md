@@ -22,6 +22,9 @@ Baseline NEO-M9N target:
 - automotive/dynamic platform model where supported and appropriate
 - UBX binary protocol
 - only required messages enabled at high rate
+- transport staged: I2C for bring-up, UART before vehicle testing, behind one byte-stream
+  interface so the parser is written once. See
+  [ADR-005](decisions/ADR-005-gnss-transport.md)
 - GNSS time kept with each fix
 - fix type and accuracy estimates preserved
 
@@ -241,11 +244,13 @@ hardware is available.
 
 Avoid over-filtering positions in a way that adds variable time lag to line crossing. If smoothing is used for UI position or heading, keep the raw accepted fixes available to the lap event engine unless testing proves a better approach.
 
-## 11. GNSS time versus UART arrival
+## 11. GNSS time versus arrival time
 
-UART arrival time includes receiver processing and serial transport delay. It can vary as message load changes.
+Arrival time includes receiver processing and transport delay. It can vary as message load changes, and it varies more on a polled transport than on a pushed one.
 
-Use the receiver's measurement timestamp for lap crossing. Store MCU arrival time separately to detect latency and queueing problems. Arrival time participates only in ordering and staleness checks; changing UART latency within those limits cannot change the calculated crossing timestamp.
+Use the receiver's measurement timestamp for lap crossing. Store MCU arrival time separately to detect latency and queueing problems. Arrival time participates only in ordering and staleness checks; changing transport latency within those limits cannot change the calculated crossing timestamp.
+
+This is what makes I2C viable for bring-up despite being polled: a fix read late still reports where the car was and when. What a polled transport risks is not a late fix but a **missing** one, which is why fix-sequence gaps are detected from the receiver's own time of week rather than inferred from arrival cadence.
 
 PPS/timepulse can be used to characterise the relationship between GNSS time and the ESP32 monotonic clock, but the MVP does not require PPS to calculate relative lap durations when both crossings use GNSS measurement time.
 
