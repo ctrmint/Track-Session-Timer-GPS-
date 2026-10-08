@@ -43,8 +43,9 @@ enum class MenuItem : std::uint8_t {
 };
 inline constexpr std::size_t kMenuItemCount = 6;
 
-// Mode and Setup each offer three children; the track list is however many are on the
-// card, so the section count is set by the caller.
+// The default only, and no longer the same for every menu: Mode offers four children,
+// Trigger and Setup three, and the track list is however many are on the card. Every
+// caller sets the count from the array it is about to show, so the two cannot disagree.
 inline constexpr std::size_t kSectionItemCount = 3;
 
 enum class SetupItem : std::uint8_t {

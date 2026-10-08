@@ -187,10 +187,13 @@ Options parse_options(const int argc, char** argv)
             if (options.initial_screen != "ready" && options.initial_screen != "setup" &&
                 options.initial_screen != "settings" && options.initial_screen != "tracks" &&
                 options.initial_screen != "gate-capture" &&
-                options.initial_screen != "g-meter" && options.initial_screen != "review" &&
+                options.initial_screen != "g-meter" &&
+                options.initial_screen != "gps-only" &&
+                options.initial_screen != "review" &&
                 options.initial_screen != "diagnostics") {
                 throw std::invalid_argument(
-                    "--screen must be ready, setup, settings, tracks, gate-capture, g-meter, review, or diagnostics");
+                    "--screen must be ready, setup, settings, tracks, gate-capture, g-meter, "
+                    "gps-only, review, or diagnostics");
             }
         }
         else if (argument == "--imu-state") {
@@ -507,10 +510,15 @@ void update_screen(ApplicationContext& context)
         diagnostics.imu = track_timer::diagnostics::SubsystemState::ready;
     }
     track_timer::domain::GnssFix latest_fix{};
-    if (context.player.latest_fix(latest_fix)) {
+    const auto have_fix = context.player.latest_fix(latest_fix);
+    if (have_fix) {
         context.screen->update_capture_fix(
             latest_fix, context.player.device().clock().now_us());
     }
+    // The replay rate is the enumerator's own value in hertz.
+    context.screen->update_gnss_readout(
+        latest_fix, have_fix,
+        static_cast<float>(static_cast<std::uint8_t>(context.player.device().gnss().rate())));
     context.screen->update(
         track_timer::ui::present_ready(ready), active_snapshot, diagnostics,
         static_cast<std::uint64_t>(context.player.elapsed_ms()), context.display_fixture.input,
@@ -640,6 +648,9 @@ int run(const Options& options)
             else if (options.initial_screen == "g-meter") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::g_meter);
             }
+            else if (options.initial_screen == "gps-only") {
+                screen.open_setup_page(track_timer::simulator::SetupPage::gps_only);
+            }
         }
     }
     ApplicationContext context{options.scenario, std::move(fixture), options.gnss_rate, &screen,
@@ -756,6 +767,11 @@ int run(const Options& options)
               << track_timer::ui::imu_meter_state_name(screen.g_meter().snapshot().state)
               << " imu-samples=" << screen.g_meter().snapshot().accepted_samples
               << " imu-trail=" << screen.g_meter().snapshot().trail_count
+              << " gps-state="
+              << track_timer::ui::gps_only_state_name(
+                     track_timer::ui::gps_only_state(screen.gps_only()))
+              << " gps-speed="
+              << track_timer::ui::gps_only_view(screen.gps_only()).speed.data()
               << " workflow-fixture=" << workflow_fixture_name(options.workflow_fixture)
               << " workflow-state="
               << track_timer::ui::session_state_name(context.lifecycle.snapshot().state)

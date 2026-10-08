@@ -14,6 +14,10 @@ inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 enum class OperatingMode : std::uint8_t {
     timer,
     g_meter,
+    // Receiver diagnosis: road speed and fix data only. Appended rather than inserted so
+    // every value already written to NVS keeps its meaning, which is why adding it needs
+    // no format version bump and no migration - only a wider validation bound.
+    gps_only,
 };
 
 enum class OrientationMode : std::uint8_t {

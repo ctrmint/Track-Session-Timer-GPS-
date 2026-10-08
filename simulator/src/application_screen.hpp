@@ -22,6 +22,7 @@
 #include "track_timer/ui/settings_screen.hpp"
 #include "track_timer/ui/session_review.hpp"
 #include "track_timer/ui/session_review_screen.hpp"
+#include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/track_selection.hpp"
 #include "track_timer/ui/track_selection_screen.hpp"
 
@@ -35,6 +36,7 @@ enum class SetupPage : std::uint8_t {
     track_selection,
     gate_capture,
     g_meter,
+    gps_only,
 };
 
 class ApplicationScreen {
@@ -58,6 +60,11 @@ class ApplicationScreen {
     void synchronize_workflow(const session::SessionSnapshot& snapshot,
                               std::uint64_t now_ms) noexcept;
     void update_track_match(const track::TrackMatchResult& match) noexcept;
+    // GPS Only on the device has no data source yet, so the simulator is the only place
+    // its layout can be seen with real numbers in it. The scenario player already replays
+    // fixes at 20 or 25 Hz, so they are fed in rather than invented.
+    void update_gnss_readout(const domain::GnssFix& fix, bool have_fix,
+                             float rate_hz) noexcept;
     void update_capture_fix(const domain::GnssFix& fix,
                             std::int64_t evaluation_monotonic_us) noexcept;
     void open_setup_page(SetupPage page) noexcept;
@@ -83,6 +90,7 @@ class ApplicationScreen {
     [[nodiscard]] const ui::DiagnosticsController& diagnostics() const noexcept;
     [[nodiscard]] ui::GmeterScreen& g_meter_screen() noexcept;
     [[nodiscard]] const ui::ImuMeterController& g_meter() const noexcept;
+    [[nodiscard]] const ui::GpsOnlySnapshot& gps_only() const noexcept;
     [[nodiscard]] RestScreen& rest_screen() noexcept;
     [[nodiscard]] const ui::RestSessionController& rest_session() const noexcept;
     [[nodiscard]] DeviceScreen& device_screen() noexcept;
@@ -139,6 +147,7 @@ class ApplicationScreen {
     lv_obj_t* session_review_root_{nullptr};
     lv_obj_t* diagnostics_root_{nullptr};
     lv_obj_t* g_meter_root_{nullptr};
+    lv_obj_t* gps_only_root_{nullptr};
     lv_obj_t* rest_root_{nullptr};
     lv_obj_t* brightness_overlay_{nullptr};
     ui::ReadyScreen ready_screen_;
@@ -158,6 +167,8 @@ class ApplicationScreen {
     ui::DiagnosticsScreen diagnostics_screen_;
     ui::ImuMeterController g_meter_{};
     ui::GmeterScreen g_meter_screen_;
+    ui::GpsOnlyScreen gps_only_screen_;
+    ui::GpsOnlySnapshot gps_only_snapshot_{};
     ui::RestSessionController rest_session_{};
     RestScreen rest_screen_;
 };

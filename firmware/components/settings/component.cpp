@@ -166,7 +166,7 @@ bool valid_settings(const DeviceSettings& settings) noexcept
            settings.average_lap_seconds <= 59 * 60 + 59 &&
            valid_brightness(settings.day_brightness_percent) &&
            valid_brightness(settings.night_brightness_percent) &&
-           settings.operating_mode <= OperatingMode::g_meter &&
+           settings.operating_mode <= OperatingMode::gps_only &&
            settings.orientation <= OrientationMode::automatic &&
            settings.lower_display <= LowerDisplayMode::laps_remaining &&
            (settings.average_lap_seconds > 0 ||

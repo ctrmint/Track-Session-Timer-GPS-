@@ -1,3 +1,4 @@
+#include "track_timer/ui/device_mode.hpp"
 #include "track_timer/ui/shell_navigation.hpp"
 
 #include <cassert>
@@ -120,6 +121,37 @@ void a_mode_is_a_handful_of_gestures_from_the_dashboard()
     result = shell.dispatch(InputAction::press);        // 5: select
     assert(result.outcome == ShellOutcome::mode_selected);
     assert(result.state.section_index == 1);
+}
+
+// Mode is the one carousel whose child count differs from the others, and the selection
+// is made by casting the carousel position straight to a DeviceMode. So every mode has to
+// be reachable by swiping, and the last one is the one a stale count would hide - which is
+// how DIAGNOSTICS was lost in #158.
+void every_mode_is_reachable_by_swiping()
+{
+    auto shell = opened();
+    to_menu(shell, MenuItem::mode);
+    (void)shell.dispatch(InputAction::press);
+    shell.set_section_count(kDeviceModeCount);
+
+    for (std::size_t expected = 1; expected < kDeviceModeCount; ++expected) {
+        const auto result = shell.dispatch(InputAction::swipe_left);
+        assert(result.outcome == ShellOutcome::moved);
+        assert(result.state.section_index == expected);
+    }
+
+    // The last mode selects, rather than wrapping past itself unreachably.
+    const auto selected = shell.dispatch(InputAction::press);
+    assert(selected.outcome == ShellOutcome::mode_selected);
+    assert(selected.state.section_index == kDeviceModeCount - 1);
+
+    // And it wraps, so the carousel is a ring rather than a list with a dead end.
+    auto wrapped = opened();
+    to_menu(wrapped, MenuItem::mode);
+    (void)wrapped.dispatch(InputAction::press);
+    wrapped.set_section_count(kDeviceModeCount);
+    const auto back = wrapped.dispatch(InputAction::swipe_right);
+    assert(back.state.section_index == kDeviceModeCount - 1);
 }
 
 // The other half of that trade: Review is now a hold and a press, where it used to be a
@@ -299,6 +331,7 @@ int main()
     the_track_list_is_sized_by_the_caller();
     a_shorter_track_list_resets_an_out_of_range_index();
     a_mode_is_a_handful_of_gestures_from_the_dashboard();
+    every_mode_is_reachable_by_swiping();
     review_is_two_gestures_from_the_dashboard();
     review_and_diagnostics_hand_over_to_the_destination_model();
     a_setting_value_is_reachable_by_descending_three_levels();

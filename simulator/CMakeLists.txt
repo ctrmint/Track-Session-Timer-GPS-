@@ -56,6 +56,7 @@ add_library(
     ../firmware/components/ui/active_session.cpp
     ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/gate_capture.cpp
+    ../firmware/components/ui/gps_only.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/imu_meter.cpp
@@ -118,7 +119,9 @@ add_library(
     ../firmware/components/ui/gesture_input.cpp
     ../firmware/components/ui/gate_capture_screen.cpp
     ../firmware/components/ui/g_meter_screen.cpp
+    ../firmware/components/ui/gps_only_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
+    src/host_timer_font.cpp
     ../firmware/components/ui/ready_screen.cpp
     ../firmware/components/ui/session_review_screen.cpp
     ../firmware/components/ui/setup_menu_screen.cpp
@@ -1244,6 +1247,48 @@ if(BUILD_TESTING)
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
             PASS_REGULAR_EXPRESSION "scenario=gnss-loss.*gnss=GPS GOOD.*gnss-mode=normal"
+            TIMEOUT 20
+    )
+
+    # The only scenario that leaves the device idle is "ready", and a setup page is hidden
+    # while a session runs - on the device too, where the shell refuses the menu mid-session.
+    # So this is the one run that actually puts the GPS Only page on screen, and the state it
+    # can show is the one that matters most: a receiver that is present and has not fixed.
+    # Nothing here may be read as a zero.
+    add_test(
+        NAME simulator-gps-only-screen
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen gps-only
+            --frames 20
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/gps-only.ppm"
+    )
+    set_tests_properties(
+        simulator-gps-only-screen
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "screen=setup.*setup-page=gps-only.*gps-state=no-fix.*gps-speed=---"
+            TIMEOUT 20
+    )
+
+    # The fixed case cannot be rendered: every scenario that replays fixes also runs a
+    # session, which hides the page. This asserts the view model only - the real replayed
+    # fix stream reaching the real formatter - and deliberately takes no snapshot, so it
+    # cannot be mistaken for evidence about what is drawn.
+    add_test(
+        NAME simulator-gps-only-fixed-view
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --screen gps-only
+            --frames 30
+    )
+    set_tests_properties(
+        simulator-gps-only-fixed-view
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "gps-state=fixed.*gps-speed=[0-9]+"
             TIMEOUT 20
     )
 
