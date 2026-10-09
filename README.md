@@ -16,13 +16,17 @@ track catalog is read from the card at boot. A session runs end to end - countdo
 overrun and rest - records its duration and peak G on every axis, writes that to the card
 and survives a power cycle.
 
-Not yet implemented: **GNSS**, which is the critical path. The UBX parser exists and is
-host tested, but nothing feeds it: there is no transport, so the timing engine, lap state
-machine and logger have still never seen a real fix. The receiver and antenna are selected
-and in hand; see
-[ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan.
-There is a GPS Only mode built to read the receiver out once there is one; today it
-reports "NO RECEIVER", which is the truth rather than a fault. The RTC is not driven yet.
+**GNSS** is the critical path and is now built but unproven. The whole chain is in the
+firmware and host tested — an I2C transport, a UBX parser, a fix-quality gate and a
+pipeline that counts every way a fix can go missing — but **no part of it has met a real
+receiver**, and nothing consumes the fix queue yet, so the timing engine, lap state machine
+and logger have still never seen a fix. GPS Only mode reads the receiver out, and with
+nothing attached it reports "NO RECEIVER", which is the truth rather than a fault.
+
+The receiver and antenna are in hand and the cables are on the way. See
+[ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan: I2C
+is solderless and so is what bring-up uses, and UART is pushed by DMA and so is what the
+car uses. The RTC is not driven yet.
 
 The repository additionally holds the project plan, architecture, hardware bill of
 materials, GNSS timing design, UI requirements, test plan and issue backlog.

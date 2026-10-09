@@ -187,6 +187,13 @@ const GnssPipelineMetrics& GnssPipeline::metrics() const noexcept { return metri
 
 const FixValidator& GnssPipeline::validator() const noexcept { return validator_; }
 
+const domain::GnssFix& GnssPipeline::last_accepted() const noexcept
+{
+    return validator_.last_accepted();
+}
+
+bool GnssPipeline::has_fix() const noexcept { return validator_.has_accepted(); }
+
 domain::GnssHealth GnssPipeline::health(const std::int64_t now_monotonic_us) const noexcept
 {
     return status_.health(now_monotonic_us);

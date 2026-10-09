@@ -106,6 +106,12 @@ class FixValidator {
     [[nodiscard]] const FixValidatorCounters& counters() const noexcept;
     [[nodiscard]] const FixQualityPolicy& policy() const noexcept;
 
+    // The most recent fix that passed. Readable without draining the queue, because a
+    // display is not a consumer: showing the latest reading must not take it away from
+    // the timing engine.
+    [[nodiscard]] const domain::GnssFix& last_accepted() const noexcept;
+    [[nodiscard]] bool has_accepted() const noexcept;
+
   private:
     [[nodiscard]] domain::FixRejectReason judge(const domain::GnssFix& candidate,
                                                 std::int64_t arrival_monotonic_us) const noexcept;

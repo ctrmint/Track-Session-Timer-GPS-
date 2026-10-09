@@ -16,6 +16,8 @@
 #include "track_timer/ui/carousel_screen.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
 #include "track_timer/ui/g_radar_screen.hpp"
+#include "track_timer/gnss/i2c_transport.hpp"
+#include "track_timer/gnss/pipeline.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/imu_meter.hpp"
@@ -74,7 +76,8 @@ diagnostics::ResetReason translate_reset_reason() noexcept
 
 // Real device telemetry. GNSS, storage and IMU stay unavailable because no driver
 // exists for them yet; memory and uptime are genuine readings.
-diagnostics::DiagnosticsSnapshot device_snapshot() noexcept
+diagnostics::DiagnosticsSnapshot device_snapshot(const gnss::GnssPipeline& gnss_pipeline,
+                                                 const domain::GnssHealth gnss_health) noexcept
 {
     diagnostics::DiagnosticsSnapshot snapshot{};
     snapshot.overall = diagnostics::OverallState::degraded;
@@ -97,7 +100,36 @@ diagnostics::DiagnosticsSnapshot device_snapshot() noexcept
     snapshot.psram.free_bytes = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     snapshot.psram.total_bytes = psram_total;
 
-    snapshot.gnss = diagnostics::SubsystemState::unavailable;
+    // Searching is not a fault, so it reports degraded rather than unavailable: the
+    // receiver is working and simply has not fixed yet, which is the normal state for the
+    // first minutes of a cold start outdoors.
+    //
+    // A bus that cannot be read collapses into unavailable here, alongside a receiver that
+    // was never fitted. SubsystemState has no vocabulary for the difference, and widening
+    // it would change a contract the simulator shares. The distinction is not lost: GPS
+    // Only mode shows it in words, and the bus error count lives in the transport's own
+    // counters.
+    const auto& gnss_metrics = gnss_pipeline.metrics();
+    snapshot.gnss = (!gnss_metrics.transport_healthy ||
+                     gnss_health == domain::GnssHealth::unavailable)
+                        ? diagnostics::SubsystemState::unavailable
+                    : gnss_health == domain::GnssHealth::good
+                        ? diagnostics::SubsystemState::ready
+                        : diagnostics::SubsystemState::degraded;
+    snapshot.gnss_rate_hz = static_cast<std::uint16_t>(gnss_metrics.observed_rate_hz + 0.5F);
+    snapshot.gnss_queue.capacity = gnss::FixQueue::capacity();
+    snapshot.gnss_queue.depth = gnss_pipeline.queue().size();
+    snapshot.gnss_queue.high_water_mark = gnss_metrics.queue_high_water;
+    // Both kinds of loss, because the page has one row for it. queue_drops is this
+    // system's own fault; missed_fixes is the receiver's or the bus's.
+    snapshot.gnss_queue.dropped = gnss_metrics.queue_drops + gnss_metrics.missed_fixes;
+    if (gnss_pipeline.has_fix()) {
+        const auto& fix = gnss_pipeline.last_accepted();
+        snapshot.gnss_fix_type = fix.fix_type;
+        snapshot.gnss_satellites = static_cast<std::uint8_t>(fix.num_satellites);
+        snapshot.gnss_horizontal_accuracy_m = fix.horizontal_accuracy_m;
+    }
+
     snapshot.storage = diagnostics::SubsystemState::unavailable;
     return snapshot;
 }
@@ -356,7 +388,38 @@ class ScreenRouter {
     void service() noexcept
     {
         service_imu();
+        service_gnss();
         service_roller();
+    }
+
+    // Polled from the LVGL service tick for now, which is deliberately the arrangement
+    // most exposed to the failure the gap counter exists to catch: this is the task that
+    // has starved twice (#133, #141). That makes it a good place to watch the counter work
+    // on real hardware, and the wrong place to leave it - the receiver belongs on its own
+    // task before any vehicle testing, which is part of what #18 still has open.
+    void service_gnss() noexcept
+    {
+        if (gnss_transport_ == nullptr) {
+            return;
+        }
+        const auto now_us = esp_timer_get_time();
+        (void)gnss_pipeline_.poll(*gnss_transport_, now_us);
+
+        // Nothing consumes fixes yet: the timing engine is not wired to this queue. Drain
+        // explicitly rather than let a bounded queue fill and report drops that say
+        // nothing about the receiver - a drop should mean a consumer was too slow, and
+        // there is no consumer to blame yet.
+        domain::GnssFix fix{};
+        while (gnss_pipeline_.queue().pop(fix)) {
+        }
+
+        const auto health = gnss_pipeline_.health(now_us);
+        gps_only_snapshot_.receiver_present = health != domain::GnssHealth::unavailable;
+        gps_only_snapshot_.fix_valid =
+            health == domain::GnssHealth::good || health == domain::GnssHealth::poor;
+        gps_only_snapshot_.fix = gnss_pipeline_.last_accepted();
+        gps_only_snapshot_.observed_rate_hz = gnss_pipeline_.metrics().observed_rate_hz;
+        gps_only_snapshot_.dropped_fixes = gnss_pipeline_.metrics().missed_fixes;
     }
 
     void service_imu() noexcept
@@ -484,6 +547,12 @@ class ScreenRouter {
         gps_only_ = new (gps_only_storage_) ui::GpsOnlyScreen(gps_only_root_);
         ui::attach_gesture_input(gps_only_root_, on_input, this);
 
+        // A receiver that is not fitted is not an error: the device runs as a timer, and
+        // GPS Only says so in words rather than in zeroes.
+        gnss_transport_ = gnss::shared_bus_gnss_transport();
+        ESP_LOGI("track_timer", "gnss: transport %s",
+                 gnss_transport_ != nullptr ? "attached over i2c" : "unavailable");
+
         // The time fields are edited on their own screen: no list of twelve choices can
         // span 0 to 59:59, so they roll rather than pick.
         roller_root_ = lv_obj_create(nullptr);
@@ -527,7 +596,8 @@ class ScreenRouter {
                  static_cast<unsigned>(scan.skipped), scan.truncated_tail ? 1 : 0);
         review_controller_.begin(&summaries_);
         review_->update(review_controller_.view_model());
-        diagnostics_controller_.begin(device_snapshot());
+        diagnostics_controller_.begin(
+            device_snapshot(gnss_pipeline_, gnss_pipeline_.health(esp_timer_get_time())));
         diagnostics_->update(diagnostics_controller_.view_model());
 
         lv_screen_load(home_screen());
@@ -556,7 +626,8 @@ class ScreenRouter {
             return;
         }
         if (result.current == ui::Destination::diagnostics) {
-            diagnostics_controller_.update(device_snapshot());
+            diagnostics_controller_.update(
+                device_snapshot(gnss_pipeline_, gnss_pipeline_.health(esp_timer_get_time())));
             diagnostics_->update(diagnostics_controller_.view_model());
         }
         if (result.current == ui::Destination::ready) {
@@ -625,7 +696,10 @@ class ScreenRouter {
     // There is no receiver and no driver yet, so the GPS trigger arms and waits on a
     // crossing that cannot arrive. The path from the gate automation to begin_session is
     // built and reachable, so landing GNSS lights it up rather than needing this again.
-    [[nodiscard]] static bool gnss_available() noexcept { return false; }
+    [[nodiscard]] bool gnss_available() const noexcept
+    {
+        return gnss_pipeline_.has_fix();
+    }
 
     void refresh_pending() noexcept
     {
@@ -736,7 +810,7 @@ class ScreenRouter {
         ui::ReadySnapshot snapshot{};
         snapshot.session_duration_seconds = settings_.session_duration_seconds;
         snapshot.rest_duration_seconds = settings_.rest_duration_seconds;
-        snapshot.gnss_health = domain::GnssHealth::unavailable;
+        snapshot.gnss_health = gnss_pipeline_.health(esp_timer_get_time());
         snapshot.storage = storage::mounted() ? ui::Readiness::ready
                                               : ui::Readiness::unavailable;
         snapshot.imu = imu::running() ? ui::Readiness::ready : ui::Readiness::unavailable;
@@ -1460,6 +1534,8 @@ class ScreenRouter {
     // Nothing writes this yet: there is no GNSS transport on the device. It reads as "no
     // receiver", which is the truth, and becomes live when the pipeline lands.
     ui::GpsOnlySnapshot gps_only_snapshot_{};
+    gnss::GnssTransport* gnss_transport_{nullptr};
+    gnss::GnssPipeline gnss_pipeline_{};
     ui::TrackdayScreen* trackday_{nullptr};
     lv_obj_t* trackday_root_{nullptr};
     ui::TimeRollerScreen* roller_{nullptr};

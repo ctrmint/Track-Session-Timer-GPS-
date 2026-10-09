@@ -162,6 +162,10 @@ const FixValidatorCounters& FixValidator::counters() const noexcept { return cou
 
 const FixQualityPolicy& FixValidator::policy() const noexcept { return policy_; }
 
+const domain::GnssFix& FixValidator::last_accepted() const noexcept { return last_accepted_; }
+
+bool FixValidator::has_accepted() const noexcept { return has_accepted_; }
+
 ReceiverStatus::ReceiverStatus(const FixQualityPolicy& policy) noexcept : policy_(policy) {}
 
 void ReceiverStatus::note_traffic(const std::int64_t arrival_monotonic_us) noexcept
