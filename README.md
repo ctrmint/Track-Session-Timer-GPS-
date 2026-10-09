@@ -40,12 +40,15 @@ The baseline prototype is built around:
   - onboard QMI8658 IMU
   - RTC and microSD/TF support
   - protective case supplied with the `-B` variant
-- **u-blox NEO-M9N GNSS**, initially via the SparkFun GPS-15712 U.FL breakout
-  - up to 25 Hz position update rate
-  - UART and UBX protocol
-  - external antenna support
+- **u-blox NEO-M9N GNSS**, on the SparkFun `GPS-17285` SMA Qwiic breakout
+  - 25 Hz position update rate across all five constellation configurations
+  - UBX protocol, over I2C for bring-up and UART before any vehicle testing
+    ([ADR-005](docs/decisions/ADR-005-gnss-transport.md))
+  - SMA antenna connector, chosen to keep a fragile U.FL joint out of a vibrating car
   - optional timepulse/PPS input to the ESP32 for timing diagnostics
-- **External active GNSS antenna** with a clear view of the sky
+- **External active GNSS antenna** covering GPS, Galileo, GLONASS **and BeiDou**, with a
+  clear view of the sky. The band matters: many "GNSS" antennas start at 1575 MHz and sit
+  above BeiDou B1 at 1561.098 MHz, losing a quarter of the constellations silently
 - **microSD card** for high-rate session logs
 
 The product target is a single dashboard-mounted unit with the display at the front and a compact GNSS/power extension behind it. The development build may use the Waveshare case plus an add-on rear pod before a final enclosure is designed.

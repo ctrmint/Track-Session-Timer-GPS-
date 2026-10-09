@@ -35,25 +35,39 @@ Planning points:
 - external active antenna supply/control capability
 - integration manual notes M9N peak current around 100 mA
 
-## SparkFun NEO-M9N development breakout
+## SparkFun NEO-M9N breakout
 
-- Product: https://www.sparkfun.com/sparkfun-gps-breakout-neo-m9n-u-fl-qwiic.html
+- Product (DigiKey UK, the sourcing selected in `HARDWARE_BOM.md`): https://www.digikey.co.uk/en/products/detail/sparkfun-electronics/GPS-17285/13561758
 - Hookup guide: https://learn.sparkfun.com/tutorials/sparkfun-gps-neo-m9n-hookup-guide
 
 Planning points:
 
-- SKU GPS-15712
-- U.FL connector
-- 25 Hz max update rate
+- SKU GPS-17285, the **SMA** variant
+- 25 Hz max update rate, across all five constellation configurations including
+  GPS+GLO+GAL+BDS - the rate does not fall as constellations are added
 - 3.3 V VCC/I/O
-- UBX/NMEA/RTCM over UART or I2C
+- UBX/NMEA/RTCM over UART or I2C. Both of this board's connectors are Qwiic (I2C); its
+  UART is plated through-holes only, so a UART link means soldering four wires
+- Module default is 38400 baud 8N1. The 115200 in the hookup guide is their serial
+  monitor's setting, not the receiver's
 
-## Reference antenna and pigtail
+**Superseded:** `GPS-15712`, the U.FL variant, with an SMA-to-U.FL pigtail (`WRL-09145`).
+Dropped to keep a fragile U.FL joint out of a vibrating car. See `HARDWARE_BOM.md`.
 
-- GPS/GNSS Magnetic Mount Antenna, GPS-14986: https://www.sparkfun.com/gps-gnss-magnetic-mount-antenna-3m-sma.html
-- SMA to U.FL cable, WRL-09145: https://www.sparkfun.com/interface-cable-sma-to-u-fl.html
+## Antenna
 
-The low-cost magnetic antenna is a development reference, not a final multi-constellation antenna specification.
+The selected antenna is in `HARDWARE_BOM.md` (H3): **Taoglas Magma X `AA.170.301111`**.
+
+**Do not substitute on price alone.** The M9N tracks four constellations concurrently at
+different frequencies - GPS and Galileo at 1575.42 MHz, GLONASS L1 at 1602 +/- 8 MHz, and
+**BeiDou B1 at 1561.098 MHz**. Many antennas sold as "GPS/GNSS" are tuned 1575-1610 MHz
+and sit entirely above BeiDou, which costs a quarter of the available constellations with
+no error, no warning and no obvious symptom beyond slightly worse fixes.
+
+**Superseded:** GPS/GNSS Magnetic Mount Antenna `GPS-14986`
+(https://www.sparkfun.com/gps-gnss-magnetic-mount-antenna-3m-sma.html). It was the
+low-cost development reference, and it is one of the 1575-1610 MHz parts described above.
+Rejected for that reason, not on quality.
 
 ## Firmware/UI
 
