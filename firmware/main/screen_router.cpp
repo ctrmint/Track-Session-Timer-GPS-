@@ -16,6 +16,7 @@
 #include "track_timer/ui/carousel_screen.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
 #include "track_timer/ui/g_radar_screen.hpp"
+#include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/imu_meter.hpp"
 #include "track_timer/imu/calibration.hpp"
@@ -224,13 +225,30 @@ constexpr ui::CarouselEntry kTriggerEntries[] = {
     {LV_SYMBOL_GPS, "GPS", kAzure},
 };
 
-// Track Day is first: it is the safe default, since it withholds the live lap times that
-// many track-day regulations prohibit.
+// Order is position, and position is a statement about when each mode is wanted. Track Day
+// is first because it is the safe default: it withholds the live lap times many track-day
+// regulations prohibit. GPS Only is last because it is a diagnostic, reached for when
+// something is wrong rather than when going out, so it costs the most swipes.
 constexpr ui::CarouselEntry kModeEntries[] = {
     {LV_SYMBOL_LOOP, "TRACK DAY", kGreen},
     {LV_SYMBOL_PLAY, "RACE", kRuby},
     {LV_SYMBOL_CHARGE, "G-ONLY", kViolet},
+    {LV_SYMBOL_GPS, "GPS ONLY", kAzure},
 };
+
+constexpr bool mode_entry_is(const ui::DeviceMode mode, const char* const label) noexcept
+{
+    return same_text(kModeEntries[static_cast<std::size_t>(mode)].label, label);
+}
+
+// The selection is made by casting the carousel position to a DeviceMode, so an entry out
+// of order would silently set the wrong mode.
+static_assert(std::size(kModeEntries) == ui::kDeviceModeCount,
+              "the carousel must offer exactly the modes the shell can select");
+static_assert(mode_entry_is(ui::DeviceMode::track_day, "TRACK DAY"));
+static_assert(mode_entry_is(ui::DeviceMode::race, "RACE"));
+static_assert(mode_entry_is(ui::DeviceMode::g_only, "G-ONLY"));
+static_assert(mode_entry_is(ui::DeviceMode::gps_only, "GPS ONLY"));
 
 // Track selection has moved to the top level, so Setup keeps only what belongs there.
 constexpr ui::CarouselEntry kSetupEntries[] = {
@@ -400,6 +418,13 @@ class ScreenRouter {
             lv_screen_active() == radar_root_) {
             radar_->update(snapshot);
         }
+        // Same gate, same reason. The snapshot stays at its default until there is a
+        // transport to fill it (#17, #18), which is why the screen has to render an absent
+        // receiver as plainly as a working one.
+        if (gps_only_ != nullptr && gps_only_root_ != nullptr &&
+            lv_screen_active() == gps_only_root_) {
+            gps_only_->update(ui::gps_only_view(gps_only_snapshot_));
+        }
     }
 
     [[nodiscard]] bool build() noexcept
@@ -450,6 +475,14 @@ class ScreenRouter {
         // The hold must still reach the gesture handler with the radar full-panel, which
         // is only true because nothing on it consumes presses.
         ui::attach_gesture_input(radar_root_, on_input, this);
+
+        // GPS Only owns the whole panel too, for the same reason.
+        gps_only_root_ = lv_obj_create(nullptr);
+        if (gps_only_root_ == nullptr) {
+            return false;
+        }
+        gps_only_ = new (gps_only_storage_) ui::GpsOnlyScreen(gps_only_root_);
+        ui::attach_gesture_input(gps_only_root_, on_input, this);
 
         // The time fields are edited on their own screen: no list of twelve choices can
         // span 0 to 59:59, so they roll rather than pick.
@@ -669,6 +702,9 @@ class ScreenRouter {
         case ui::DeviceMode::g_only:
             trackday_->set_mode_note("G-ONLY  -  session timer");
             break;
+        case ui::DeviceMode::gps_only:
+            trackday_->set_mode_note("GPS ONLY  -  receiver diagnosis, not timing");
+            break;
         }
     }
 
@@ -677,12 +713,20 @@ class ScreenRouter {
         static_cast<ScreenRouter*>(context)->handle_input(action);
     }
 
-    // In G-Only the radar is home; otherwise the ready dashboard is.
+    // Two modes own the whole panel and are their own home: G-Only the radar, GPS Only
+    // the receiver readout. Everything else starts at the ready dashboard.
     [[nodiscard]] lv_obj_t* home_screen() noexcept
     {
-        return ui::mode_from_settings(settings_) == ui::DeviceMode::g_only
-                   ? radar_root_
-                   : screen_for(ui::Destination::ready);
+        switch (ui::mode_from_settings(settings_)) {
+        case ui::DeviceMode::g_only:
+            return radar_root_;
+        case ui::DeviceMode::gps_only:
+            return gps_only_root_;
+        case ui::DeviceMode::track_day:
+        case ui::DeviceMode::race:
+            break;
+        }
+        return screen_for(ui::Destination::ready);
     }
 
     // The dashboard reflects what is actually loaded, so the driver can confirm the
@@ -945,12 +989,23 @@ class ScreenRouter {
             show_tracks(state);
             return;
         }
-        shell_.set_section_count(ui::kSectionItemCount);
         const auto item = shell_.menu_item();
-        const auto* entries = item == ui::MenuItem::mode      ? kModeEntries
-                              : item == ui::MenuItem::trigger ? kTriggerEntries
-                                                              : kSetupEntries;
-        carousel_->set_entries(entries, 3);
+        // Pointer and count are taken from the same array so they cannot disagree. Mode
+        // now offers four while Trigger and Setup offer three, so one shared constant is
+        // no longer even correct - and a hand-written count that stopped matching its
+        // entries is exactly what made DIAGNOSTICS unreachable in #158.
+        const ui::CarouselEntry* entries = kSetupEntries;
+        auto count = std::size(kSetupEntries);
+        if (item == ui::MenuItem::mode) {
+            entries = kModeEntries;
+            count = std::size(kModeEntries);
+        }
+        else if (item == ui::MenuItem::trigger) {
+            entries = kTriggerEntries;
+            count = std::size(kTriggerEntries);
+        }
+        shell_.set_section_count(count);
+        carousel_->set_entries(entries, count);
         // Showing the live selection in the title means the driver can see what is set
         // before changing it, rather than having to remember.
         carousel_->set_title(
@@ -1400,6 +1455,11 @@ class ScreenRouter {
     lv_obj_t* carousel_root_{nullptr};
     ui::GRadarScreen* radar_{nullptr};
     lv_obj_t* radar_root_{nullptr};
+    ui::GpsOnlyScreen* gps_only_{nullptr};
+    lv_obj_t* gps_only_root_{nullptr};
+    // Nothing writes this yet: there is no GNSS transport on the device. It reads as "no
+    // receiver", which is the truth, and becomes live when the pipeline lands.
+    ui::GpsOnlySnapshot gps_only_snapshot_{};
     ui::TrackdayScreen* trackday_{nullptr};
     lv_obj_t* trackday_root_{nullptr};
     ui::TimeRollerScreen* roller_{nullptr};
@@ -1443,6 +1503,7 @@ class ScreenRouter {
         diagnostics_storage_[sizeof(ui::DiagnosticsScreen)]{};
     alignas(ui::CarouselScreen) std::byte carousel_storage_[sizeof(ui::CarouselScreen)]{};
     alignas(ui::GRadarScreen) std::byte radar_storage_[sizeof(ui::GRadarScreen)]{};
+    alignas(ui::GpsOnlyScreen) std::byte gps_only_storage_[sizeof(ui::GpsOnlyScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
     alignas(ui::TimeRollerScreen) std::byte
         roller_storage_[sizeof(ui::TimeRollerScreen)]{};

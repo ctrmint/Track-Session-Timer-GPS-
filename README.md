@@ -20,8 +20,9 @@ Not yet implemented: **GNSS**, which is the critical path. The UBX parser exists
 host tested, but nothing feeds it: there is no transport, so the timing engine, lap state
 machine and logger have still never seen a real fix. The receiver and antenna are selected
 and in hand; see
-[ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan. The
-RTC is not driven yet.
+[ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan.
+There is a GPS Only mode built to read the receiver out once there is one; today it
+reports "NO RECEIVER", which is the truth rather than a fault. The RTC is not driven yet.
 
 The repository additionally holds the project plan, architecture, hardware bill of
 materials, GNSS timing design, UI requirements, test plan and issue backlog.

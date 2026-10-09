@@ -10,19 +10,23 @@ namespace track_timer::ui {
 // A single user-facing Mode, derived from settings that already exist rather than
 // introduced as a third parallel concept:
 //
-//   Track Day  operating_mode = timer,   trackday_mode_enabled = true
-//   Race       operating_mode = timer,   trackday_mode_enabled = false
+//   Track Day  operating_mode = timer,    trackday_mode_enabled = true
+//   Race       operating_mode = timer,    trackday_mode_enabled = false
 //   G-Only     operating_mode = g_meter
+//   GPS Only   operating_mode = gps_only
 //
 // Deriving rather than adding a field means the persisted settings format is unchanged,
 // so no schema version bump and no migration, and the existing tested Trackday Mode
-// behaviour in ActiveSessionController is reused as-is.
+// behaviour in ActiveSessionController is reused as-is. The first three modes exhausted
+// the combinations of the two existing fields, so GPS Only is the one that needed a new
+// OperatingMode enumerator - appended, so no stored value changes meaning.
 enum class DeviceMode : std::uint8_t {
     track_day,
     race,
     g_only,
+    gps_only,
 };
-inline constexpr std::size_t kDeviceModeCount = 3;
+inline constexpr std::size_t kDeviceModeCount = 4;
 
 // What each mode is permitted to show while a session is running.
 struct ModeVisibility {
@@ -30,6 +34,7 @@ struct ModeVisibility {
     bool lap_times{false};
     bool lap_delta{false};
     bool g_meter{false};
+    bool gnss_data{false};
 };
 
 // Track Day withholds live lap times deliberately. Many track days run under regulations

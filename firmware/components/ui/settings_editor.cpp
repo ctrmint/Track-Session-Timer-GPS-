@@ -109,7 +109,9 @@ void format_value(const SettingsField field, const settings::DeviceSettings& set
     case SettingsField::operating_mode:
         std::snprintf(output.data(), output.size(), "%s",
                       settings.operating_mode == settings::OperatingMode::timer ? "TIMER"
-                                                                               : "G METER");
+                      : settings.operating_mode == settings::OperatingMode::g_meter
+                          ? "G METER"
+                          : "GPS ONLY");
         break;
     case SettingsField::trackday_mode:
         std::snprintf(output.data(), output.size(), "%s",

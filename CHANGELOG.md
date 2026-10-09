@@ -61,6 +61,12 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- GPS Only mode: a fourth selectable Mode showing road speed, position and the receiver's
+  own report, for diagnosing the receiver on the bench, in the car and at a venue. With no
+  transport yet it reads "NO RECEIVER"; nothing on it renders an unknown value as a zero,
+  since a stationary car and a receiver that has never seen a satellite both report zero
+  speed
+
 - Waveshare board hardware configuration: 16 MB flash, 8 MB octal PSRAM, 240 MHz CPU
 - RM690B0 AMOLED panel bring-up over QSPI with LVGL 9 display registration
 - FT6336 touch input registered as an LVGL pointer device

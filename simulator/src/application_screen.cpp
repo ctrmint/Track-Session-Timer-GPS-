@@ -34,6 +34,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       session_review_root_(make_screen_root(root)),
       diagnostics_root_(make_screen_root(root)),
       g_meter_root_(make_screen_root(root)),
+      gps_only_root_(make_screen_root(root)),
       rest_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this),
       active_screen_(active_root_, device_action, this),
@@ -44,6 +45,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       session_review_screen_(session_review_root_, review_action, this),
       diagnostics_screen_(diagnostics_root_, diagnostics_action, this),
       g_meter_screen_(g_meter_root_, g_meter_action, this),
+      gps_only_screen_(gps_only_root_),
       rest_screen_(rest_root_, rest_action, this)
 {
     ui::style_screen(root);
@@ -160,6 +162,23 @@ ui::NavigationResult ApplicationScreen::navigate(const ui::NavigationAction acti
 void ApplicationScreen::update_track_match(const track::TrackMatchResult& match) noexcept
 {
     track_match_ = match;
+}
+
+void ApplicationScreen::update_gnss_readout(const domain::GnssFix& fix,
+                                            const bool have_fix,
+                                            const float rate_hz) noexcept
+{
+    // A simulated receiver is always attached, so the absent case is not reachable here.
+    // What the simulator can show is the difference between searching and fixed, which is
+    // the pair the layout has to hold legibly.
+    gps_only_snapshot_.receiver_present = true;
+    gps_only_snapshot_.fix_valid = have_fix && fix.fix_type != domain::FixType::no_fix;
+    gps_only_snapshot_.fix = fix;
+    gps_only_snapshot_.observed_rate_hz = rate_hz;
+    if (navigation_.destination() == ui::Destination::setup &&
+        setup_page_ == SetupPage::gps_only) {
+        gps_only_screen_.update(ui::gps_only_view(gps_only_snapshot_));
+    }
 }
 
 void ApplicationScreen::update_capture_fix(
@@ -364,6 +383,11 @@ ui::GmeterScreen& ApplicationScreen::g_meter_screen() noexcept
 const ui::ImuMeterController& ApplicationScreen::g_meter() const noexcept
 {
     return g_meter_;
+}
+
+const ui::GpsOnlySnapshot& ApplicationScreen::gps_only() const noexcept
+{
+    return gps_only_snapshot_;
 }
 
 RestScreen& ApplicationScreen::rest_screen() noexcept
@@ -705,6 +729,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(session_review_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(diagnostics_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(g_meter_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(gps_only_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(rest_root_, LV_OBJ_FLAG_HIDDEN);
 
     switch (navigation_.destination()) {
@@ -726,6 +751,10 @@ void ApplicationScreen::show_destination() noexcept
         }
         else if (setup_page_ == SetupPage::g_meter) {
             lv_obj_remove_flag(g_meter_root_, LV_OBJ_FLAG_HIDDEN);
+        }
+        else if (setup_page_ == SetupPage::gps_only) {
+            lv_obj_remove_flag(gps_only_root_, LV_OBJ_FLAG_HIDDEN);
+            gps_only_screen_.update(ui::gps_only_view(gps_only_snapshot_));
         }
         else {
             lv_obj_remove_flag(setup_menu_root_, LV_OBJ_FLAG_HIDDEN);
@@ -776,7 +805,7 @@ void ApplicationScreen::apply_display_policy(const board::DisplayCommand& comman
     const auto scale = portrait ? 192 : 256;
     for (auto* root : {ready_root_, active_root_, setup_menu_root_, settings_root_,
                        track_selection_root_, gate_capture_root_, session_review_root_, diagnostics_root_,
-                       g_meter_root_, rest_root_}) {
+                       g_meter_root_, gps_only_root_, rest_root_}) {
         lv_obj_set_pos(root, command.layout_shift_x, command.layout_shift_y);
         lv_obj_set_style_transform_pivot_x(root, 300, 0);
         lv_obj_set_style_transform_pivot_y(root, 225, 0);
@@ -809,6 +838,8 @@ const char* setup_page_name(const SetupPage page) noexcept
         return "gate-capture";
     case SetupPage::g_meter:
         return "g-meter";
+    case SetupPage::gps_only:
+        return "gps-only";
     }
     return "menu";
 }

@@ -23,7 +23,7 @@ settings::DeviceSettings base()
 void every_mode_round_trips_through_settings()
 {
     for (const auto mode : {ui::DeviceMode::track_day, ui::DeviceMode::race,
-                            ui::DeviceMode::g_only}) {
+                            ui::DeviceMode::g_only, ui::DeviceMode::gps_only}) {
         auto settings = base();
         ui::apply_mode(mode, settings);
         assert(ui::mode_from_settings(settings) == mode);
@@ -44,15 +44,46 @@ void modes_map_onto_the_existing_settings_fields()
 
     ui::apply_mode(ui::DeviceMode::g_only, settings);
     assert(settings.operating_mode == settings::OperatingMode::g_meter);
+
+    ui::apply_mode(ui::DeviceMode::gps_only, settings);
+    assert(settings.operating_mode == settings::OperatingMode::gps_only);
+    assert(!settings.trackday_mode_enabled);
 }
 
-// The combination the UI never writes still has to resolve to something definite.
-void g_meter_wins_over_a_stale_trackday_flag()
+// The combinations the UI never writes still have to resolve to something definite.
+void the_operating_mode_wins_over_a_stale_trackday_flag()
 {
     auto settings = base();
     settings.operating_mode = settings::OperatingMode::g_meter;
     settings.trackday_mode_enabled = true;
     assert(ui::mode_from_settings(settings) == ui::DeviceMode::g_only);
+
+    settings.operating_mode = settings::OperatingMode::gps_only;
+    assert(ui::mode_from_settings(settings) == ui::DeviceMode::gps_only);
+}
+
+// A debug view of the receiver and nothing else. A session timer here would invite using
+// this mode to time something, which is the one thing it is not for.
+void gps_only_shows_receiver_data_and_nothing_else()
+{
+    const auto visibility = ui::visibility_for(ui::DeviceMode::gps_only);
+    assert(visibility.gnss_data);
+    assert(!visibility.session_timer);
+    assert(!visibility.lap_times);
+    assert(!visibility.lap_delta);
+    assert(!visibility.g_meter);
+}
+
+// Every mode has to be namable and labellable, or the carousel and the boot log can
+// disagree with what is actually set.
+void every_mode_has_a_name_a_label_and_a_summary()
+{
+    for (std::size_t index = 0; index < ui::kDeviceModeCount; ++index) {
+        const auto mode = static_cast<ui::DeviceMode>(index);
+        assert(std::strcmp(ui::device_mode_name(mode), "unknown") != 0);
+        assert(std::strlen(ui::device_mode_label(mode)) > 0);
+        assert(std::strlen(ui::device_mode_summary(mode)) > 0);
+    }
 }
 
 // Track Day withholding live lap times is a regulatory rule, not a preference, so it is
@@ -82,6 +113,7 @@ void g_only_shows_nothing_but_the_meter()
     assert(!visibility.session_timer);
     assert(!visibility.lap_times);
     assert(!visibility.lap_delta);
+    assert(!visibility.gnss_data);
 }
 
 // The point of the rework: every value is one press away, never a stepping run. The time
@@ -171,7 +203,9 @@ int main()
 {
     every_mode_round_trips_through_settings();
     modes_map_onto_the_existing_settings_fields();
-    g_meter_wins_over_a_stale_trackday_flag();
+    the_operating_mode_wins_over_a_stale_trackday_flag();
+    gps_only_shows_receiver_data_and_nothing_else();
+    every_mode_has_a_name_a_label_and_a_summary();
     track_day_shows_the_timer_only();
     race_shows_laps_delta_and_remaining();
     g_only_shows_nothing_but_the_meter();

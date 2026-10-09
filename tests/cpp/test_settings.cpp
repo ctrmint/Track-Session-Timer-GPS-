@@ -94,6 +94,28 @@ void test_validation_and_codec()
 
 // The ladder changed under stored settings, and rejecting a value no longer offered would
 // fail the whole blob and take every unrelated setting back to defaults with it.
+// GPS Only needed a fourth operating mode. Validation covers the whole blob, so a value
+// it does not know about is not corrected to a default - the entire record is discarded
+// and every setting on the device reverts. Encode, validate and decode all have to accept
+// it, and the bound has to stay a bound.
+void test_gps_only_operating_mode_round_trips()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::gps_only;
+    assert(valid_settings(settings));
+
+    const auto blob = encode_settings(settings);
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+    assert(decoded.operating_mode == OperatingMode::gps_only);
+    assert(settings_equal(settings, decoded));
+
+    auto beyond = settings;
+    beyond.operating_mode = static_cast<OperatingMode>(
+        static_cast<std::uint8_t>(OperatingMode::gps_only) + 1);
+    assert(!valid_settings(beyond));
+}
+
 void test_launch_sensitivity_snapping()
 {
     // Every value the old ladder offered maps onto the new one rather than being refused.
@@ -342,6 +364,7 @@ void test_file_store_restart()
 int main()
 {
     test_validation_and_codec();
+    test_gps_only_operating_mode_round_trips();
     test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();
     test_migration_corruption_and_storage_errors();
