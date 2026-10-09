@@ -59,7 +59,12 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - RM690B0 partial redraws rendered as offset horizontal bands; flush areas are now
   aligned to even columns
 
-### Added
+- I2C transport for the receiver, and the GNSS chain linked into the firmware for the
+  first time. The u-blox DDC protocol reads the waiting byte count from `0xFD`/`0xFE`
+  before streaming from `0xFF`, rather than reading blindly and discarding padding on a bus
+  shared with touch, the IMU and the RTC; an implausible count is refused rather than
+  believed, since a NACKed read returns 0xFFFF. GPS Only, the ready dashboard and the
+  Diagnostics GNSS page are all driven from the receiver's real state
 
 - GNSS pipeline: bytes in, judged fixes out, and an account of everything lost on the way.
   Work per poll is bounded so the pipeline cannot starve the task it shares a core with,

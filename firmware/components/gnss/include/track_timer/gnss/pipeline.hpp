@@ -114,6 +114,8 @@ class GnssPipeline {
     [[nodiscard]] const FixQueue& queue() const noexcept;
     [[nodiscard]] const GnssPipelineMetrics& metrics() const noexcept;
     [[nodiscard]] const FixValidator& validator() const noexcept;
+    [[nodiscard]] const domain::GnssFix& last_accepted() const noexcept;
+    [[nodiscard]] bool has_fix() const noexcept;
     [[nodiscard]] domain::GnssHealth health(std::int64_t now_monotonic_us) const noexcept;
 
     void reset() noexcept;
