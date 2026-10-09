@@ -195,13 +195,43 @@ Do not rely on a single time debounce.
 
 ## 10. Fix quality
 
-The timing engine should be able to reject or mark suspect fixes based on:
+Fix quality is judged in **two stages, at deliberately different strictness**, and
+keeping them apart is the point rather than an accident of layering.
 
-- invalid fix status
-- implausible timestamp jump
-- horizontal accuracy above configured threshold
-- impossible speed/position discontinuity
-- stale fix age
+**The receiver gate** runs as each observation is decoded, in the GNSS component, and asks
+only whether a fix is usable at all:
+
+- invalid fix status: `gnssFixOK` clear, no position at all, or values that are not finite
+- arrival order violated, on the MCU monotonic clock
+- measurement time going backwards, on the receiver's own clock
+- the same epoch repeated, which is an observation that is not new
+- horizontal accuracy beyond 50 m or speed accuracy beyond 10 m/s
+- motion no car performs: beyond 134 m/s, beyond about 5 g, or a position jump implying
+  either
+
+**The crossing gate** runs on the two fixes either side of a timing line, and asks the
+stricter question of whether a lap time may be computed from them: a 3D fix, at least 6
+satellites, horizontal accuracy no worse than 5 m, speed accuracy no worse than 2 m/s,
+heading accuracy no worse than 25 degrees.
+
+The receiver gate is loose on purpose. If it applied the crossing thresholds, a merely
+imprecise fix would be refused before the crossing validator ever saw it, every refusal
+would surface there as `source_fix_rejected`, and the reason a lap was missed would be
+lost on the way. A fix that is too imprecise to time against is still worth having: it
+drives the speed readout, the health indicator and the diagnostics.
+
+The receiver gate's checks are applied in a fixed order and the first failure wins, so the
+same observation against the same history always yields the same reason — a log of what
+happened stays true when it is read back. A rejected fix is returned whole, with every raw
+value and both NAV-PVT flag bytes intact, so a replay can put a different policy against
+the same evidence; nothing is dropped at the point of judgement.
+
+Two clock domains are involved and are never compared with each other. `measurement_time_ns`
+is the receiver's time of week and is what durations between fixes are measured in, because
+it is the clock the position was sampled against. `arrival_monotonic_us` is the MCU's
+monotonic clock and is only ever compared with other arrivals, to ask how long the receiver
+has been quiet. They share no epoch, and the offset between them contains the whole
+transport.
 
 Both source fixes for a crossing must already be accepted for timing. The default
 crossing thresholds require a 3D fix, at least 6 satellites, horizontal accuracy
