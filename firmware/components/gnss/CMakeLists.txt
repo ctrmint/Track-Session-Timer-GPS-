@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "component.cpp" "ubx.cpp" "fix_validation.cpp"
+    SRCS "component.cpp" "ubx.cpp" "fix_validation.cpp" "pipeline.cpp"
     INCLUDE_DIRS "include"
     REQUIRES domain board
 )

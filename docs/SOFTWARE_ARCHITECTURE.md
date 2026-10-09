@@ -79,10 +79,10 @@ GNSS parser and timing engine need predictable latency. Avoid direct SD writes, 
 Recommended queue flow:
 
 ```text
-UART ISR/driver
+GNSS transport (I2C for bring-up, UART before the vehicle - ADR-005)
     |
     v
-GNSS parser task
+GNSS pipeline task: parse -> judge -> count
     |
     +--> latest GNSS status
     |
@@ -99,6 +99,18 @@ Timing task ----> lap event queue ----> session controller
 
 session controller -------------------------------> UI snapshot
 ```
+
+A lost fix has no symptom of its own: the device keeps running, the screen keeps updating,
+and the only trace is a lap time that does not repeat. So every way one can go missing is
+counted separately, because they have different causes and different remedies, and a single
+"dropped" total would conflate a slow consumer with a starved bus.
+
+Two of those counters deserve care when they are read. Gaps are measured from the
+receiver's own time of week rather than from arrival cadence: arrival says when this system
+got round to looking, which on a polled bus is a statement about the CPU rather than about
+the receiver. And a gap is only visible once the stream resumes, because a hole cannot be
+seen until its far edge arrives - until then loss reads as silence, which is why receiver
+health and the gap counter are separate instruments rather than one.
 
 ## 5. Memory
 
@@ -142,7 +154,10 @@ Expose a diagnostic screen containing at least:
 - satellite count
 - horizontal accuracy
 - GNSS queue high-water mark
-- dropped GNSS records
+- maximum poll interval, which is what explains a gap on a polled transport
+- fixes lost, counted separately by cause: bytes the transport never handed over, frames
+  the parser discarded, fixes the quality gate refused, epochs the receiver never sent,
+  and fixes dropped because the consumer was too slow
 - logger queue high-water mark
 - SD write failures
 - display frame/update metrics
