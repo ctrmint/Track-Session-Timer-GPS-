@@ -61,6 +61,13 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- GNSS pipeline: bytes in, judged fixes out, and an account of everything lost on the way.
+  Work per poll is bounded so the pipeline cannot starve the task it shares a core with,
+  the fix queue is bounded so a slow consumer becomes a counted drop rather than a memory
+  fault later, and loss is counted by cause rather than as one total. Gaps are measured
+  from the receiver's own time of week, never from arrival cadence, so a late poll is not
+  mistaken for loss and a lost epoch cannot hide behind a prompt one
+
 - GNSS fix-quality validation and receiver health: each decoded observation is completed
   with its arrival time and sequence, then judged against a deliberately loose receiver
   gate — invalid status, arrival or measurement order, a repeated epoch, unusable accuracy,
