@@ -61,6 +61,14 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- GNSS fix-quality validation and receiver health: each decoded observation is completed
+  with its arrival time and sequence, then judged against a deliberately loose receiver
+  gate — invalid status, arrival or measurement order, a repeated epoch, unusable accuracy,
+  or motion no car performs. The first failing check wins, so a refusal always has one
+  deterministic reason, and a rejected fix is kept whole so a replay can apply a different
+  policy to the same evidence. Receiver health separates nothing connected from connected
+  and still searching
+
 - GPS Only mode: a fourth selectable Mode showing road speed, position and the receiver's
   own report, for diagnosing the receiver on the bench, in the car and at a venue. With no
   transport yet it reads "NO RECEIVER"; nothing on it renders an unknown value as a zero,
