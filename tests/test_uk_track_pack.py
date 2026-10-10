@@ -7,6 +7,7 @@ import unittest
 import zipfile
 
 from tools.build_uk_track_pack import (
+    PROMOTED_STATUSES,
     DEFAULT_MANIFEST,
     TrackPackError,
     build_pack,
@@ -17,13 +18,17 @@ from tools.track_workbench import validate_definition
 
 
 class UkTrackPackTests(unittest.TestCase):
-    def test_pack_is_complete_provisional_valid_and_deterministic(self):
+    def test_pack_is_complete_valid_and_deterministic(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "uk"
             first = build_pack(DEFAULT_MANIFEST, output)
             self.assertEqual(first["layout_count"], 35)
             self.assertEqual(first["definition_count"], 24)
             self.assertEqual(first["blocked_count"], 11)
+            # Donington's two layouts share one validated gate profile. If this ever
+            # reaches zero, every circuit in the pack is timer-only again and the device
+            # cannot arm anywhere real - which is the state #139 existed to end.
+            self.assertEqual(first["timing_ready_count"], 2)
             package_manifest = json.loads(
                 (output / "pack-manifest.json").read_text(encoding="utf-8")
             )
@@ -32,15 +37,19 @@ class UkTrackPackTests(unittest.TestCase):
                 {"England", "Scotland", "Wales", "Northern Ireland"},
             )
             for layout in package_manifest["layouts"]:
-                self.assertFalse(layout["timing_ready"])
                 if layout["geometry_status"] == "blocked":
+                    self.assertFalse(layout["timing_ready"])
                     self.assertTrue(layout["blocker"])
                     continue
                 definition_path = output / layout["definition"]
                 definition = json.loads(definition_path.read_text(encoding="utf-8"))
-                self.assertEqual(
-                    definition["provenance"]["geometry_status"], "provisional"
-                )
+                status = definition["provenance"]["geometry_status"]
+                # The packaged summary and the definition itself must agree about whether
+                # a track can be timed. A driver reads one and the engine reads the other.
+                self.assertEqual(status, layout["geometry_status"])
+                self.assertEqual(layout["timing_ready"], status in PROMOTED_STATUSES)
+                if status != "provisional":
+                    self.assertIn("validated", definition["provenance"]["source"])
                 self.assertEqual(validate_definition(definition), [])
                 self.assertEqual(
                     hashlib.sha256(definition_path.read_bytes()).hexdigest(),
@@ -75,6 +84,70 @@ class UkTrackPackTests(unittest.TestCase):
         unsafe_layout["venues"][0]["layouts"][0].pop("blocker")
         with self.assertRaisesRegex(TrackPackError, "exactly one"):
             validate_manifest(unsafe_layout)
+
+    def test_a_promotion_without_real_corroboration_is_refused(self):
+        """The gate that stops unverified geometry becoming a believable lap time.
+
+        Every case here is a plausible shortcut someone could take in good faith, and each
+        would produce a pack that looks validated and is not.
+        """
+        manifest = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+
+        def build_with(validation):
+            candidate = deepcopy(manifest)
+            venue = next(
+                v for v in candidate["venues"] if v["venue_id"] == "donington_park"
+            )
+            if validation is None:
+                venue["gate_profiles"]["default"].pop("validation", None)
+            else:
+                venue["gate_profiles"]["default"]["validation"] = validation
+            with tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "manifest.json"
+                path.write_text(json.dumps(candidate), encoding="utf-8")
+                return build_pack(path, Path(temporary) / "uk")
+
+        good = deepcopy(
+            next(
+                v for v in manifest["venues"] if v["venue_id"] == "donington_park"
+            )["gate_profiles"]["default"]["validation"]
+        )
+
+        # One source is not corroboration, however good it is.
+        single = deepcopy(good)
+        single["sources"] = single["sources"][:1]
+        with self.assertRaisesRegex(TrackPackError, "at least two sources"):
+            build_with(single)
+
+        # Two readings of the same database are one source read twice.
+        same_origin = deepcopy(good)
+        same_origin["sources"][1]["origin"] = same_origin["sources"][0]["origin"]
+        with self.assertRaisesRegex(TrackPackError, "two distinct origins"):
+            build_with(same_origin)
+
+        # Sources that disagree by more than the threshold have not corroborated anything;
+        # they have identified a discrepancy nobody resolved.
+        far_apart = deepcopy(good)
+        far_apart["agreement_m"] = 25.0
+        with self.assertRaisesRegex(TrackPackError, "exceeds the"):
+            build_with(far_apart)
+
+        # A status outside the ladder cannot be invented.
+        invented = deepcopy(good)
+        invented["geometry_status"] = "looks_about_right"
+        with self.assertRaisesRegex(TrackPackError, "geometry_status must be"):
+            build_with(invented)
+
+        # Evidence without a date cannot be reviewed against a pack revision later.
+        undated = deepcopy(good)
+        undated.pop("verified_utc")
+        with self.assertRaisesRegex(TrackPackError, "verified_utc"):
+            build_with(undated)
+
+        # And with no validation record at all, the definition stays provisional rather
+        # than inheriting anything from its neighbours.
+        result = build_with(None)
+        self.assertEqual(result["timing_ready_count"], 0)
 
     def test_osm_derivation_never_claims_timing_readiness(self):
         snapshot = {

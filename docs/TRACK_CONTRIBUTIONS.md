@@ -10,9 +10,21 @@ safety-relevant data, not accepted as unverified convenience presets.
 2. Use a stable layout-specific `track_id`; separate circuit layouts need separate files.
 3. Set `provenance.source` to a public source or a clear description of an original
    measurement, record a compatible licence, and set `verified_utc` to the verification
-   time. Set `geometry_status` to `provisional` for public-map research; promotion
-   requires all four gates to be independently or physically validated. Do not submit
+   time. Set `geometry_status` to `provisional` for public-map research. Do not submit
    private raw location traces, account identifiers, or telemetry.
+
+   To claim anything above `provisional`, follow the promotion process in
+   [TRACK_DATABASE.md section 2.1](TRACK_DATABASE.md). In short: `independently_validated`
+   needs two sources from **distinct origins** agreeing within 10 m, and two readings of
+   the same database do not count as two sources. Name both origins and give the measured
+   agreement in the pull request - a reviewer cannot check a claim of corroboration
+   without the number.
+
+   Be careful which second source you reach for. Lap-timing databases such as RaceChrono's
+   and AiM's hold exactly this data, but they are user-contributed or vendor-maintained
+   with no licence that permits redistribution, so they cannot be used here. A coordinate
+   read off published circuit documentation is a fact and may be quoted; the surrounding
+   map or text may not be reproduced.
 4. Start at revision 1. Every geometry or timing change increments the revision and
    updates provenance. Git retains the complete review history.
 5. Run the workbench before copying a candidate into `data/tracks/`:

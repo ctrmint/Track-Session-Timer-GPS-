@@ -134,25 +134,111 @@ def validate_manifest(manifest: dict) -> None:
     _require(represented_nations == NATIONS, "manifest must cover all four UK nations")
 
 
+# Promoting geometry is the one thing in this generator that can turn unverified data
+# into a lap time a driver will believe, so the rules are enforced here rather than left
+# to review. Derivation alone always yields "provisional"; only an explicit, evidenced
+# validation record can raise it, and a record that does not meet these rules stops the
+# build rather than quietly producing a provisional pack nobody notices.
+PROMOTED_STATUSES = frozenset(
+    {"device_captured", "independently_validated", "physically_validated"}
+)
+
+# Two sources that disagree by more than this cannot promote a gate.
+#
+# Ten metres is 0.16 s at 62.6 m/s, the fastest a UK circuit is driven. A start/finish
+# line displaced along the straight shifts every lap by the same amount, so lap durations
+# and lap-to-lap comparisons are unaffected; what it changes is absolute agreement with
+# another timing system. GPS lap timing carries roughly 0.15-0.25 s of error of its own,
+# so demanding better agreement than that would be false precision - and demanding worse
+# would admit a line on the wrong part of the circuit.
+MAXIMUM_SOURCE_DISAGREEMENT_M = 10.0
+
+
+def _validation_for(profile: dict, path: str) -> tuple[str, str | None, str | None]:
+    """Return (geometry_status, evidence_text, verified_utc) for a gate profile."""
+    validation = profile.get("validation")
+    if validation is None:
+        return "provisional", None, None
+
+    status = validation.get("geometry_status")
+    _require(
+        status in PROMOTED_STATUSES,
+        f"{path}.validation.geometry_status must be one of {sorted(PROMOTED_STATUSES)}",
+    )
+    verified_utc = validation.get("verified_utc")
+    _require(
+        isinstance(verified_utc, str) and verified_utc.endswith("Z"),
+        f"{path}.validation.verified_utc must be an RFC3339 UTC timestamp",
+    )
+
+    sources = validation.get("sources") or []
+    _require(
+        len(sources) >= 2,
+        f"{path}.validation needs at least two sources; one source is not corroboration",
+    )
+    origins = set()
+    for index, source in enumerate(sources):
+        source_path = f"{path}.validation.sources[{index}]"
+        for field in ("name", "url", "origin"):
+            _require(
+                isinstance(source.get(field), str) and source[field],
+                f"{source_path}.{field} is required",
+            )
+        _require(
+            source["url"].startswith("https://"),
+            f"{source_path}.url must be an HTTPS source",
+        )
+        origins.add(source["origin"])
+    # Two readings of the same database are one source read twice.
+    _require(
+        len(origins) >= 2,
+        f"{path}.validation sources must come from at least two distinct origins",
+    )
+
+    agreement = validation.get("agreement_m")
+    _require(
+        isinstance(agreement, (int, float)) and 0.0 <= float(agreement),
+        f"{path}.validation.agreement_m is required",
+    )
+    _require(
+        float(agreement) <= MAXIMUM_SOURCE_DISAGREEMENT_M,
+        f"{path}.validation.agreement_m of {agreement} m exceeds the "
+        f"{MAXIMUM_SOURCE_DISAGREEMENT_M} m limit",
+    )
+
+    # Compact by construction: provenance.source is capped at 127 characters by the
+    # definition schema, and the full citation - every source, its URL and its licence -
+    # travels with the pack in source-manifest.json, so nothing is lost by being brief
+    # here.
+    evidence = f"{len(origins)} origins agreeing to {float(agreement):.1f} m"
+    return status, evidence, verified_utc
+
+
 def _definition_for(manifest: dict, venue: dict, layout: dict) -> dict:
     profile = venue["gate_profiles"][layout["gate_profile"]]
     gate_specs = {
         gate_name: tuple(profile[gate_name]) for gate_name in GATE_NAMES
     }
     source_ids = profile["source_way_ids"]
+    status, evidence, verified_utc = _validation_for(
+        profile, f"{venue['venue_id']}.{layout['gate_profile']}"
+    )
+    source = f"OpenStreetMap ways {source_ids[0]}/{source_ids[1]}; UK pack manifest"
+    if evidence is not None:
+        source = f"{source}; validated: {evidence}"
     return create_definition(
         track_id=layout["track_id"],
         name=layout["name"],
         country="GB",
-        source=f"OpenStreetMap ways {source_ids[0]}/{source_ids[1]}; UK pack manifest",
+        source=source,
         license_name=manifest["data_license"],
-        verified_utc=manifest["researched_utc"],
+        verified_utc=verified_utc or manifest["researched_utc"],
         reference_lat_deg=venue["reference"][0],
         reference_lon_deg=venue["reference"][1],
         geofence_radius_m=venue["geofence_radius_m"],
         gate_specs=gate_specs,
         minimum_lap_time_s=layout["minimum_lap_time_s"],
-        geometry_status="provisional",
+        geometry_status=status,
     )
 
 
@@ -186,6 +272,7 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
         definitions_dir.mkdir()
         packaged_layouts: list[dict] = []
         generated_count = 0
+        timing_ready_count = 0
         blocked_count = 0
         for venue in manifest["venues"]:
             for layout in venue["layouts"]:
@@ -208,9 +295,10 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
                     definition = _definition_for(manifest, venue, layout)
                     definition_path = definitions_dir / f"{layout['track_id']}.json"
                     write_definition(definition_path, definition)
+                    status = definition["provenance"]["geometry_status"]
                     packaged.update(
-                        geometry_status="provisional",
-                        timing_ready=False,
+                        geometry_status=status,
+                        timing_ready=status in PROMOTED_STATUSES,
                         definition=f"definitions/{definition_path.name}",
                         sha256=_sha256(definition_path),
                         source_way_ids=venue["gate_profiles"][layout["gate_profile"]][
@@ -218,6 +306,8 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
                         ],
                     )
                     generated_count += 1
+                    if packaged["timing_ready"]:
+                        timing_ready_count += 1
                 packaged_layouts.append(packaged)
 
         package_manifest = {
@@ -231,6 +321,7 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
             "scope_exclusions": manifest.get("scope_exclusions", []),
             "layout_count": len(packaged_layouts),
             "definition_count": generated_count,
+            "timing_ready_count": timing_ready_count,
             "blocked_count": blocked_count,
             "layouts": packaged_layouts,
         }
@@ -256,7 +347,8 @@ def main() -> int:
     arguments = parser.parse_args()
     result = build_pack(arguments.manifest, arguments.output)
     print(
-        f"Built {result['definition_count']} provisional definition(s); "
+        f"Built {result['definition_count']} definition(s), of which "
+        f"{result['timing_ready_count']} are timing-ready; "
         f"documented {result['blocked_count']} blocker(s) across "
         f"{result['layout_count']} UK layout(s)"
     )

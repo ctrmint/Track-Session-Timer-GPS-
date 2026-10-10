@@ -100,6 +100,64 @@ be browsed and refined but cannot be selected for lap timing. `device_captured`,
 configuration adapter independently rejects provisional definitions, so an old saved
 identifier cannot bypass the selection-screen guard.
 
+### 2.1 Promoting geometry beyond provisional
+
+The status names imply a process. This is it.
+
+Promotion is the one step that turns unverified data into a lap time a driver will
+believe, so it is never a judgement call recorded in a commit message. Each status has
+evidence that must exist before it may be claimed:
+
+| Status | What it requires |
+| --- | --- |
+| `provisional` | Derived from a public map. The default, and what every untouched definition stays at. |
+| `independently_validated` | **At least two sources from distinct origins, agreeing within 10 m.** Two readings of the same database are one source read twice. |
+| `device_captured` | All four gates captured on the device while stationary, or from a logged trace of the circuit. |
+| `physically_validated` | Captured and then confirmed by driving it, with lap times that repeat. |
+
+Ten metres is the threshold because it is 0.16 s at 62.6 m/s, the fastest a UK circuit is
+driven. A start/finish line displaced *along* the straight shifts every lap by the same
+amount, so lap durations and lap-to-lap comparisons are unaffected; what it changes is
+absolute agreement with another timing system. GPS lap timing carries roughly 0.15 to
+0.25 s of error of its own, so demanding better agreement would be false precision -
+and demanding worse would admit a line on the wrong part of the circuit entirely.
+
+For the UK pack, the evidence lives in the gate profile's `validation` block in
+`data/track-packs/uk/manifest.json`, and `tools/build_uk_track_pack.py` enforces every
+rule above at build time. A promotion that does not meet them **stops the build** rather
+than quietly producing a provisional pack nobody notices. The full citation travels with
+the pack in `source-manifest.json`; the definition's own `provenance.source` carries a
+compact form because the schema caps that field at 127 characters.
+
+Derivation never promotes. `tools/derive_osm_gates.py` always produces `provisional`, and
+a test holds it to that, so geometry cannot become timing-ready as a side effect of being
+regenerated.
+
+### 2.2 Why this gate is not theoretical
+
+The first circuit put through this process, Donington Park, was found to be **wrong** -
+not merely unvalidated.
+
+Its provisional start/finish gate sat exactly on OpenStreetMap way 841515325, *Melbourne
+Loop (up)*. Donington's start/finish line is on the Wheatcroft Straight, way 242867013,
+which the pit lane opens onto at both ends. The gate was 82 m from that straight, 131 m
+from the corrected position, and its heading was 162 degrees out - pointing back down the
+circuit. A car crossing the real line would never have triggered it; the direction check
+would have refused it even if it had.
+
+Both Donington layouts share that profile, so neither the GP nor the National circuit
+could have timed a lap, and the National circuit does not even drive the Melbourne Loop.
+
+Three further venues carry start/finish gates taken from features that are not their
+start/finish straight: Croft from a way named *Rallycross*, Silverstone's international
+profile from *Stowe Circuit* (a separate circuit on the same site), and Pembrey from
+*Honda*, a corner. Four more are taken from unnamed or whole-circuit ways, where the name
+alone cannot say whether the position is right. These remain provisional and are tracked
+in #139.
+
+The lesson is worth keeping: the provenance gate was not protecting against imprecision.
+It was the only thing standing between unverified geometry and confident, wrong lap times.
+
 ## 3. Track matching
 
 Automatic suggestion should use only a broad geofence. It must never create a lap event from the geofence.
@@ -191,13 +249,16 @@ Official venue pages establish layout identity. Raceway context is derived from
 OpenStreetMap under ODbL 1.0 with the required attribution retained in both source and
 package manifests.
 
-Run `make uk-track-pack` to create `build/track-pack/uk-track-pack-v1.zip`. The archive
-contains 24 schema-valid provisional definitions, a hash for every definition, and 11
+Run `make uk-track-pack` to create `build/track-pack/uk-track-pack-v1.zip`. At pack
+revision 2 the archive contains 24 schema-valid definitions, a hash for every one, and 11
 explicit blockers where public four-gate geometry could not be identified safely. No
-blocked layout receives invented coordinates. All generated definitions have
-`timing_ready: false`; independent or physical validation must create a later revision
-before use for lap timing. The package is deterministic and is rebuilt and validated by
-`make check` in CI.
+blocked layout receives invented coordinates.
+
+Two of those definitions are timing-ready - Donington Park GP and National, which share
+one validated gate profile. The other 22 carry `timing_ready: false` and must go through
+section 2.1 before they can be used for lap timing. The package is deterministic and is
+rebuilt and validated by `make check` in CI, which asserts the timing-ready count: if it
+ever returns to zero, the device cannot arm at any real venue again.
 
 ## 6. On-card layout and device loading
 

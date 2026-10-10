@@ -50,16 +50,29 @@ int main(const int argc, char** argv)
     for (std::size_t index = 0; index < fixture.count; ++index) {
         assert(identifiers.insert(fixture.definitions[index].track_id.data()).second);
     }
+    // The loader used to refuse any definition that was not provisional, which was a
+    // reasonable guard while nothing in the pack could ever be promoted. It is wrong now:
+    // it would have kept the simulator from ever exercising a circuit that can actually
+    // arm, which is the one thing worth exercising. The pack builder is what enforces
+    // that a promotion carries evidence; the loader only has to agree with the engine.
+    std::size_t ready_count = 0;
     for (std::size_t index = 2; index < fixture.count; ++index) {
         const auto& definition = fixture.definitions[index];
-        assert(definition.provenance.geometry_status ==
-               track::TrackGeometryStatus::provisional);
-        assert(!track::track_timing_ready(definition));
+        const auto ready = track::track_timing_ready(definition);
+        assert(ready == (definition.provenance.geometry_status !=
+                         track::TrackGeometryStatus::provisional));
+        if (ready) {
+            ++ready_count;
+        }
         if (index > 2) {
             assert(std::strcmp(fixture.definitions[index - 1].track_id.data(),
                                definition.track_id.data()) < 0);
         }
     }
+    // Donington's two layouts: the first real circuits in the pack that can arm timing.
+    assert(ready_count == 2);
+    assert(contains_track(fixture, "gb_donington_gp"));
+    assert(contains_track(fixture, "gb_donington_national"));
     assert(contains_track(fixture, "gb_brands_hatch_gp"));
     assert(contains_track(fixture, "gb_knockhill_international_cw"));
     assert(contains_track(fixture, "gb_silverstone_gp"));
@@ -86,6 +99,6 @@ int main(const int argc, char** argv)
     assert(error.find("directory is missing") != std::string::npos);
     assert(unchanged.count == 2);
 
-    std::cout << "Simulator loaded 24 deterministic provisional UK tracks safely\n";
+    std::cout << "Simulator loaded 24 deterministic UK tracks safely: 2 can arm timing, 22 are timer-only\n";
     return 0;
 }
