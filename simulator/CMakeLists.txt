@@ -683,7 +683,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-uk-track-runtime-catalog
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Simulator loaded 24 deterministic provisional UK tracks safely"
+            PASS_REGULAR_EXPRESSION "Simulator loaded 24 deterministic UK tracks safely: 2 can arm timing, 22 are timer-only"
             TIMEOUT 20
     )
 

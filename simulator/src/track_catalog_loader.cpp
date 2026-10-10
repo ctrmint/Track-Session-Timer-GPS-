@@ -76,12 +76,6 @@ bool append_track_catalog_directory(const std::filesystem::path& definitions_dir
                         track::track_load_result_name(report.result);
                 return false;
             }
-            if (definition.provenance.geometry_status !=
-                track::TrackGeometryStatus::provisional) {
-                error = "packaged simulator definition is not provisional: " +
-                        path.string();
-                return false;
-            }
             for (std::size_t index = 0; index < candidate.count; ++index) {
                 if (same_track_id(candidate.definitions[index], definition)) {
                     error = "duplicate track identifier: " +

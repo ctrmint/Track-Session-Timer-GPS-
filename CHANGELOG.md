@@ -59,6 +59,26 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - RM690B0 partial redraws rendered as offset horizontal bands; flush areas are now
   aligned to even columns
 
+- Donington Park's start/finish gate was on the wrong part of the circuit. It sat on
+  OpenStreetMap way 841515325, *Melbourne Loop (up)*, 82 m from the Wheatcroft Straight
+  that the pit lane opens onto, with its heading 162 degrees out - pointing back down the
+  circuit. A car crossing the real line would never have triggered it, and the National
+  layout does not drive the Melbourne Loop at all. Found by checking every cited
+  OpenStreetMap way against what it is actually named
+
+### Added
+
+- a real circuit that can arm the timing engine. Donington Park GP and National are
+  promoted to `independently_validated` from two sources agreeing to 3.8 m. Until now
+  every circuit in the UK pack was provisional, so a driver could select any of the 24
+  and the engine would never arm at a real venue
+
+- a documented promotion process for track geometry, enforced by the pack builder rather
+  than left to review: two sources from distinct origins agreeing within 10 m, or a
+  physical capture. A promotion that does not meet the rules stops the build. Restores
+  the `### Added` heading, which a previous edit removed, leaving every addition filed
+  under Fixed
+
 - I2C transport for the receiver, and the GNSS chain linked into the firmware for the
   first time. The u-blox DDC protocol reads the waiting byte count from `0xFD`/`0xFE`
   before streaming from `0xFF`, rather than reading blindly and discarding padding on a bus
