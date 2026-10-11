@@ -166,10 +166,10 @@ Expected bootstrap messages include:
 TrackSessionTimer GPS bootstrap
 sd-card: mounted
 settings: source=0 current-format=1, mode track-day
-track catalog: built (25 discovered, 25 loaded, 0 rejected, cap 32)
+track catalog: built (26 discovered, 26 loaded, 0 rejected, cap 32)
 imu: ready
+gnss: transport attached over i2c
 ready screen presented on the 600x450 panel
-no GNSS transport yet: timer-only operation
 ```
 
 The track counts depend on what is on the card. The settings source reports where the
@@ -179,6 +179,39 @@ format on this boot.
 If flashing waits for download, use the board's documented BOOT/RESET sequence. Do
 not freeze board GPIO assignments until the exact 2.41-B schematic and physical board
 revision have been checked.
+
+### Capturing a cold boot log
+
+`idf.py monitor` is interactive and refuses to run without a TTY attached, so it cannot be
+scripted. For a scriptable capture, including everything printed before a host would
+normally attach:
+
+```bash
+make firmware-capture-boot
+# or, to keep it:
+python3 -B tools/capture_boot_log.py --seconds 15 --output boot.log
+```
+
+This holds the port open, resets the chip itself, and reads straight through the boot. Two
+traps are worth knowing, because both fail in ways that look like something else:
+
+- **Opening the port and waiting captures nothing.** Boot output is written and discarded
+  before a host attaches, so the listener has to be holding the port before the reset.
+- **Pulsing RTS alone boots the download stub, which prints nothing.** RTS is wired to EN
+  (reset) and **DTR to GPIO0** (boot select), and pyserial asserts both when it opens a
+  port. Releasing RTS with GPIO0 still low starts the ROM download stub, and an empty
+  capture then reads as "the output was discarded" when it means "the application never
+  ran". DTR must be deasserted before the open and again after it.
+
+A genuine **power cycle cannot be captured** this way at all. The USB device is inside the
+chip, so cutting power destroys the port the listener is holding. A reset through RTS is a
+chip reset — `rst:0x15 (USB_UART_CHIP_RESET)` in the log — and the handle survives it. Only
+a separate USB-UART adapter on UART0 could see a post-power-cycle boot, since its own
+connection to the host is independent of the target's power.
+
+`pyserial` is deliberately not in `requirements-dev.txt`, being useful only with hardware
+attached. Install it into the environment when needed:
+`.venv/bin/python -m pip install pyserial`.
 
 ## Clean-clone verification
 

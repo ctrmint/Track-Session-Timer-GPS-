@@ -8,6 +8,10 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the boot log contradicted itself 270 ms apart: `app_main` ended startup with an
+  unconditional `no GNSS transport yet`, which #178 made false when it wired the transport,
+  while the screen router had already reported `gnss: transport attached over i2c`. Anyone
+  diagnosing GNSS would have believed the later line
 - a circuit that could not arm the timing engine read `TIMER ONLY - TRACK DATA` whatever
   the reason, so honest provisional geometry was presented exactly like a corrupt file and
   sent the driver to inspect their card instead of capturing gates. All seven
@@ -96,6 +100,12 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- `tools/capture_boot_log.py` and `make firmware-capture-boot` capture a cold boot over the
+  board's own USB-Serial-JTAG port, which #181 had concluded was impossible. It was not: a
+  reset through RTS is a chip reset the port survives, and the earlier failures were the
+  chip silently booting the ROM download stub because DTR is wired to GPIO0 and pyserial
+  asserts it on open. `idf.py monitor` refuses to run without a TTY, so it cannot be
+  scripted
 - a test fixture track pack, `data/track-packs/test/manifest.json`, holding Test Circuit: a
   943 m clockwise public-road loop for exercising timing, GNSS reception and lap logging end
   to end. Its gates are 12 m rather than the 20 m a circuit uses, because the carriageway is
