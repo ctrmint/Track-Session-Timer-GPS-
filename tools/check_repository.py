@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check local Markdown links and reject tracked generated artefacts."""
+"""Check local Markdown links, changelog structure, and tracked generated artefacts."""
 
 from __future__ import annotations
 
@@ -13,6 +13,12 @@ import yaml
 
 LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 IGNORED_PARTS = {".git", ".venv", "build", "managed_components"}
+
+# Keep a Changelog's section types, in the order it specifies. The changelog is edited
+# by hand on nearly every change, which makes it one of the easier files to damage
+# without noticing: a typo'd heading silently starts a section nobody reads, and a
+# duplicate one splits a section in two.
+CHANGELOG_SECTIONS = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
 
 
 def markdown_files(repo_root: Path):
@@ -79,15 +85,80 @@ def invalid_yaml_files(repo_root: Path) -> list[str]:
     return failures
 
 
+def changelog_problems(repo_root: Path) -> list[str]:
+    """Structural checks on CHANGELOG.md.
+
+    This catches a mistyped, duplicated, out-of-order or empty section. It deliberately
+    does not try to judge whether an entry is filed under the right heading - no check can
+    - so the companion guardrail is in CONTRIBUTING.md: read the section you are editing.
+    An earlier edit in this repository deleted `### Added` outright, which left a valid
+    structure and filed every addition under Fixed for two merges.
+    """
+    path = repo_root / "CHANGELOG.md"
+    if not path.exists():
+        return ["CHANGELOG.md is missing"]
+    lines = path.read_text(encoding="utf-8").splitlines()
+
+    problems: list[str] = []
+    if not any(line.strip() == "## Unreleased" for line in lines):
+        problems.append("CHANGELOG.md has no '## Unreleased' section")
+
+    release = None
+    seen: dict[str, list[str]] = {}
+    order: dict[str, list[int]] = {}
+    body: dict[tuple[str, str], bool] = {}
+    current = None
+    for number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            release = stripped[3:].strip()
+            seen.setdefault(release, [])
+            order.setdefault(release, [])
+            current = None
+        elif stripped.startswith("### "):
+            heading = stripped[4:].strip()
+            if release is None:
+                problems.append(f"CHANGELOG.md:{number}: '{heading}' sits outside any release")
+                continue
+            if heading not in CHANGELOG_SECTIONS:
+                problems.append(
+                    f"CHANGELOG.md:{number}: '{heading}' is not one of "
+                    f"{', '.join(CHANGELOG_SECTIONS)}"
+                )
+                continue
+            if heading in seen[release]:
+                problems.append(
+                    f"CHANGELOG.md:{number}: '{heading}' appears twice under '{release}'"
+                )
+            seen[release].append(heading)
+            order[release].append(CHANGELOG_SECTIONS.index(heading))
+            current = heading
+            body[(release, heading)] = False
+        elif stripped.startswith("- ") and release is not None and current is not None:
+            body[(release, current)] = True
+
+    for release, positions in order.items():
+        if positions != sorted(positions):
+            problems.append(
+                f"CHANGELOG.md: sections under '{release}' are out of order; expected "
+                f"{', '.join(CHANGELOG_SECTIONS)}"
+            )
+    for (release, heading), has_entries in body.items():
+        if not has_entries:
+            problems.append(f"CHANGELOG.md: '{heading}' under '{release}' has no entries")
+    return problems
+
+
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     failures = broken_markdown_links(repo_root)
     failures.extend(f"tracked generated file: {path}" for path in tracked_generated_files(repo_root))
     failures.extend(invalid_yaml_files(repo_root))
+    failures.extend(changelog_problems(repo_root))
     if failures:
         print("\n".join(failures))
         return 1
-    print("Repository links and tracked-file hygiene checks passed")
+    print("Repository links, changelog structure, and tracked-file hygiene checks passed")
     return 0
 
 
