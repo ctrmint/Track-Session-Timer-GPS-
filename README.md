@@ -202,10 +202,11 @@ repository root. See [docs/DEVELOPMENT_SETUP.md](docs/DEVELOPMENT_SETUP.md) for 
 pinned Python environment, clean-clone checks, and flashing notes.
 
 Build the deterministic UK offline track archive from the repository root with
-`make uk-track-pack`. The resulting file is written under `build/track-pack/`; it is
-ignored by Git and all public-map geometry remains timer-only until validated.
-
-The bootstrap application only proves that the ESP32-S3 toolchain and board connection work. Display, touch and GNSS support are later milestones.
+`make uk-track-pack`, and the functional test fixtures with `make test-track-pack`. The
+archives are written under `build/track-pack/` and are ignored by Git. Public-map geometry
+is timer-only until it is validated: two definitions in the UK pack have been, Donington
+Park GP and National, and the remaining 22 have not. See
+[docs/TRACK_DATABASE.md](docs/TRACK_DATABASE.md) for what promotion requires.
 
 ## Hardware-independent screen simulator
 

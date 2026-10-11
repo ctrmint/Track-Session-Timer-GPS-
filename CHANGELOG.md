@@ -6,99 +6,11 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ## Unreleased
 
-### Fixed
-
-- the boot log contradicted itself 270 ms apart: `app_main` ended startup with an
-  unconditional `no GNSS transport yet`, which #178 made false when it wired the transport,
-  while the screen router had already reported `gnss: transport attached over i2c`. Anyone
-  diagnosing GNSS would have believed the later line
-- a circuit that could not arm the timing engine read `TIMER ONLY - TRACK DATA` whatever
-  the reason, so honest provisional geometry was presented exactly like a corrupt file and
-  sent the driver to inspect their card instead of capturing gates. All seven
-  `TrackApplyResult` causes collapsed into one message, and the reason was logged - to a
-  console unreadable on this board - and then discarded. The ready page now distinguishes
-  provisional geometry from a missing or unreadable definition, and the selected track
-  carries its own state and colour on its own line so it is legible with no GNSS fix, which
-  is when the whole track-state message was previously unreachable
-- the pack archive was named `uk-track-pack-v1.zip` whatever it contained, so building a
-  second pack into the same directory silently overwrote the first one's archive; it is now
-  named from the pack id
-- `make check` ran against whatever `python3` resolved to, so a system interpreter missing
-  `rfc3339-validator` produced one confusing failure in the schema test while
-  `tools/validate_tracks.py` and `tools/track_workbench.py` silently stopped validating
-  `format: date-time` - meaning `provenance.verified_utc`, the field the track provenance
-  gate reads, would accept any string. The Makefile now prefers `.venv/bin/python` when it
-  exists, `make venv` creates it from the pinned requirements, and
-  `tools/check_python_env.py` refuses an interpreter that cannot validate what the suite
-  asserts
-
-- five start/finish gates in the UK pack were on the wrong feature. Croft's was on a way
-  named *Rallycross* and Silverstone's international profile on *Stowe Circuit*, both
-  tarmac the circuit's cars never drive, so neither gate could ever have triggered.
-  Silverstone's national profile, Pembrey and Llandow had start lines whose coordinates
-  were copied from their pit entry, placing the line at the junction where the preceding
-  corner meets the pit straight. All five are now identified from pit-lane adjacency, and
-  the pack build refuses a start gate that shares a pit gate's position
-
-- G peaks were never scoped to a session, so they described everything since boot; the meter
-  was still being told no session was ever running
-- the vertical axis was computed and then dropped before it reached the meter
-- Review rendered its summary rows at 0.82 mm, which on this panel reads as an empty screen
-
-- the launch sensitivity ladder ran to 4 g, which a car cannot reach as forward
-  acceleration, so six of its ten choices could never fire and nothing was offered below
-  0.5 g where a deliberate pit exit sits; stored values are snapped onto the new ladder
-  rather than failing validation and resetting every other setting
-
-- section menus opened on their first item rather than the one in force, so Mode, Track and
-  Trigger could not tell the driver what was set, only let them change it
-- the menu carousel was told there were four items while the shell offered five, leaving
-  Diagnostics selectable but never drawn
-
-- the start page kept the durations it read at boot, so a session or rest period changed in
-  the menu was obeyed by the timer but still shown at its old value until a restart
-- durations were written two ways at once, so a one minute session read "1 MIN SESSION"
-  beside a "0:12 REST"; every duration is now minutes and seconds
-
-- a session that ran out simply stopped: the rest period was modelled and tested but never
-  routed to a screen, and overtime rendered identically to a session still running
-
-- time settings could not reach most of their own range: the average lap picker stopped at
-  3:00 against a field holding 59:59, and the durations at 60 minutes against 24 hours
-- saving on the roller used LVGL's 400 ms long press, which committed a value while it was
-  still being chosen
-
-- the G meter subtracted a gravity reference frozen at calibration, so every later change
-  of tilt read as acceleration at sin(angle) - 0.17 g on a 10 degree banked corner - and
-  peak-hold latched those artefacts rather than averaging them away; attitude is now
-  tracked with the gyroscope
-- the vehicle frame was built with "up" pointing down, which inverted the lateral axis and
-  swapped the recorded left and right peaks
-- rest detection accepted a device that was turning
-
-- LVGL allocated from a fixed 64 KB pool, so large glyph bitmaps evicted and
-  re-rasterised on every draw and starved the UI task; it now uses the ESP-IDF heap
-  with glyph bitmaps in PSRAM
-- live views were refreshed at the LVGL loop rate rather than a sensible one
-
-- the scaled carousel icon drove LVGL's software image transform hard enough to starve
-  the UI task, tripping the task watchdog and freezing the menu
-- the G meter showed raw accelerometer axes, so the dot sat wherever the unit was tilted
-  instead of at the centre
-- a swipe also fired a press, because LVGL sends RELEASED before SHORT_CLICKED
-- swipes starting on a clickable child never reached the screen's gesture handler
-
-- RM690B0 partial redraws rendered as offset horizontal bands; flush areas are now
-  aligned to even columns
-
-- Donington Park's start/finish gate was on the wrong part of the circuit. It sat on
-  OpenStreetMap way 841515325, *Melbourne Loop (up)*, 82 m from the Wheatcroft Straight
-  that the pit lane opens onto, with its heading 162 degrees out - pointing back down the
-  circuit. A car crossing the real line would never have triggered it, and the National
-  layout does not drive the Melbourne Loop at all. Found by checking every cited
-  OpenStreetMap way against what it is actually named
-
 ### Added
+
+- `make check` now checks CHANGELOG.md's structure: a mistyped, duplicated, out-of-order or
+  empty section fails rather than silently starting a section nobody reads. It found the
+  Unreleased section's own headings were out of order on the first run
 
 - `tools/capture_boot_log.py` and `make firmware-capture-boot` capture a cold boot over the
   board's own USB-Serial-JTAG port, which #181 had concluded was impossible. It was not: a
@@ -207,3 +119,103 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - ESP-IDF bootstrap application
 - host-side geometry reference tests
 - initial GitHub issue plan
+
+### Fixed
+
+- `CONTRIBUTING.md` told contributors to install the pinned requirements into whatever
+  `python` resolved to, which is exactly the drift that was silently disabling date
+  validation. It now says `make venv`, matching `docs/DEVELOPMENT_SETUP.md`
+- the README claimed the firmware "only proves that the ESP32-S3 toolchain and board
+  connection work" with "display, touch and GNSS support" as later milestones, contradicting
+  its own status section 190 lines above, and said all public-map geometry was timer-only
+  after two definitions had been validated
+
+- the boot log contradicted itself 270 ms apart: `app_main` ended startup with an
+  unconditional `no GNSS transport yet`, which #178 made false when it wired the transport,
+  while the screen router had already reported `gnss: transport attached over i2c`. Anyone
+  diagnosing GNSS would have believed the later line
+- a circuit that could not arm the timing engine read `TIMER ONLY - TRACK DATA` whatever
+  the reason, so honest provisional geometry was presented exactly like a corrupt file and
+  sent the driver to inspect their card instead of capturing gates. All seven
+  `TrackApplyResult` causes collapsed into one message, and the reason was logged - to a
+  console unreadable on this board - and then discarded. The ready page now distinguishes
+  provisional geometry from a missing or unreadable definition, and the selected track
+  carries its own state and colour on its own line so it is legible with no GNSS fix, which
+  is when the whole track-state message was previously unreachable
+- the pack archive was named `uk-track-pack-v1.zip` whatever it contained, so building a
+  second pack into the same directory silently overwrote the first one's archive; it is now
+  named from the pack id
+- `make check` ran against whatever `python3` resolved to, so a system interpreter missing
+  `rfc3339-validator` produced one confusing failure in the schema test while
+  `tools/validate_tracks.py` and `tools/track_workbench.py` silently stopped validating
+  `format: date-time` - meaning `provenance.verified_utc`, the field the track provenance
+  gate reads, would accept any string. The Makefile now prefers `.venv/bin/python` when it
+  exists, `make venv` creates it from the pinned requirements, and
+  `tools/check_python_env.py` refuses an interpreter that cannot validate what the suite
+  asserts
+
+- five start/finish gates in the UK pack were on the wrong feature. Croft's was on a way
+  named *Rallycross* and Silverstone's international profile on *Stowe Circuit*, both
+  tarmac the circuit's cars never drive, so neither gate could ever have triggered.
+  Silverstone's national profile, Pembrey and Llandow had start lines whose coordinates
+  were copied from their pit entry, placing the line at the junction where the preceding
+  corner meets the pit straight. All five are now identified from pit-lane adjacency, and
+  the pack build refuses a start gate that shares a pit gate's position
+
+- G peaks were never scoped to a session, so they described everything since boot; the meter
+  was still being told no session was ever running
+- the vertical axis was computed and then dropped before it reached the meter
+- Review rendered its summary rows at 0.82 mm, which on this panel reads as an empty screen
+
+- the launch sensitivity ladder ran to 4 g, which a car cannot reach as forward
+  acceleration, so six of its ten choices could never fire and nothing was offered below
+  0.5 g where a deliberate pit exit sits; stored values are snapped onto the new ladder
+  rather than failing validation and resetting every other setting
+
+- section menus opened on their first item rather than the one in force, so Mode, Track and
+  Trigger could not tell the driver what was set, only let them change it
+- the menu carousel was told there were four items while the shell offered five, leaving
+  Diagnostics selectable but never drawn
+
+- the start page kept the durations it read at boot, so a session or rest period changed in
+  the menu was obeyed by the timer but still shown at its old value until a restart
+- durations were written two ways at once, so a one minute session read "1 MIN SESSION"
+  beside a "0:12 REST"; every duration is now minutes and seconds
+
+- a session that ran out simply stopped: the rest period was modelled and tested but never
+  routed to a screen, and overtime rendered identically to a session still running
+
+- time settings could not reach most of their own range: the average lap picker stopped at
+  3:00 against a field holding 59:59, and the durations at 60 minutes against 24 hours
+- saving on the roller used LVGL's 400 ms long press, which committed a value while it was
+  still being chosen
+
+- the G meter subtracted a gravity reference frozen at calibration, so every later change
+  of tilt read as acceleration at sin(angle) - 0.17 g on a 10 degree banked corner - and
+  peak-hold latched those artefacts rather than averaging them away; attitude is now
+  tracked with the gyroscope
+- the vehicle frame was built with "up" pointing down, which inverted the lateral axis and
+  swapped the recorded left and right peaks
+- rest detection accepted a device that was turning
+
+- LVGL allocated from a fixed 64 KB pool, so large glyph bitmaps evicted and
+  re-rasterised on every draw and starved the UI task; it now uses the ESP-IDF heap
+  with glyph bitmaps in PSRAM
+- live views were refreshed at the LVGL loop rate rather than a sensible one
+
+- the scaled carousel icon drove LVGL's software image transform hard enough to starve
+  the UI task, tripping the task watchdog and freezing the menu
+- the G meter showed raw accelerometer axes, so the dot sat wherever the unit was tilted
+  instead of at the centre
+- a swipe also fired a press, because LVGL sends RELEASED before SHORT_CLICKED
+- swipes starting on a clickable child never reached the screen's gesture handler
+
+- RM690B0 partial redraws rendered as offset horizontal bands; flush areas are now
+  aligned to even columns
+
+- Donington Park's start/finish gate was on the wrong part of the circuit. It sat on
+  OpenStreetMap way 841515325, *Melbourne Loop (up)*, 82 m from the Wheatcroft Straight
+  that the pit lane opens onto, with its heading 162 degrees out - pointing back down the
+  circuit. A car crossing the real line would never have triggered it, and the National
+  layout does not drive the Melbourne Loop at all. Found by checking every cited
+  OpenStreetMap way against what it is actually named
