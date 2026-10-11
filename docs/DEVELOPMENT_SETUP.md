@@ -209,6 +209,17 @@ chip reset — `rst:0x15 (USB_UART_CHIP_RESET)` in the log — and the handle su
 a separate USB-UART adapter on UART0 could see a post-power-cycle boot, since its own
 connection to the host is independent of the target's power.
 
+**UART0 is not used as a diagnostic tap, by decision.** The Waveshare's UART socket is
+GPIO43/44, which is UART0, and
+[ADR-005](decisions/ADR-005-gnss-transport.md) reserves those pins for the GNSS receiver:
+UART is pushed by DMA where I2C must be polled, so the vehicle configuration needs them. A
+console and a receiver cannot share the socket — log output would be transmitted into the
+receiver, and the console driver would own the pin the receiver answers on.
+
+So a post-power-cycle boot stays unobservable, and that is an accepted limit rather than an
+open problem. It is also a narrow one: a chip reset reproduces everything a power cycle
+does except the power-on reset itself, and that is captured above.
+
 `pyserial` is deliberately not in `requirements-dev.txt`, being useful only with hardware
 attached. Install it into the environment when needed:
 `.venv/bin/python -m pip install pyserial`.
