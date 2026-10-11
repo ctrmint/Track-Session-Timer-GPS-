@@ -8,6 +8,15 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- `make check` ran against whatever `python3` resolved to, so a system interpreter missing
+  `rfc3339-validator` produced one confusing failure in the schema test while
+  `tools/validate_tracks.py` and `tools/track_workbench.py` silently stopped validating
+  `format: date-time` - meaning `provenance.verified_utc`, the field the track provenance
+  gate reads, would accept any string. The Makefile now prefers `.venv/bin/python` when it
+  exists, `make venv` creates it from the pinned requirements, and
+  `tools/check_python_env.py` refuses an interpreter that cannot validate what the suite
+  asserts
+
 - five start/finish gates in the UK pack were on the wrong feature. Croft's was on a way
   named *Rallycross* and Silverstone's international profile on *Stowe Circuit*, both
   tarmac the circuit's cars never drive, so neither gate could ever have triggered.

@@ -1,4 +1,9 @@
-PYTHON ?= python3
+# A repository virtual environment is used when one exists, so forgetting to activate it
+# is not silently answered with the system interpreter. The system Python can satisfy
+# every import and still not validate a date-time (see tools/check_python_env.py), which
+# makes the fallback worse than a missing dependency.
+VENV_PYTHON := .venv/bin/python
+PYTHON ?= $(if $(wildcard $(VENV_PYTHON)),$(VENV_PYTHON),python3)
 CXX ?= c++
 IDF_IMAGE ?= espressif/idf:v6.0.2
 FIRMWARE_PORT ?= /dev/ttyACM0
@@ -57,14 +62,21 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
+.PHONY: check venv python-env test track-validate uk-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-device-info firmware-clean issue-preview label-preview
 
-check: test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
+check: python-env test track-validate track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
 
-test:
+venv:
+	python3 -m venv .venv
+	$(VENV_PYTHON) -m pip install --disable-pip-version-check -r requirements-dev.txt
+
+python-env:
+	$(PYTHON) -B tools/check_python_env.py
+
+test: python-env
 	$(PYTHON) -B -m unittest discover -s tests -p 'test_*.py'
 
-track-validate:
+track-validate: python-env
 	$(PYTHON) -B tools/validate_tracks.py
 
 uk-track-pack:
