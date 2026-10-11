@@ -20,12 +20,12 @@ add_custom_command(
     OUTPUT "${TRACK_TIMER_UK_TRACK_PACK_ROOT}/pack-manifest.json"
     COMMAND
         "${Python3_EXECUTABLE}" -B
-        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_uk_track_pack.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_track_pack.py"
         --manifest "${CMAKE_CURRENT_SOURCE_DIR}/../data/track-packs/uk/manifest.json"
         --output "${TRACK_TIMER_UK_TRACK_PACK_ROOT}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/../data/track-packs/uk/manifest.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_uk_track_pack.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_track_pack.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/../tools/track_workbench.py"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
     COMMENT "Generating provenance-gated UK simulator track catalog"

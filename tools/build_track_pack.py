@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the deterministic, provenance-gated UK offline track pack."""
+"""Build a deterministic, provenance-gated offline track pack from a source manifest."""
 
 from __future__ import annotations
 
@@ -19,15 +19,14 @@ try:
         create_definition,
         write_definition,
     )
-except ModuleNotFoundError:  # Direct `python tools/build_uk_track_pack.py` execution.
+except ModuleNotFoundError:  # Direct `python tools/build_track_pack.py` execution.
     from track_workbench import _meters_per_radian, create_definition, write_definition
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MANIFEST = REPO_ROOT / "data" / "track-packs" / "uk" / "manifest.json"
-DEFAULT_OUTPUT = REPO_ROOT / "build" / "track-pack" / "uk"
 TRACK_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,47}$")
-NATIONS = {"England", "Scotland", "Wales", "Northern Ireland"}
+PACK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,46}$")
+COUNTRY_PATTERN = re.compile(r"^[A-Z]{2,3}$")
 GATE_NAMES = ("start", "finish", "pit_entry", "pit_exit")
 
 # A start line and a pit gate can sit close together on a real circuit, but they are
@@ -56,7 +55,11 @@ def _separation_m(left: list, right: list) -> float:
 
 def validate_manifest(manifest: dict) -> None:
     _require(manifest.get("schema_version") == 1, "unsupported manifest schema")
-    _require(manifest.get("pack_id") == "uk-major-circuits", "unexpected pack id")
+    pack_id = manifest.get("pack_id")
+    _require(
+        isinstance(pack_id, str) and bool(PACK_ID_PATTERN.fullmatch(pack_id)),
+        "pack_id must be a lowercase slug",
+    )
     _require(manifest.get("revision", 0) > 0, "pack revision must be positive")
     _require(manifest.get("data_license") == "ODbL-1.0", "pack must retain ODbL")
     _require("OpenStreetMap" in manifest.get("attribution", ""), "OSM attribution missing")
@@ -65,6 +68,17 @@ def validate_manifest(manifest: dict) -> None:
         and manifest["scope_exclusions"],
         "scope exclusions must be explicit",
     )
+    required_nations = manifest.get("required_nations")
+    _require(
+        required_nations is None
+        or (
+            isinstance(required_nations, list)
+            and required_nations
+            and all(isinstance(value, str) and value for value in required_nations)
+        ),
+        "required_nations must be a non-empty list of names when present",
+    )
+
     venues = manifest.get("venues")
     _require(isinstance(venues, list) and venues, "venues must be a non-empty list")
 
@@ -78,8 +92,15 @@ def validate_manifest(manifest: dict) -> None:
         _require(venue_id not in venue_ids, f"{path}.venue_id duplicates {venue_id}")
         venue_ids.add(venue_id)
         nation = venue.get("nation")
-        _require(nation in NATIONS, f"{path}.nation is unsupported")
+        _require(isinstance(nation, str) and nation, f"{path}.nation is missing")
+        if required_nations is not None:
+            _require(nation in required_nations, f"{path}.nation is unsupported")
         represented_nations.add(nation)
+        country = venue.get("country")
+        _require(
+            isinstance(country, str) and bool(COUNTRY_PATTERN.fullmatch(country)),
+            f"{path}.country must be a 2-3 letter uppercase code",
+        )
         reference = venue.get("reference")
         _require(
             isinstance(reference, list)
@@ -92,10 +113,14 @@ def validate_manifest(manifest: dict) -> None:
             0 < venue.get("geofence_radius_m", 0) <= 25_000,
             f"{path}.geofence_radius_m is invalid",
         )
-        for source_field in ("osm_venue", "official_source"):
+        _require(
+            str(venue.get("osm_venue", "")).startswith("https://"),
+            f"{path}.osm_venue must be an HTTPS source",
+        )
+        if "official_source" in venue:
             _require(
-                str(venue.get(source_field, "")).startswith("https://"),
-                f"{path}.{source_field} must be an HTTPS source",
+                str(venue["official_source"]).startswith("https://"),
+                f"{path}.official_source must be an HTTPS source",
             )
 
         profiles = venue.get("gate_profiles")
@@ -158,7 +183,11 @@ def validate_manifest(manifest: dict) -> None:
                     layout["gate_profile"] in profiles,
                     f"{layout_path}.gate_profile does not exist",
                 )
-    _require(represented_nations == NATIONS, "manifest must cover all four UK nations")
+    if required_nations is not None:
+        _require(
+            represented_nations == set(required_nations),
+            f"manifest must cover every nation it declares: {sorted(required_nations)}",
+        )
 
 
 # Promoting geometry is the one thing in this generator that can turn unverified data
@@ -172,7 +201,7 @@ PROMOTED_STATUSES = frozenset(
 
 # Two sources that disagree by more than this cannot promote a gate.
 #
-# Ten metres is 0.16 s at 62.6 m/s, the fastest a UK circuit is driven. A start/finish
+# Ten metres is 0.16 s at 62.6 m/s, about as fast as a circuit here is driven. A start/finish
 # line displaced along the straight shifts every lap by the same amount, so lap durations
 # and lap-to-lap comparisons are unaffected; what it changes is absolute agreement with
 # another timing system. GPS lap timing carries roughly 0.15-0.25 s of error of its own,
@@ -250,13 +279,16 @@ def _definition_for(manifest: dict, venue: dict, layout: dict) -> dict:
     status, evidence, verified_utc = _validation_for(
         profile, f"{venue['venue_id']}.{layout['gate_profile']}"
     )
-    source = f"OpenStreetMap ways {source_ids[0]}/{source_ids[1]}; UK pack manifest"
+    source = (
+        f"OpenStreetMap ways {source_ids[0]}/{source_ids[1]}; "
+        f"{manifest['pack_id']} manifest"
+    )
     if evidence is not None:
         source = f"{source}; validated: {evidence}"
     return create_definition(
         track_id=layout["track_id"],
         name=layout["name"],
-        country="GB",
+        country=venue["country"],
         source=source,
         license_name=manifest["data_license"],
         verified_utc=verified_utc or manifest["researched_utc"],
@@ -293,7 +325,7 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     validate_manifest(manifest)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
-    temporary = Path(tempfile.mkdtemp(prefix=".uk-track-pack-", dir=output_dir.parent))
+    temporary = Path(tempfile.mkdtemp(prefix=".track-pack-", dir=output_dir.parent))
     try:
         definitions_dir = temporary / "definitions"
         definitions_dir.mkdir()
@@ -308,9 +340,11 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
                     "name": layout["name"],
                     "venue_id": venue["venue_id"],
                     "nation": venue["nation"],
-                    "official_source": venue["official_source"],
+                    "country": venue["country"],
                     "osm_venue": venue["osm_venue"],
                 }
+                if "official_source" in venue:
+                    packaged["official_source"] = venue["official_source"]
                 if layout.get("blocker"):
                     packaged.update(
                         geometry_status="blocked",
@@ -357,7 +391,9 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
         if output_dir.exists():
             shutil.rmtree(output_dir)
         temporary.replace(output_dir)
-        archive_path = output_dir.parent / "uk-track-pack-v1.zip"
+        # Named from the pack id, so building a second pack into the same parent
+        # directory cannot overwrite the first one's archive.
+        archive_path = output_dir.parent / f"{manifest['pack_id']}-pack-v1.zip"
         _write_zip(output_dir, archive_path)
         package_manifest["archive"] = str(archive_path)
         package_manifest["archive_sha256"] = _sha256(archive_path)
@@ -369,15 +405,15 @@ def build_pack(manifest_path: Path, output_dir: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args()
     result = build_pack(arguments.manifest, arguments.output)
     print(
         f"Built {result['definition_count']} definition(s), of which "
         f"{result['timing_ready_count']} are timing-ready; "
         f"documented {result['blocked_count']} blocker(s) across "
-        f"{result['layout_count']} UK layout(s)"
+        f"{result['layout_count']} layout(s)"
     )
     print(f"Archive: {result['archive']} ({result['archive_sha256']})")
     return 0

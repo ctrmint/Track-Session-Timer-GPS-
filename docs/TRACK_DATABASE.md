@@ -123,7 +123,7 @@ absolute agreement with another timing system. GPS lap timing carries roughly 0.
 and demanding worse would admit a line on the wrong part of the circuit entirely.
 
 For the UK pack, the evidence lives in the gate profile's `validation` block in
-`data/track-packs/uk/manifest.json`, and `tools/build_uk_track_pack.py` enforces every
+`data/track-packs/uk/manifest.json`, and `tools/build_track_pack.py` enforces every
 rule above at build time. A promotion that does not meet them **stops the build** rather
 than quietly producing a provisional pack nobody notices. The full citation travels with
 the pack in `source-manifest.json`; the definition's own `provenance.source` carries a
@@ -197,7 +197,7 @@ lane runs beside, which is robust rather than surveyed.
 What is *not* benign is a gate at the junction where the preceding corner meets the
 straight, where heading changes fastest and the direction check is least reliable. Two
 gates in this pack sat exactly there, because their coordinates had been copied from the
-pit entry. `tools/build_uk_track_pack.py` now refuses a start gate within
+pit entry. `tools/build_track_pack.py` now refuses a start gate within
 `MINIMUM_START_PIT_SEPARATION_M` of a pit gate: a real start line and a pit gate can be
 close, but they are never the same point.
 
@@ -292,9 +292,9 @@ Official venue pages establish layout identity. Raceway context is derived from
 OpenStreetMap under ODbL 1.0 with the required attribution retained in both source and
 package manifests.
 
-Run `make uk-track-pack` to create `build/track-pack/uk-track-pack-v1.zip`. At pack
-revision 2 the archive contains 24 schema-valid definitions, a hash for every one, and 11
-explicit blockers where public four-gate geometry could not be identified safely. No
+Run `make uk-track-pack` to create `build/track-pack/uk-major-circuits-pack-v1.zip`. At
+pack revision 4 the archive contains 24 schema-valid definitions, a hash for every one, and
+11 explicit blockers where public four-gate geometry could not be identified safely. No
 blocked layout receives invented coordinates.
 
 Two of those definitions are timing-ready - Donington Park GP and National, which share
@@ -302,6 +302,55 @@ one validated gate profile. The other 22 carry `timing_ready: false` and must go
 section 2.1 before they can be used for lap timing. The package is deterministic and is
 rebuilt and validated by `make check` in CI, which asserts the timing-ready count: if it
 ever returns to zero, the device cannot arm at any real venue again.
+
+### 5.1 One builder, several packs
+
+`tools/build_track_pack.py` takes `--manifest` and `--output`, so it builds any pack whose
+manifest follows this schema. The rules a pack asserts are declared in its own manifest
+rather than compiled into the builder:
+
+| Declared by the manifest | Effect |
+|---|---|
+| `pack_id` | names the pack and its archive, so two packs cannot overwrite each other |
+| `required_nations` | the coverage rule. The UK pack names all four and the build fails if one is unrepresented. A pack that omits the field asserts no coverage |
+| `country`, per venue | the ISO code written into each definition |
+| `official_source`, per venue | optional. A commercial circuit has an operator to cite; a public road does not, and an invented citation would be worse than none |
+
+The provenance gate of section 2.1 and the coincident-gate check of section 2.3 are **not**
+declarable. They apply to every pack, because a second builder that quietly omitted them
+would reintroduce exactly what they exist to prevent.
+
+### 5.2 Test fixture pack
+
+`data/track-packs/test/manifest.json` holds functional test fixtures rather than
+competition venues, built with `make test-track-pack`. It currently contains one definition,
+**Test Circuit** (#184): a 943 m clockwise public-road loop on the Isle of Man, out along
+Sea Cliff Road and back along King Edward Road, with a stretch of Harbour Road standing in
+for a pit lane.
+
+It is a separate pack rather than an entry in the UK one for reasons that are not
+bureaucratic. The Isle of Man is a Crown Dependency and not part of the United Kingdom, so
+admitting it would make the UK pack's own coverage claim false; a public road is a street
+venue, which #109 excluded from the circuit scope deliberately; and there is no official
+source to cite for a public highway.
+
+Its gates are 12 m rather than the 20 m every circuit uses, because the carriageway is 25 ft
+(7.62 m): 20 m would reach 6.19 m past each road edge and touch the opposite carriageway
+where the two legs come within 13.3 m of each other. The start/finish line sits 30 m back
+along King Edward Road from the junction, because the supplied Start and Finish are the same
+point — the junction where both legs meet — and a gate there would span the departing
+carriageway as well as the arriving one.
+
+The fixture stays `provisional`, and that is the point rather than an omission. A road has
+no pit lane to identify its start/finish straight by the method in section 2.3, and no
+second independent source exists for a line somebody chose, so `independently_validated` is
+unreachable. The only honest promotion is `device_captured`, from driving the loop with the
+unit fitted. Until then it loads and can be selected, but the timing engine will not arm —
+which is the provenance gate working, not a defect in the fixture.
+
+The supplied route is recorded in the manifest as `source_points`. The definition schema has
+no field for a route, so without that record the 14 coordinates the gates were derived from
+would exist only in the issue that agreed them.
 
 ## 6. On-card layout and device loading
 
@@ -312,7 +361,7 @@ adding a track needs no firmware rebuild.
 /sdcard/track-packs/<pack_id>/definitions/<track_id>.json
 ```
 
-This is exactly what `tools/build_uk_track_pack.py` emits, so a pack can be copied to
+This is exactly what `tools/build_track_pack.py` emits, so a pack can be copied to
 the card unchanged. Several packs may coexist; `device-captured` is reserved for
 geometry captured on the device itself, so wiping a distributed pack never deletes a
 capture. Packs are only recognised at that path: a directory is scanned only if it

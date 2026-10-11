@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "pack_id": "test-circuits",
+  "revision": 1,
+  "researched_utc": "2026-10-11T00:00:00Z",
+  "attribution": "Road geometry derived from OpenStreetMap contributors; loop defined for functional testing, not for competition.",
+  "data_license": "ODbL-1.0",
+  "policy": "This pack holds functional test fixtures, not competition venues. Every definition is provisional and timer-only until its gate profile carries a validation record. A road loop has no pit lane to identify its start/finish straight and no second independent source for a line somebody chose, so independently_validated is not reachable here: promotion must come from device capture. See docs/TRACK_DATABASE.md.",
+  "scope_exclusions": [
+    {
+      "venue": "Public roads generally",
+      "reason": "This pack holds only the fixed functional test loop agreed in issue #184. No other public road is in scope, and nothing here is intended for timed competition on a public highway."
+    }
+  ],
+  "venues": [
+    {
+      "venue_id": "test_circuit",
+      "venue_name": "Test Circuit",
+      "nation": "Isle of Man",
+      "country": "IM",
+      "reference": [
+        54.167636,
+        -4.448607
+      ],
+      "geofence_radius_m": 600,
+      "osm_venue": "https://www.openstreetmap.org/way/262071530",
+      "roads": [
+        {
+          "leg": "outbound",
+          "name": "Sea Cliff Road",
+          "osm_ways": [
+            25988950,
+            186708042
+          ],
+          "width_m": 7.62
+        },
+        {
+          "leg": "return",
+          "name": "King Edward Road",
+          "osm_ways": [
+            262071530
+          ],
+          "width_m": 7.62
+        },
+        {
+          "leg": "pit lane",
+          "name": "Harbour Road",
+          "osm_ways": [
+            262071527
+          ],
+          "width_m": 7.62
+        }
+      ],
+      "source_points": [
+        {
+          "name": "Start",
+          "lat": 54.169676,
+          "lon": -4.44677
+        },
+        {
+          "name": "Waypoint 1",
+          "lat": 54.169142,
+          "lon": -4.446392
+        },
+        {
+          "name": "Waypoint 2",
+          "lat": 54.168699,
+          "lon": -4.446843
+        },
+        {
+          "name": "Waypoint 3",
+          "lat": 54.167802,
+          "lon": -4.447591
+        },
+        {
+          "name": "Waypoint 4",
+          "lat": 54.166978,
+          "lon": -4.44804
+        },
+        {
+          "name": "Waypoint 5",
+          "lat": 54.166475,
+          "lon": -4.449074
+        },
+        {
+          "name": "Waypoint 6",
+          "lat": 54.166359,
+          "lon": -4.449993
+        },
+        {
+          "name": "Waypoint 7",
+          "lat": 54.166441,
+          "lon": -4.450427
+        },
+        {
+          "name": "Southern Junction",
+          "lat": 54.166558,
+          "lon": -4.450468
+        },
+        {
+          "name": "Waypoint 8",
+          "lat": 54.166707,
+          "lon": -4.450342
+        },
+        {
+          "name": "Waypoint 9",
+          "lat": 54.167172,
+          "lon": -4.449786
+        },
+        {
+          "name": "Waypoint 10",
+          "lat": 54.168049,
+          "lon": -4.448762
+        },
+        {
+          "name": "Waypoint 11",
+          "lat": 54.169208,
+          "lon": -4.447405
+        },
+        {
+          "name": "Finish",
+          "lat": 54.169676,
+          "lon": -4.44677
+        }
+      ],
+      "source_points_note": "The loop as supplied, clockwise, 943 m, measured from these points. They are the input the gates were derived from; the definition schema has no field for a route, so they are recorded here to let the derivation be rechecked.",
+      "gate_profiles": {
+        "default": {
+          "source_way_ids": [
+            262071530,
+            262071527
+          ],
+          "start": [
+            54.169459,
+            -4.447053,
+            34.0,
+            12
+          ],
+          "finish": [
+            54.169459,
+            -4.447053,
+            34.0,
+            12
+          ],
+          "pit_entry": [
+            54.170325,
+            -4.447392,
+            149.9,
+            12
+          ],
+          "pit_exit": [
+            54.169953,
+            -4.446944,
+            147.3,
+            12
+          ],
+          "derivation": "Start and finish sit 30 m back along King Edward Road from the Sea Cliff Road junction, measured along the OSM centreline, because the two legs meet at the junction itself and a gate there would span both. At 30 m back the outbound leg is 26.3 m away, leaving 16.5 m between the gate end and its carriageway. Gates are 12 m: 7.62 m of road plus 2.19 m beyond each edge for lateral fix error. pit_exit faces 147.3 deg south-east-bound so the north-bound pass into the pit lane does not register."
+        }
+      },
+      "layouts": [
+        {
+          "track_id": "im_test_circuit",
+          "name": "Test Circuit",
+          "minimum_lap_time_s": 30,
+          "gate_profile": "default"
+        }
+      ]
+    }
+  ]
+}

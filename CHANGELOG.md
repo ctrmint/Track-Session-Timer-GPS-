@@ -8,6 +8,9 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the pack archive was named `uk-track-pack-v1.zip` whatever it contained, so building a
+  second pack into the same directory silently overwrote the first one's archive; it is now
+  named from the pack id
 - `make check` ran against whatever `python3` resolved to, so a system interpreter missing
   `rfc3339-validator` produced one confusing failure in the schema test while
   `tools/validate_tracks.py` and `tools/track_workbench.py` silently stopped validating
@@ -84,6 +87,17 @@ The project follows Semantic Versioning once the first firmware release is tagge
   OpenStreetMap way against what it is actually named
 
 ### Added
+
+- a test fixture track pack, `data/track-packs/test/manifest.json`, holding Test Circuit: a
+  943 m clockwise public-road loop for exercising timing, GNSS reception and lap logging end
+  to end. Its gates are 12 m rather than the 20 m a circuit uses, because the carriageway is
+  25 ft. It stays provisional until captured on device: a road has no pit lane to identify
+  its start/finish straight and no second source for a line somebody chose, so
+  `independently_validated` is unreachable and the engine will not arm until #37 captures it
+- `tools/build_track_pack.py` builds any pack whose manifest follows the schema, with the
+  rules a pack asserts - its id, its national coverage, whether a venue has an official
+  source to cite - declared in that manifest rather than compiled into the builder. The
+  provenance gate and the coincident-gate check are not declarable and apply to every pack
 
 - a real circuit that can arm the timing engine. Donington Park GP and National are
   promoted to `independently_validated` from two sources agreeing to 3.8 m. Until now
