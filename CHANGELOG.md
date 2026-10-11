@@ -8,6 +8,14 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- five start/finish gates in the UK pack were on the wrong feature. Croft's was on a way
+  named *Rallycross* and Silverstone's international profile on *Stowe Circuit*, both
+  tarmac the circuit's cars never drive, so neither gate could ever have triggered.
+  Silverstone's national profile, Pembrey and Llandow had start lines whose coordinates
+  were copied from their pit entry, placing the line at the junction where the preceding
+  corner meets the pit straight. All five are now identified from pit-lane adjacency, and
+  the pack build refuses a start gate that shares a pit gate's position
+
 - G peaks were never scoped to a session, so they described everything since boot; the meter
   was still being told no session was ever running
 - the vertical axis was computed and then dropped before it reached the meter

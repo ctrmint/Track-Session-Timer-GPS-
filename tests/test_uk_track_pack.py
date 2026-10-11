@@ -7,6 +7,7 @@ import unittest
 import zipfile
 
 from tools.build_uk_track_pack import (
+    MINIMUM_START_PIT_SEPARATION_M,
     PROMOTED_STATUSES,
     DEFAULT_MANIFEST,
     TrackPackError,
@@ -148,6 +149,45 @@ class UkTrackPackTests(unittest.TestCase):
         # than inheriting anything from its neighbours.
         result = build_with(None)
         self.assertEqual(result["timing_ready_count"], 0)
+
+    def test_a_start_gate_copied_from_a_pit_gate_is_refused(self):
+        """How two gates in this pack came to sit on a corner instead of a straight.
+
+        Silverstone's national profile and Llandow both carried a start line whose
+        coordinates were byte-identical to their pit entry. That is not a close call on a
+        tight circuit, it is the mark of a gate derived from the pit lane rather than from
+        the start/finish straight - and it put both lines at the junction where the
+        preceding corner meets the pit straight, where heading changes fastest and the
+        direction check is least reliable.
+        """
+        manifest = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+
+        # Nothing in the shipped pack may regress to that state.
+        validate_manifest(manifest)
+
+        def validate_with_start(start):
+            candidate = deepcopy(manifest)
+            venue = next(v for v in candidate["venues"] if v["venue_id"] == "llandow")
+            venue["gate_profiles"]["full"]["start"] = start
+            validate_manifest(candidate)
+
+        llandow = next(v for v in manifest["venues"] if v["venue_id"] == "llandow")
+        pit_entry = llandow["gate_profiles"]["full"]["pit_entry"]
+
+        # The exact failure that shipped: the pit gate's position, reused.
+        with self.assertRaisesRegex(TrackPackError, "coincident with pit_entry"):
+            validate_with_start([pit_entry[0], pit_entry[1], 89.5, 20])
+
+        # And near-coincidence, since a copy nudged by a rounding error is still a copy.
+        # One degree of latitude is about 111 km, so this offset is well under a metre.
+        with self.assertRaisesRegex(TrackPackError, "coincident with pit_entry"):
+            validate_with_start([pit_entry[0] + 0.000005, pit_entry[1], 89.5, 20])
+
+        # A genuine separation is accepted. 0.001 degrees of latitude is about 111 m,
+        # comfortably clear of the threshold without asserting anything about where a real
+        # start line sits relative to its pit entry.
+        self.assertLess(MINIMUM_START_PIT_SEPARATION_M, 111.0)
+        validate_with_start([pit_entry[0] + 0.001, pit_entry[1], 89.5, 20])
 
     def test_osm_derivation_never_claims_timing_readiness(self):
         snapshot = {
