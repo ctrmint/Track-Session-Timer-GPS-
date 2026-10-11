@@ -28,11 +28,22 @@ Required for all development:
 The normal host checks do not require the target board.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+make venv
 make check
 ```
+
+`make venv` creates `.venv` and installs the pinned `requirements-dev.txt`. The Makefile
+uses `.venv/bin/python` whenever that file exists, so the environment does not need to be
+activated for `make` targets; activate it only to run tools directly.
+
+Do not run the checks against a system Python that happens to have the packages. The
+versions are pinned because one of them changes what the validators *accept*, not just
+whether they run: `jsonschema` enforces a `format` keyword only when a checker for that
+format is installed, and says nothing when one is not. Without `rfc3339-validator`,
+`format: date-time` is not checked, so `provenance.verified_utc` will accept any string -
+including in `tools/validate_tracks.py` and `tools/track_workbench.py`, which is the field
+the track provenance gate reads. `make check` runs `tools/check_python_env.py` first to
+refuse that interpreter rather than let it quietly widen what the validators allow.
 
 On Windows, activate the virtual environment with the appropriate PowerShell or
 Command Prompt script before running the same Python and Make targets.
@@ -176,9 +187,7 @@ A second environment should be able to run:
 ```bash
 git clone git@github.com:ctrmint/Track-Session-Timer-GPS-.git
 cd Track-Session-Timer-GPS-
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+make venv
 make check
 make firmware-container-build
 git status --short
@@ -189,6 +198,11 @@ The final command should report no generated or modified tracked files.
 ## Troubleshooting
 
 - `idf.py: command not found`: activate the v6.0.2 IDF environment or use the container target.
+- `cannot run the host checks`: the interpreter is missing a pinned dependency, or has
+  one that `jsonschema` has not registered as a format checker. Run `make venv`. A
+  distribution's own `python3-jsonschema` package commonly omits
+  `rfc3339-validator`, which produces a single confusing failure in
+  `tests/test_track_schema.py` while every other target still passes.
 - Docker permission denied: configure the current user for the local Docker service; do not run repository builds as root unless the resulting ownership is understood.
 - SDL2 or CMake missing: install the simulator prerequisites above or run `make simulator-container-test`.
 - Serial port unavailable: verify the cable, device path, group membership, and that no monitor process already owns the port.
