@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import shutil
@@ -13,9 +14,13 @@ import tempfile
 import zipfile
 
 try:
-    from tools.track_workbench import create_definition, write_definition
+    from tools.track_workbench import (
+        _meters_per_radian,
+        create_definition,
+        write_definition,
+    )
 except ModuleNotFoundError:  # Direct `python tools/build_uk_track_pack.py` execution.
-    from track_workbench import create_definition, write_definition
+    from track_workbench import _meters_per_radian, create_definition, write_definition
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +30,13 @@ TRACK_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,47}$")
 NATIONS = {"England", "Scotland", "Wales", "Northern Ireland"}
 GATE_NAMES = ("start", "finish", "pit_entry", "pit_exit")
 
+# A start line and a pit gate can sit close together on a real circuit, but they are
+# never the same point. Identical coordinates mean the start gate was copied from the
+# pit gate instead of being derived from the start/finish straight, which is how two
+# gates in this pack came to sit on the corner before the pit straight. The threshold
+# is below GNSS noise, so it cannot reject a position that was genuinely surveyed.
+MINIMUM_START_PIT_SEPARATION_M = 5.0
+
 
 class TrackPackError(ValueError):
     """Raised when the source manifest cannot produce a safe package."""
@@ -33,6 +45,13 @@ class TrackPackError(ValueError):
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise TrackPackError(message)
+
+
+def _separation_m(left: list, right: list) -> float:
+    east_per_radian, north_per_radian = _meters_per_radian((left[0] + right[0]) / 2.0)
+    east = math.radians(right[1] - left[1]) * east_per_radian
+    north = math.radians(right[0] - left[0]) * north_per_radian
+    return math.hypot(east, north)
 
 
 def validate_manifest(manifest: dict) -> None:
@@ -99,6 +118,14 @@ def validate_manifest(manifest: dict) -> None:
                     and 0 <= gate[2] < 360
                     and 1 <= gate[3] <= 1_000,
                     f"{path}.gate_profiles.{profile_name}.{gate_name} is invalid",
+                )
+            for pit_gate in ("pit_entry", "pit_exit"):
+                _require(
+                    _separation_m(profile["start"], profile[pit_gate])
+                    >= MINIMUM_START_PIT_SEPARATION_M,
+                    f"{path}.gate_profiles.{profile_name}.start is coincident with "
+                    f"{pit_gate}, so it was taken from the pit gate rather than from the "
+                    "start/finish straight",
                 )
 
         layouts = venue.get("layouts")

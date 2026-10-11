@@ -148,15 +148,58 @@ would have refused it even if it had.
 Both Donington layouts share that profile, so neither the GP nor the National circuit
 could have timed a lap, and the National circuit does not even drive the Melbourne Loop.
 
-Three further venues carry start/finish gates taken from features that are not their
-start/finish straight: Croft from a way named *Rallycross*, Silverstone's international
-profile from *Stowe Circuit* (a separate circuit on the same site), and Pembrey from
-*Honda*, a corner. Four more are taken from unnamed or whole-circuit ways, where the name
-alone cannot say whether the position is right. These remain provisional and are tracked
-in #139.
+Checking the rest of the pack the same way found four more gates on the wrong feature,
+corrected in #182 and described in section 2.3. Two of them - Croft and Silverstone's
+international profile - were on tarmac the circuit's cars never drive, so like Donington
+they could never have triggered at all.
 
 The lesson is worth keeping: the provenance gate was not protecting against imprecision.
 It was the only thing standing between unverified geometry and confident, wrong lap times.
+
+### 2.3 Identifying the start/finish straight
+
+Every gate in the UK pack was placed on an OpenStreetMap way, so the question for each one
+is whether it is the *right* way. A way's name is weak evidence - mappers name corners,
+rallycross tracks and whole circuits with the same `highway=raceway` tag - and Donington
+showed that a wrong name means a wrong gate. The reliable signal is the pit lane.
+
+**The method.** The pit lane runs alongside the start/finish straight, and nothing else:
+
+1. Find the pit lane. It carries `raceway=pitlane` or `raceway=pit_lane`, or is named for
+   one.
+2. Sample points along it every few metres, and for each candidate circuit way measure
+   what fraction of those samples fall within about 60 m of it, and how far away they are
+   on average. The pit straight is the way the pit lane runs beside for most of its
+   length, at a consistent short distance.
+3. Take the direction of travel from the straight's own geometry, and resolve its sign
+   against the recorded pit entry and exit headings.
+
+Donington allowed a shortcut - the pit lane shared *both* endpoints with the Wheatcroft
+Straight - but that only works where the straight is mapped as a single way. Where a
+circuit is split into named segments, the pit lane's two ends land on two different ways,
+and adjacency along its length is the test that still works.
+
+**Two traps.** A second surface running parallel to the pit straight scores highly on
+adjacency too: at Croft the Main Straight is alongside 100% of the pit lane at a mean of
+17 m, and the *Rallycross* way is alongside 92% of it at 45 m. The mean distance
+separates them, the overlap fraction does not. And venues tag far more than the circuit -
+paddock, run-off and kerb ways, and karting, RC car and speedway surfaces - all of which
+must be excluded before the comparison means anything.
+
+**What this establishes, and what it does not.** It identifies the straight. It does not
+locate the line along that straight, which is why a gate identified this way stays
+`provisional`: promotion still needs the two independent sources of section 2.1. The
+residual uncertainty is benign for lap timing, because a line displaced along the straight
+shifts every lap equally - it affects agreement with another timing system, not
+lap-to-lap consistency. So these gates are placed at the midpoint of the stretch the pit
+lane runs beside, which is robust rather than surveyed.
+
+What is *not* benign is a gate at the junction where the preceding corner meets the
+straight, where heading changes fastest and the direction check is least reliable. Two
+gates in this pack sat exactly there, because their coordinates had been copied from the
+pit entry. `tools/build_uk_track_pack.py` now refuses a start gate within
+`MINIMUM_START_PIT_SEPARATION_M` of a pit gate: a real start line and a pit gate can be
+close, but they are never the same point.
 
 ## 3. Track matching
 
@@ -274,6 +317,15 @@ the card unchanged. Several packs may coexist; `device-captured` is reserved for
 geometry captured on the device itself, so wiping a distributed pack never deletes a
 capture. Packs are only recognised at that path: a directory is scanned only if it
 contains a `definitions` subdirectory.
+
+`<pack_id>` is a directory name the firmware does not interpret. `SdTrackStore` scans
+whatever directories it finds and takes each definition's identity from its filename, so
+**updating a card means overwriting the directory the card already uses, not adding one
+named after the new pack.** A second directory holding the same circuits does not replace
+the first, it doubles them: the same track ids twice, against a 32-entry catalog.
+`list_track_ids` counts everything it discovers and keeps only what fits, so the surplus is
+reported as truncation and those circuits are simply absent from the driver's list. The
+count on the selection screen is the only symptom, which makes this an easy mistake to ship.
 
 At boot `SdTrackStore` enumerates every pack and `catalog::TrackCatalog` parses each
 definition into a caller-owned array. Two allocations dominate and both are placed in
