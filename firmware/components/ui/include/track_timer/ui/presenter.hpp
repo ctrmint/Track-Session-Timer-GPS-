@@ -14,6 +14,16 @@ enum class Readiness : std::uint8_t {
     ready,
 };
 
+// Why lap timing will or will not run for the circuit the driver has chosen. Selection
+// always succeeds, including for geometry that cannot arm, so this is the only thing that
+// tells them which they have. `invalid` means the definition could not be used - a file
+// problem the driver should act on; `provisional` means it was read perfectly well and its
+// geometry has not been validated, which is the provenance gate working rather than a
+// fault, and needs a different answer from the driver. Collapsing the two tells somebody
+// to suspect their card when they should be capturing gates.
+//
+// `suggested`, `ambiguous` and `missing` belong to automatic track matching. The simulator
+// drives them today; the device does not produce them yet.
 enum class ReadyTrackState : std::uint8_t {
     selected,
     suggested,
@@ -21,6 +31,7 @@ enum class ReadyTrackState : std::uint8_t {
     missing,
     invalid,
     none,
+    provisional,
 };
 
 struct ReadySnapshot {
@@ -41,7 +52,11 @@ struct ReadinessItem {
 };
 
 struct ReadyViewModel {
+    // The track line carries the circuit's own state, in the carousel's colours, because
+    // `timing_mode` reports GNSS health first and so says nothing about the track until
+    // there is a fix. A driver checking their selection indoors has only this.
     std::array<char, 48> selected_track{};
+    std::uint32_t selected_track_color_rgb{0xFFFFFF};
     std::array<char, 24> session_duration{};
     std::array<char, 24> rest_duration{};
     std::array<char, 40> timing_mode{};

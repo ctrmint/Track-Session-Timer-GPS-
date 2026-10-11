@@ -5,6 +5,7 @@
 #include "track_timer/ui/foundation.hpp"
 
 #include <cstdio>
+#include <cstring>
 
 namespace track_timer::ui {
 namespace {
@@ -110,6 +111,60 @@ void set_readiness_item(ReadinessItem& item, const Readiness readiness,
     std::snprintf(item.text.data(), item.text.size(), "%s", text);
 }
 
+// The track line, independent of GNSS. The suffix is what the driver acts on, so the name
+// is truncated to make room for it rather than the other way round: "Donington Park Nat..."
+// still identifies the circuit, while a cut-off "- PROVISION" does not identify the
+// problem. Colours match the selection carousel, where green means a circuit can arm and
+// amber means it cannot.
+void set_track_line(ReadyViewModel& model, const ReadySnapshot& snapshot) noexcept
+{
+    if (snapshot.selected_track[0] == '\0') {
+        std::snprintf(model.selected_track.data(), model.selected_track.size(),
+                      "NO TRACK SELECTED");
+        model.selected_track_color_rgb = color::caution_bright;
+        return;
+    }
+
+    const char* suffix = nullptr;
+    model.selected_track_color_rgb = color::positive_bright;
+    switch (snapshot.track_state) {
+    case ReadyTrackState::selected:
+        break;
+    case ReadyTrackState::provisional:
+        suffix = " - PROVISIONAL";
+        model.selected_track_color_rgb = color::caution_bright;
+        break;
+    case ReadyTrackState::suggested:
+        suffix = " - UNCONFIRMED";
+        model.selected_track_color_rgb = color::caution_bright;
+        break;
+    case ReadyTrackState::ambiguous:
+        suffix = " - NOT CONFIRMED";
+        model.selected_track_color_rgb = color::caution_bright;
+        break;
+    case ReadyTrackState::missing:
+        suffix = " - FILE MISSING";
+        model.selected_track_color_rgb = color::critical_bright;
+        break;
+    case ReadyTrackState::invalid:
+        suffix = " - FILE UNREADABLE";
+        model.selected_track_color_rgb = color::critical_bright;
+        break;
+    case ReadyTrackState::none:
+        model.selected_track_color_rgb = color::caution_bright;
+        break;
+    }
+
+    if (suffix == nullptr) {
+        std::snprintf(model.selected_track.data(), model.selected_track.size(), "%.47s",
+                      snapshot.selected_track.data());
+        return;
+    }
+    const auto room = model.selected_track.size() - 1 - std::strlen(suffix);
+    std::snprintf(model.selected_track.data(), model.selected_track.size(), "%.*s%s",
+                  static_cast<int>(room), snapshot.selected_track.data(), suffix);
+}
+
 }  // namespace
 
 DeviceViewModel present(const domain::UiSnapshot& snapshot) noexcept
@@ -133,9 +188,7 @@ DeviceViewModel present(const domain::UiSnapshot& snapshot) noexcept
 ReadyViewModel present_ready(const ReadySnapshot& snapshot) noexcept
 {
     ReadyViewModel model{};
-    std::snprintf(model.selected_track.data(), model.selected_track.size(), "%.47s",
-                  snapshot.selected_track[0] == '\0' ? "NO TRACK SELECTED"
-                                                      : snapshot.selected_track.data());
+    set_track_line(model, snapshot);
     std::array<char, 12> duration{};
     format_duration_value(duration.data(), duration.size(), snapshot.session_duration_seconds);
     std::snprintf(model.session_duration.data(), model.session_duration.size(),
@@ -164,11 +217,17 @@ ReadyViewModel present_ready(const ReadySnapshot& snapshot) noexcept
             break;
         case ReadyTrackState::missing:
             std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
-                          "TIMER ONLY - TRACK MISSING");
+                          "TIMER ONLY - TRACK FILE MISSING");
+            break;
+        case ReadyTrackState::provisional:
+            // Says what to do, not what is wrong: the file is fine and the gates are not
+            // validated, so capturing them is the remedy.
+            std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
+                          "TIMER ONLY - CAPTURE GATES TO TIME");
             break;
         case ReadyTrackState::invalid:
             std::snprintf(model.timing_mode.data(), model.timing_mode.size(),
-                          "TIMER ONLY - TRACK DATA");
+                          "TIMER ONLY - TRACK FILE UNREADABLE");
             break;
         case ReadyTrackState::none:
             std::snprintf(model.timing_mode.data(), model.timing_mode.size(),

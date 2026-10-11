@@ -158,6 +158,32 @@ constexpr std::uint32_t kGreen = 0x3FC98A;
 constexpr std::uint32_t kViolet = 0xB06CFF;
 constexpr std::uint32_t kRuby = 0xFF8FA3;
 
+// Why timing did not arm, in the vocabulary the ready page speaks. The switch carries no
+// `default`, so a new TrackApplyResult fails the build rather than silently becoming a
+// file fault: six of these are problems with the card or the file, and one - provisional
+// geometry - is the provenance gate working as designed, which needs a different answer
+// from the driver.
+[[nodiscard]] ui::ReadyTrackState ready_track_state_for(
+    const catalog::TrackApplyResult result) noexcept
+{
+    switch (result) {
+    case catalog::TrackApplyResult::applied:
+        return ui::ReadyTrackState::selected;
+    case catalog::TrackApplyResult::not_timing_ready:
+        return ui::ReadyTrackState::provisional;
+    case catalog::TrackApplyResult::definition_missing:
+        return ui::ReadyTrackState::missing;
+    case catalog::TrackApplyResult::no_selection:
+        return ui::ReadyTrackState::none;
+    case catalog::TrackApplyResult::session_active:
+    case catalog::TrackApplyResult::definition_unreadable:
+    case catalog::TrackApplyResult::definition_invalid:
+    case catalog::TrackApplyResult::engine_rejected:
+        return ui::ReadyTrackState::invalid;
+    }
+    return ui::ReadyTrackState::invalid;
+}
+
 // The settings level has no dedicated glyphs in LVGL's built-in set, so related fields
 // share an icon. The custom icon font remains open in #128.
 [[nodiscard]] const char* icon_for(const ui::SettingsField field) noexcept
@@ -823,11 +849,13 @@ class ScreenRouter {
             snapshot.track_state = ui::ReadyTrackState::selected;
         }
         else if (active_track_.name[0] != '\0') {
-            // Selected and persisted, but the geometry is provisional so timing will not
-            // arm. Saying "selected" here would imply lap timing that is not running.
+            // Selected and persisted, but timing will not arm. Saying "selected" here
+            // would imply lap timing that is not running - and reporting every cause
+            // identically would tell a driver with honest provisional geometry to go and
+            // check their card, which is the wrong remedy for the commonest case.
             std::strncpy(snapshot.selected_track.data(), active_track_.name.data(),
                          snapshot.selected_track.size() - 1);
-            snapshot.track_state = ui::ReadyTrackState::invalid;
+            snapshot.track_state = ready_track_state_for(last_apply_result_);
         }
         else {
             std::strncpy(snapshot.selected_track.data(), "No track selected",
@@ -948,6 +976,7 @@ class ScreenRouter {
             catalog::apply_track(identifier, track_store_, settings_, false,
                                  timing_engine_, *load_scratch_, active_track_);
         track_armed_ = report.ok();
+        last_apply_result_ = report.result;
         if (!track_armed_) {
             // Keep the name so the dashboard can report the circuit and its state.
             active_track_ = chosen;
@@ -1562,6 +1591,9 @@ class ScreenRouter {
     ui::ImuMeterController imu_meter_{};
     track::TrackDefinition active_track_{};
     bool track_armed_{false};
+    // Kept so the ready page can say why timing is not armed. The reason was previously
+    // logged and discarded, and the log is unreadable on this board (#181).
+    catalog::TrackApplyResult last_apply_result_{catalog::TrackApplyResult::no_selection};
     storage::SdTrackStore track_store_{};
     catalog::TrackCatalog track_catalog_{nullptr, 0};
     catalog::TrackLoadScratch* load_scratch_{nullptr};

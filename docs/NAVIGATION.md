@@ -47,11 +47,23 @@ Back, taps, and swipes remain unable to end or leave an active session.
 
 The dashboard shows:
 
-- selected track;
+- selected track, with its own state and colour: green when the circuit can arm, amber
+  with a `- PROVISIONAL` suffix when its geometry has not been validated, red with
+  `- FILE MISSING` or `- FILE UNREADABLE` when the definition could not be used;
 - session and rest duration;
 - GNSS, storage, IMU, and logging readiness using both text and colour;
-- `LAP TIMING READY` when GNSS is suitable;
-- an explicit `TIMER ONLY` reason when GNSS is unavailable or poor.
+- `LAP TIMING READY` when GNSS is suitable and the track can arm;
+- an explicit `TIMER ONLY` reason otherwise.
+
+The track line is deliberately independent of GNSS health. The `TIMER ONLY` reason reports
+GNSS first, because no fix means no timing whatever the track is, which leaves it unable to
+say anything about the selection until there is a fix. Since all but two definitions in the
+shipped pack are provisional, a driver needs to know that indoors, before driving anywhere,
+so the track carries its state on its own line.
+
+A provisional reason says `CAPTURE GATES TO TIME` rather than naming a fault. The file is
+fine; the geometry is unvalidated, and the remedy is to capture the gates rather than to go
+and inspect the card.
 
 Start remains usable in the degraded timer-only path. Setup is disabled/deferred once
 a session is active. Interactive controls meet the shared 56 pixel minimum target.
