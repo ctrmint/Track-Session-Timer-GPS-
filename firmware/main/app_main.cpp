@@ -87,7 +87,7 @@ extern "C" void app_main(void)
 
     track_timer::display::set_service_callback(track_timer::main_app::service_screen_router);
     ESP_LOGI(kTag, "ready screen presented on the 600x450 panel");
-    // Storage and the IMU report their own state above; only GNSS is still unwired, and
-    // the parser exists without a transport to feed it.
-    ESP_LOGI(kTag, "no GNSS transport yet: timer-only operation");
+    // GNSS reports its own state from the screen router, which is where the transport is
+    // built. A line here as well was unconditional, and said the transport was unwired
+    // after #178 wired it - so the boot log contradicted itself 270 ms apart.
 }
