@@ -8,6 +8,14 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- a circuit that could not arm the timing engine read `TIMER ONLY - TRACK DATA` whatever
+  the reason, so honest provisional geometry was presented exactly like a corrupt file and
+  sent the driver to inspect their card instead of capturing gates. All seven
+  `TrackApplyResult` causes collapsed into one message, and the reason was logged - to a
+  console unreadable on this board - and then discarded. The ready page now distinguishes
+  provisional geometry from a missing or unreadable definition, and the selected track
+  carries its own state and colour on its own line so it is legible with no GNSS fix, which
+  is when the whole track-state message was previously unreachable
 - the pack archive was named `uk-track-pack-v1.zip` whatever it contained, so building a
   second pack into the same directory silently overwrote the first one's archive; it is now
   named from the pack id

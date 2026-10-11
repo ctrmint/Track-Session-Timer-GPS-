@@ -11,6 +11,7 @@
 #include "track_timer/simulator/summary_fixtures.hpp"
 #include "track_timer/simulator/track_catalog_loader.hpp"
 #include "track_timer/simulator/track_fixtures.hpp"
+#include "track_timer/track/definition.hpp"
 #include "track_timer/track/matching.hpp"
 #include "track_timer/ui/foundation.hpp"
 #include "track_timer/ui/presenter.hpp"
@@ -436,9 +437,16 @@ void update_screen(ApplicationContext& context)
     track_timer::ui::ReadySnapshot ready{};
     if (track_match.state == track_timer::track::TrackMatchState::selected &&
         track_match.selected_index < context.track_fixture->count) {
+        const auto& definition =
+            context.track_fixture->definitions[track_match.selected_index];
         std::snprintf(ready.selected_track.data(), ready.selected_track.size(), "%s",
-                      context.track_fixture->definitions[track_match.selected_index].name.data());
-        ready.track_state = track_timer::ui::ReadyTrackState::selected;
+                      definition.name.data());
+        // Matched and selected is not the same as armable. 22 of the 24 circuits in the
+        // UK pack are provisional, so reporting every selection as ready would make the
+        // simulator disagree with the device about the commonest case.
+        ready.track_state = track_timer::track::track_timing_ready(definition)
+                                ? track_timer::ui::ReadyTrackState::selected
+                                : track_timer::ui::ReadyTrackState::provisional;
     }
     else {
         switch (track_match.state) {

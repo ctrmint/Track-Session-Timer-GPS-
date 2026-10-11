@@ -91,6 +91,9 @@ ReadyScreen::ReadyScreen(lv_obj_t* root, const NavigationCallback callback,
 void ReadyScreen::update(const ReadyViewModel& model) noexcept
 {
     lv_label_set_text(track_label_, model.selected_track.data());
+    // Coloured from the track's own state rather than from GNSS, so the driver can see
+    // whether their selection will time without waiting for a fix.
+    lv_obj_set_style_text_color(track_label_, lv_color_hex(model.selected_track_color_rgb), 0);
     lv_label_set_text(session_label_, model.session_duration.data());
     lv_label_set_text(rest_label_, model.rest_duration.data());
     lv_label_set_text(timing_mode_label_, model.timing_mode.data());

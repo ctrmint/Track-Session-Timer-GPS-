@@ -233,8 +233,14 @@ path. Selecting Timer Only clears the identifier. Both actions are rejected afte
 session becomes active, including a race between opening the screen and pressing the
 action. Deterministic simulator fixtures cover selected, missing, invalid, ambiguous,
 suggested, no-nearby-track, and unavailable-location states. Provisional definitions
-remain visible as capture candidates, are labelled `PROVISIONAL - TIMER ONLY`, and
-cannot be persisted as the active timing track.
+remain visible as capture candidates and are labelled `PROVISIONAL - TIMER ONLY`.
+
+The two selection paths disagree about what happens next, and the disagreement is worth
+knowing about. `ui::TrackSelectionController::confirm` **refuses** a provisional selection,
+returning `invalid_settings` without persisting it. `screen_router`'s own path, which is
+what runs on the device, **persists it anyway** and runs timer-only, so a driver at an
+unvalidated venue keeps the circuit name on their dashboard. Only the second is reachable
+on hardware today. Which behaviour is wanted is tracked in #187.
 
 ## 4. Unknown track capture
 

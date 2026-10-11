@@ -2,7 +2,9 @@
 #include "track_timer/ui/presenter.hpp"
 
 #include <cassert>
+#include <cstdio>
 #include <cstring>
+#include <string_view>
 #include <iostream>
 
 int main()
@@ -85,14 +87,60 @@ int main()
              TrackTimingExpectation{ReadyTrackState::ambiguous,
                                     "TIMER ONLY - SELECT TRACK"},
              TrackTimingExpectation{ReadyTrackState::missing,
-                                    "TIMER ONLY - TRACK MISSING"},
+                                    "TIMER ONLY - TRACK FILE MISSING"},
              TrackTimingExpectation{ReadyTrackState::invalid,
-                                    "TIMER ONLY - TRACK DATA"},
+                                    "TIMER ONLY - TRACK FILE UNREADABLE"},
+             // Provisional geometry is not a file fault and must not read as one: the
+             // driver's remedy is to capture the gates, not to inspect their card.
+             TrackTimingExpectation{ReadyTrackState::provisional,
+                                    "TIMER ONLY - CAPTURE GATES TO TIME"},
              TrackTimingExpectation{ReadyTrackState::none, "TIMER ONLY - NO TRACK"},
          }) {
         ready.track_state = expectation.state;
         assert(std::strcmp(present_ready(ready).timing_mode.data(), expectation.text) == 0);
     }
+
+    // The whole point of the track line: it reports the circuit's own state, so a driver
+    // can tell whether their selection will lap-time without first getting a fix. The
+    // timing_mode line above cannot do this, because it reports GNSS health first.
+    ready.gnss_health = track_timer::domain::GnssHealth::unavailable;
+    std::snprintf(ready.selected_track.data(), ready.selected_track.size(), "Test Circuit");
+
+    ready.track_state = ReadyTrackState::provisional;
+    const auto provisional = present_ready(ready);
+    assert(std::strcmp(provisional.timing_mode.data(), "TIMER ONLY - GPS UNAVAILABLE") == 0);
+    assert(std::strcmp(provisional.selected_track.data(), "Test Circuit - PROVISIONAL") == 0);
+
+    ready.track_state = ReadyTrackState::selected;
+    const auto armed = present_ready(ready);
+    assert(std::strcmp(armed.selected_track.data(), "Test Circuit") == 0);
+    // Still indistinguishable on the timing line, which is why the track line exists.
+    assert(std::strcmp(armed.timing_mode.data(), "TIMER ONLY - GPS UNAVAILABLE") == 0);
+    assert(armed.selected_track_color_rgb != provisional.selected_track_color_rgb);
+
+    // A file fault and unvalidated geometry must not look alike.
+    ready.track_state = ReadyTrackState::invalid;
+    const auto unreadable = present_ready(ready);
+    assert(std::strcmp(unreadable.selected_track.data(), "Test Circuit - FILE UNREADABLE") == 0);
+    assert(unreadable.selected_track_color_rgb != provisional.selected_track_color_rgb);
+
+    ready.track_state = ReadyTrackState::missing;
+    assert(std::strcmp(present_ready(ready).selected_track.data(),
+                       "Test Circuit - FILE MISSING") == 0);
+
+    // The suffix is what the driver acts on, so a long circuit name loses characters
+    // before the status does. A truncated name still identifies the circuit; a truncated
+    // status identifies nothing.
+    std::snprintf(ready.selected_track.data(), ready.selected_track.size(),
+                  "A Circuit With A Rather Long Name Indeed");
+    ready.track_state = ReadyTrackState::provisional;
+    const std::string_view line{present_ready(ready).selected_track.data()};
+    assert(line == "A Circuit With A Rather Long Name - PROVISIONAL");
+    assert(line.size() < ready.selected_track.size());
+
+    ready.selected_track = {};
+    ready.track_state = ReadyTrackState::none;
+    assert(std::strcmp(present_ready(ready).selected_track.data(), "NO TRACK SELECTED") == 0);
 
     ready.session_active = true;
     const auto active = present_ready(ready);
