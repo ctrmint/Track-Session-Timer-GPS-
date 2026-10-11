@@ -18,7 +18,7 @@ inline constexpr std::size_t kMaximumPacks = 8;
 //
 //   /sdcard/track-packs/<pack_id>/definitions/<track_id>.json
 //
-// so a pack produced by tools/build_uk_track_pack.py can be copied across unchanged.
+// so a pack produced by tools/build_track_pack.py can be copied across unchanged.
 // Multiple packs may coexist; lookups scan them in directory order.
 class SdTrackStore final : public track::TrackDefinitionStore,
                            public track::TrackCatalogSource {

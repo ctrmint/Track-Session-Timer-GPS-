@@ -1,7 +1,13 @@
 {
   "schema_version": 1,
   "pack_id": "uk-major-circuits",
-  "revision": 3,
+  "required_nations": [
+    "England",
+    "Scotland",
+    "Wales",
+    "Northern Ireland"
+  ],
+  "revision": 4,
   "researched_utc": "2026-08-14T12:30:00Z",
   "attribution": "Contains information from OpenStreetMap, available under ODbL 1.0: https://www.openstreetmap.org/copyright",
   "data_license": "ODbL-1.0",
@@ -33,6 +39,7 @@
       "venue_id": "anglesey",
       "venue_name": "Anglesey Circuit",
       "nation": "Wales",
+      "country": "GB",
       "reference": [
         53.1904852,
         -4.4981294
@@ -66,6 +73,7 @@
       "venue_id": "bedford_autodrome",
       "venue_name": "Bedford Autodrome",
       "nation": "England",
+      "country": "GB",
       "reference": [
         52.2340844,
         -0.4718732
@@ -105,6 +113,7 @@
       "venue_id": "brands_hatch",
       "venue_name": "Brands Hatch",
       "nation": "England",
+      "country": "GB",
       "reference": [
         51.3574884,
         0.2600065
@@ -163,6 +172,7 @@
       "venue_id": "bishopscourt",
       "venue_name": "Bishopscourt Racing Circuit",
       "nation": "Northern Ireland",
+      "country": "GB",
       "reference": [
         54.3055017,
         -5.5805284
@@ -190,6 +200,7 @@
       "venue_id": "cadwell_park",
       "venue_name": "Cadwell Park",
       "nation": "England",
+      "country": "GB",
       "reference": [
         53.3112032,
         -0.0608402
@@ -242,6 +253,7 @@
       "venue_id": "castle_combe",
       "venue_name": "Castle Combe Circuit",
       "nation": "England",
+      "country": "GB",
       "reference": [
         51.4896961,
         -2.2115794
@@ -263,6 +275,7 @@
       "venue_id": "croft",
       "venue_name": "Croft Circuit",
       "nation": "England",
+      "country": "GB",
       "reference": [
         54.4560466,
         -1.5588314
@@ -315,6 +328,7 @@
       "venue_id": "donington_park",
       "venue_name": "Donington Park",
       "nation": "England",
+      "country": "GB",
       "reference": [
         52.8296064,
         -1.3901421
@@ -394,6 +408,7 @@
       "venue_id": "goodwood",
       "venue_name": "Goodwood Motor Circuit",
       "nation": "England",
+      "country": "GB",
       "reference": [
         50.8591352,
         -0.7533116
@@ -446,6 +461,7 @@
       "venue_id": "kirkistown",
       "venue_name": "Kirkistown Circuit",
       "nation": "Northern Ireland",
+      "country": "GB",
       "reference": [
         54.4569446,
         -5.4748346
@@ -467,6 +483,7 @@
       "venue_id": "knockhill",
       "venue_name": "Knockhill Racing Circuit",
       "nation": "Scotland",
+      "country": "GB",
       "reference": [
         56.1283006,
         -3.5057847
@@ -561,6 +578,7 @@
       "venue_id": "llandow",
       "venue_name": "Llandow Circuit",
       "nation": "Wales",
+      "country": "GB",
       "reference": [
         51.4318768,
         -3.4979064
@@ -613,6 +631,7 @@
       "venue_id": "mallory_park",
       "venue_name": "Mallory Park",
       "nation": "England",
+      "country": "GB",
       "reference": [
         52.5980634,
         -1.3363435
@@ -665,6 +684,7 @@
       "venue_id": "oulton_park",
       "venue_name": "Oulton Park",
       "nation": "England",
+      "country": "GB",
       "reference": [
         53.1765498,
         -2.6179277
@@ -729,6 +749,7 @@
       "venue_id": "pembrey",
       "venue_name": "Pembrey Circuit",
       "nation": "Wales",
+      "country": "GB",
       "reference": [
         51.7055818,
         -4.3204467
@@ -787,6 +808,7 @@
       "venue_id": "silverstone",
       "venue_name": "Silverstone Circuit",
       "nation": "England",
+      "country": "GB",
       "reference": [
         52.0718116,
         -1.0142991
@@ -881,6 +903,7 @@
       "venue_id": "snetterton",
       "venue_name": "Snetterton",
       "nation": "England",
+      "country": "GB",
       "reference": [
         52.4653968,
         0.9475707
@@ -945,6 +968,7 @@
       "venue_id": "thruxton",
       "venue_name": "Thruxton Circuit",
       "nation": "England",
+      "country": "GB",
       "reference": [
         51.207191,
         -1.6085264

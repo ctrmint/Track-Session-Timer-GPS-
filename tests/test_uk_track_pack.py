@@ -6,14 +6,16 @@ import tempfile
 import unittest
 import zipfile
 
-from tools.build_uk_track_pack import (
+from tools.build_track_pack import (
     MINIMUM_START_PIT_SEPARATION_M,
     PROMOTED_STATUSES,
-    DEFAULT_MANIFEST,
     TrackPackError,
     build_pack,
     validate_manifest,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+UK_MANIFEST = REPO_ROOT / "data" / "track-packs" / "uk" / "manifest.json"
 from tools.derive_osm_gates import derive
 from tools.track_workbench import validate_definition
 
@@ -22,7 +24,7 @@ class UkTrackPackTests(unittest.TestCase):
     def test_pack_is_complete_valid_and_deterministic(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "uk"
-            first = build_pack(DEFAULT_MANIFEST, output)
+            first = build_pack(UK_MANIFEST, output)
             self.assertEqual(first["layout_count"], 35)
             self.assertEqual(first["definition_count"], 24)
             self.assertEqual(first["blocked_count"], 11)
@@ -64,22 +66,31 @@ class UkTrackPackTests(unittest.TestCase):
                     len([name for name in packaged.namelist() if name.startswith("definitions/")]),
                     24,
                 )
-            second = build_pack(DEFAULT_MANIFEST, output)
+            second = build_pack(UK_MANIFEST, output)
             self.assertEqual(
                 hashlib.sha256(Path(second["archive"]).read_bytes()).hexdigest(),
                 first_hash,
             )
 
     def test_manifest_requires_all_four_nations_and_explicit_blockers(self):
-        manifest = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+        manifest = json.loads(UK_MANIFEST.read_text(encoding="utf-8"))
         missing_nation = deepcopy(manifest)
         missing_nation["venues"] = [
             venue
             for venue in missing_nation["venues"]
             if venue["nation"] != "Northern Ireland"
         ]
-        with self.assertRaisesRegex(TrackPackError, "all four UK nations"):
+        with self.assertRaisesRegex(TrackPackError, "must cover every nation it declares"):
             validate_manifest(missing_nation)
+
+        # The coverage rule is the pack's own claim, not a property of packs in general,
+        # so a pack that declares no nations is not silently asserting coverage of any.
+        undeclared = deepcopy(manifest)
+        undeclared.pop("required_nations")
+        undeclared["venues"] = [
+            venue for venue in undeclared["venues"] if venue["nation"] != "Northern Ireland"
+        ]
+        validate_manifest(undeclared)
 
         unsafe_layout = deepcopy(manifest)
         unsafe_layout["venues"][0]["layouts"][0].pop("blocker")
@@ -92,7 +103,7 @@ class UkTrackPackTests(unittest.TestCase):
         Every case here is a plausible shortcut someone could take in good faith, and each
         would produce a pack that looks validated and is not.
         """
-        manifest = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+        manifest = json.loads(UK_MANIFEST.read_text(encoding="utf-8"))
 
         def build_with(validation):
             candidate = deepcopy(manifest)
@@ -160,7 +171,7 @@ class UkTrackPackTests(unittest.TestCase):
         preceding corner meets the pit straight, where heading changes fastest and the
         direction check is least reliable.
         """
-        manifest = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+        manifest = json.loads(UK_MANIFEST.read_text(encoding="utf-8"))
 
         # Nothing in the shipped pack may regress to that state.
         validate_manifest(manifest)
