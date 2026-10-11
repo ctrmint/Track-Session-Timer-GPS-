@@ -318,6 +318,15 @@ geometry captured on the device itself, so wiping a distributed pack never delet
 capture. Packs are only recognised at that path: a directory is scanned only if it
 contains a `definitions` subdirectory.
 
+`<pack_id>` is a directory name the firmware does not interpret. `SdTrackStore` scans
+whatever directories it finds and takes each definition's identity from its filename, so
+**updating a card means overwriting the directory the card already uses, not adding one
+named after the new pack.** A second directory holding the same circuits does not replace
+the first, it doubles them: the same track ids twice, against a 32-entry catalog.
+`list_track_ids` counts everything it discovers and keeps only what fits, so the surplus is
+reported as truncation and those circuits are simply absent from the driver's list. The
+count on the selection screen is the only symptom, which makes this an easy mistake to ship.
+
 At boot `SdTrackStore` enumerates every pack and `catalog::TrackCatalog` parses each
 definition into a caller-owned array. Two allocations dominate and both are placed in
 PSRAM rather than internal RAM or a task stack:
