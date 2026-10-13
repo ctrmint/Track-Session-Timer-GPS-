@@ -21,6 +21,7 @@
 #include "track_timer/gnss/configure.hpp"
 #include "track_timer/gnss/i2c_transport.hpp"
 #include "track_timer/gnss/pipeline.hpp"
+#include "track_timer/ui/clock_screen.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/imu_meter.hpp"
@@ -406,6 +407,10 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     {LV_SYMBOL_PLAY, "RACE", kRuby},
     {LV_SYMBOL_CHARGE, "G-ONLY", kViolet},
     {LV_SYMBOL_GPS, "GPS ONLY", kAzure},
+    // Last, after the diagnostic. It is the mode least likely to be wanted on a track day,
+    // and the caption says where the time comes from - a clock that is an hour off BST for
+    // half the year needs that said before it is selected, not only once it is on screen.
+    {LV_SYMBOL_BELL, "CLOCK", kAmber, "GMT from GNSS"},
 };
 
 constexpr bool mode_entry_is(const ui::DeviceMode mode, const char* const label) noexcept
@@ -421,6 +426,7 @@ static_assert(mode_entry_is(ui::DeviceMode::track_day, "TRACK DAY"));
 static_assert(mode_entry_is(ui::DeviceMode::race, "RACE"));
 static_assert(mode_entry_is(ui::DeviceMode::g_only, "G-ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::gps_only, "GPS ONLY"));
+static_assert(mode_entry_is(ui::DeviceMode::clock, "CLOCK"));
 
 // Track selection has moved to the top level, so Setup keeps only what belongs there.
 constexpr ui::CarouselEntry kSetupEntries[] = {
@@ -571,6 +577,16 @@ class ScreenRouter {
         gps_only_snapshot_.observed_rate_hz = gnss_pipeline_.metrics().observed_rate_hz;
         gps_only_snapshot_.dropped_fixes = gnss_pipeline_.metrics().missed_fixes;
 
+        // Clock mode's reading, taken from the same judged fix. Kept only when the
+        // receiver vouches for it, and stamped with the fix's own arrival rather than with
+        // now_us - that stamp is what later tells the clock how stale it has become, and
+        // taking it from the current time would refresh it on every poll and so make a
+        // dead receiver look permanently live.
+        if (judged.utc.valid) {
+            clock_utc_ = judged.utc;
+            clock_utc_monotonic_us_ = judged.arrival_monotonic_us;
+        }
+
         log_gnss_progress(now_us);
 
     }
@@ -698,6 +714,11 @@ class ScreenRouter {
     // an address, since adding a device to the bus never talks to the chip.
     void log_gnss_progress(const std::int64_t now_us) noexcept
     {
+        // Before the stage gate below, not after it. The wall clock resolves on its own
+        // schedule - it can become valid while the stage has not moved for minutes - so
+        // hanging it off a stage change would mean the line usually never appeared.
+        log_clock_state();
+
         const auto& metrics = gnss_pipeline_.metrics();
         const auto stage = gnss_stage(metrics, gnss_pipeline_.has_fix());
         const auto satellites = gnss_pipeline_.last_judged().num_satellites;
@@ -843,6 +864,14 @@ class ScreenRouter {
             lv_screen_active() == gps_only_root_) {
             gps_only_->update(ui::gps_only_view(gps_only_snapshot_));
         }
+        // Same gate again, with one difference: the clock's snapshot has to be rebuilt
+        // here rather than reused from service_gnss, because what it shows depends on how
+        // long ago the reading arrived and that changes between polls. A clock refreshed
+        // only when a fix lands would stop moving the moment the receiver did.
+        if (clock_ != nullptr && clock_root_ != nullptr &&
+            lv_screen_active() == clock_root_) {
+            clock_->update(ui::clock_view(clock_snapshot()));
+        }
     }
 
     [[nodiscard]] bool build() noexcept
@@ -901,6 +930,15 @@ class ScreenRouter {
         }
         gps_only_ = new (gps_only_storage_) ui::GpsOnlyScreen(gps_only_root_);
         ui::attach_gesture_input(gps_only_root_, on_input, this);
+
+        // Clock owns the whole panel as well, and for the same reason: there is nothing on
+        // it to press, so the hold gesture still reaches the shell.
+        clock_root_ = lv_obj_create(nullptr);
+        if (clock_root_ == nullptr) {
+            return false;
+        }
+        clock_ = new (clock_storage_) ui::ClockScreen(clock_root_);
+        ui::attach_gesture_input(clock_root_, on_input, this);
 
         // A receiver that is not fitted is not an error: the device runs as a timer, and
         // GPS Only says so in words rather than in zeroes.
@@ -1135,6 +1173,9 @@ class ScreenRouter {
         case ui::DeviceMode::gps_only:
             trackday_->set_mode_note("GPS ONLY  -  receiver diagnosis, not timing");
             break;
+        case ui::DeviceMode::clock:
+            trackday_->set_mode_note("CLOCK  -  GMT from the receiver");
+            break;
         }
     }
 
@@ -1152,11 +1193,50 @@ class ScreenRouter {
             return radar_root_;
         case ui::DeviceMode::gps_only:
             return gps_only_root_;
+        case ui::DeviceMode::clock:
+            return clock_root_;
         case ui::DeviceMode::track_day:
         case ui::DeviceMode::race:
             break;
         }
         return screen_for(ui::Destination::ready);
+    }
+
+    // One line each time the wall clock changes state, and the time once it has one.
+    //
+    // Clock mode draws only while it is the active screen, which makes the panel useless
+    // as evidence that the time is being decoded at all: it could be resolved and correct
+    // the whole time a different mode is showing. This is the channel that can say so,
+    // and it is also the only way to check the reading against an independent clock
+    // without reading it off the glass.
+    void log_clock_state() noexcept
+    {
+        const auto snapshot = clock_snapshot();
+        const auto state = ui::clock_state(snapshot);
+        if (state == logged_clock_state_) {
+            return;
+        }
+        logged_clock_state_ = state;
+        const auto view = ui::clock_view(snapshot);
+        ESP_LOGI("track_timer", "clock: %s (%s:%s gmt, %s)",
+                 ui::clock_state_name(state), view.time.data(), view.seconds.data(),
+                 view.date[0] != '\0' ? view.date.data() : "no date");
+    }
+
+    // Rebuilt on every render rather than cached, because two of its four fields are about
+    // *now*: how old the reading is decides both which digits are shown and whether the
+    // clock still calls itself live.
+    [[nodiscard]] ui::ClockSnapshot clock_snapshot() const noexcept
+    {
+        ui::ClockSnapshot snapshot{};
+        snapshot.utc = clock_utc_;
+        snapshot.receiver_present = gps_only_snapshot_.receiver_present;
+        // The arrival of the fix this reading came from, carried through from the
+        // validator. It is on the same monotonic clock as esp_timer_get_time, which is the
+        // only reason subtracting one from the other means anything.
+        snapshot.utc_monotonic_us = clock_utc_monotonic_us_;
+        snapshot.now_monotonic_us = esp_timer_get_time();
+        return snapshot;
     }
 
     // The dashboard reflects what is actually loaded, so the driver can confirm the
@@ -1893,6 +1973,21 @@ class ScreenRouter {
     // Nothing writes this yet: there is no GNSS transport on the device. It reads as "no
     // receiver", which is the truth, and becomes live when the pipeline lands.
     ui::GpsOnlySnapshot gps_only_snapshot_{};
+    ui::ClockScreen* clock_{nullptr};
+    lv_obj_t* clock_root_{nullptr};
+    // The last wall clock the receiver vouched for, and when it arrived.
+    //
+    // Retained here rather than read from the pipeline on demand, because the clock has to
+    // outlive the fix that carried it: a receiver that resolves the time and then goes
+    // quiet is exactly the case Clock mode's holding state exists for, and the pipeline's
+    // last judged fix is cleared on reset.
+    domain::UtcTime clock_utc_{};
+    // Paired with clock_utc_, and the reason the pair is kept rather than the reading
+    // alone: the age that decides live-versus-holding has to be the age of *this* reading.
+    // Taking it from the newest fix instead would leave a receiver that still sends fixes
+    // but has stopped resolving the time looking live while showing a frozen clock.
+    std::int64_t clock_utc_monotonic_us_{domain::kUnavailableTime};
+    ui::ClockState logged_clock_state_{ui::ClockState::no_receiver};
     gnss::GnssTransport* gnss_transport_{nullptr};
     gnss::GnssPipeline gnss_pipeline_{};
     gnss::GnssConfigurationReport gnss_configuration_{};
@@ -1948,6 +2043,7 @@ class ScreenRouter {
     alignas(ui::CarouselScreen) std::byte carousel_storage_[sizeof(ui::CarouselScreen)]{};
     alignas(ui::GRadarScreen) std::byte radar_storage_[sizeof(ui::GRadarScreen)]{};
     alignas(ui::GpsOnlyScreen) std::byte gps_only_storage_[sizeof(ui::GpsOnlyScreen)]{};
+    alignas(ui::ClockScreen) std::byte clock_storage_[sizeof(ui::ClockScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
     alignas(ui::TimeRollerScreen) std::byte
         roller_storage_[sizeof(ui::TimeRollerScreen)]{};

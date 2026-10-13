@@ -56,6 +56,7 @@ add_library(
     ../firmware/components/ui/active_session.cpp
     ../firmware/components/ui/foundation.cpp
     ../firmware/components/ui/gate_capture.cpp
+    ../firmware/components/ui/clock.cpp
     ../firmware/components/ui/gps_only.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
@@ -119,6 +120,7 @@ add_library(
     ../firmware/components/ui/gesture_input.cpp
     ../firmware/components/ui/gate_capture_screen.cpp
     ../firmware/components/ui/g_meter_screen.cpp
+    ../firmware/components/ui/clock_screen.cpp
     ../firmware/components/ui/gps_only_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     src/host_timer_font.cpp

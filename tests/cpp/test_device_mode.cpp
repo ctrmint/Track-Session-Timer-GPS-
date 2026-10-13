@@ -23,7 +23,8 @@ settings::DeviceSettings base()
 void every_mode_round_trips_through_settings()
 {
     for (const auto mode : {ui::DeviceMode::track_day, ui::DeviceMode::race,
-                            ui::DeviceMode::g_only, ui::DeviceMode::gps_only}) {
+                            ui::DeviceMode::g_only, ui::DeviceMode::gps_only,
+                            ui::DeviceMode::clock}) {
         auto settings = base();
         ui::apply_mode(mode, settings);
         assert(ui::mode_from_settings(settings) == mode);
@@ -48,6 +49,10 @@ void modes_map_onto_the_existing_settings_fields()
     ui::apply_mode(ui::DeviceMode::gps_only, settings);
     assert(settings.operating_mode == settings::OperatingMode::gps_only);
     assert(!settings.trackday_mode_enabled);
+
+    ui::apply_mode(ui::DeviceMode::clock, settings);
+    assert(settings.operating_mode == settings::OperatingMode::clock);
+    assert(!settings.trackday_mode_enabled);
 }
 
 // The combinations the UI never writes still have to resolve to something definite.
@@ -60,6 +65,9 @@ void the_operating_mode_wins_over_a_stale_trackday_flag()
 
     settings.operating_mode = settings::OperatingMode::gps_only;
     assert(ui::mode_from_settings(settings) == ui::DeviceMode::gps_only);
+
+    settings.operating_mode = settings::OperatingMode::clock;
+    assert(ui::mode_from_settings(settings) == ui::DeviceMode::clock);
 }
 
 // A debug view of the receiver and nothing else. A session timer here would invite using
@@ -76,6 +84,20 @@ void gps_only_shows_receiver_data_and_nothing_else()
 
 // Every mode has to be namable and labellable, or the carousel and the boot log can
 // disagree with what is actually set.
+// A wall clock, and nothing that could be mistaken for timing a session.
+void clock_shows_the_time_and_nothing_else()
+{
+    const auto visibility = ui::visibility_for(ui::DeviceMode::clock);
+    // Set because the mode reads the receiver, not because it shows a position: the flag
+    // is about where the data comes from, which is what the router needs in order to keep
+    // polling while this mode is on screen.
+    assert(visibility.gnss_data);
+    assert(!visibility.session_timer);
+    assert(!visibility.lap_times);
+    assert(!visibility.lap_delta);
+    assert(!visibility.g_meter);
+}
+
 void every_mode_has_a_name_a_label_and_a_summary()
 {
     for (std::size_t index = 0; index < ui::kDeviceModeCount; ++index) {
@@ -205,6 +227,7 @@ int main()
     modes_map_onto_the_existing_settings_fields();
     the_operating_mode_wins_over_a_stale_trackday_flag();
     gps_only_shows_receiver_data_and_nothing_else();
+    clock_shows_the_time_and_nothing_else();
     every_mode_has_a_name_a_label_and_a_summary();
     track_day_shows_the_timer_only();
     race_shows_laps_delta_and_remaining();

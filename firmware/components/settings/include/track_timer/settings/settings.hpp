@@ -18,6 +18,9 @@ enum class OperatingMode : std::uint8_t {
     // every value already written to NVS keeps its meaning, which is why adding it needs
     // no format version bump and no migration - only a wider validation bound.
     gps_only,
+    // A wall clock from the receiver's own UTC time. Appended for the same reason, and
+    // the same two consequences: no migration, one wider bound in valid_settings.
+    clock,
 };
 
 enum class OrientationMode : std::uint8_t {

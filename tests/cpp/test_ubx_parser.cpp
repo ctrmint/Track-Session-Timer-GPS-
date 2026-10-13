@@ -20,6 +20,13 @@ void put_u32(std::vector<std::uint8_t>& out, const std::size_t offset,
     out[offset + 3] = static_cast<std::uint8_t>((value >> 24U) & 0xFFU);
 }
 
+void put_u16(std::vector<std::uint8_t>& out, const std::size_t offset,
+             const std::uint16_t value)
+{
+    out[offset] = static_cast<std::uint8_t>(value & 0xFFU);
+    out[offset + 1] = static_cast<std::uint8_t>(value >> 8U & 0xFFU);
+}
+
 void put_i32(std::vector<std::uint8_t>& out, const std::size_t offset,
              const std::int32_t value)
 {
@@ -60,6 +67,12 @@ std::vector<std::uint8_t> nav_pvt_payload()
 {
     std::vector<std::uint8_t> payload(gnss::kNavPvtLength, 0);
     put_u32(payload, 0, 123'456'789);        // iTOW ms
+    put_u16(payload, 4, 2026);               // UTC year
+    payload[6] = 10;                         // month
+    payload[7] = 13;                         // day
+    payload[8] = 14;                         // hour, already 24-hour
+    payload[9] = 32;                         // minute
+    payload[10] = 7;                         // second
     payload[11] = 0x07;                      // validDate | validTime | fullyResolved
     // The UTC second's fractional part. Large and negative, because that is what breaks
     // monotonicity if it is ever folded into iTOW, and small values hid this for a long time.
@@ -136,9 +149,89 @@ void a_valid_fix_is_framed_and_decoded()
     assert((fix.valid_flags & 0xFFU) == 0x07U);
     assert(((fix.valid_flags >> 8U) & 0xFFU) == 0x01U);
 
+    // The same message's wall clock, which is a different quantity from the measurement
+    // stamp above and must not be confused with it: iTOW has no date and is ahead of UTC
+    // by the leap-second count, while this is the receiver's own corrected calendar time.
+    assert(fix.utc.valid);
+    assert(fix.utc.year == 2026 && fix.utc.month == 10 && fix.utc.day == 13);
+    assert(fix.utc.hour == 14 && fix.utc.minute == 32 && fix.utc.second == 7);
+    // The field whose misreading was #193, now in the one place that wants it.
+    assert(fix.utc.nanosecond == -500'000'000);
+
     assert(parser.counters().frames == 1);
     assert(parser.counters().checksum_errors == 0);
     assert(parser.counters().discarded_bytes == 0);
+}
+
+// The receiver signals an unresolved clock, and a clock readout has to believe it.
+void a_time_the_receiver_will_not_vouch_for_is_refused()
+{
+    // fullyResolved cleared: the receiver has a date and a time but may still correct the
+    // leap-second offset, so the seconds field is not yet the one it will settle on.
+    auto payload = nav_pvt_payload();
+    payload[11] = 0x03;  // validDate | validTime, without fullyResolved
+    const auto stream = frame(gnss::kClassNav, gnss::kIdNavPvt, payload);
+
+    gnss::UbxParser parser;
+    domain::GnssFix fix{};
+    for (const auto byte : stream) {
+        if (parser.consume(byte)) {
+            assert(gnss::decode_nav_pvt(parser.message(), fix));
+        }
+    }
+    assert(!fix.utc.valid);
+    // The position and the measurement stamp are unaffected. The clock's gate is stricter
+    // than the timing gate and asks a different question, so one failing must not take the
+    // other down with it.
+    assert(fix.measurement_time_ns == 123'456'789LL * 1'000'000);
+    assert(fix.num_satellites == 14);
+}
+
+void a_date_outside_the_receivers_own_range_is_refused()
+{
+    auto payload = nav_pvt_payload();
+    put_u16(payload, 4, 1980);  // before the field's documented range begins
+    const auto stream = frame(gnss::kClassNav, gnss::kIdNavPvt, payload);
+
+    gnss::UbxParser parser;
+    domain::GnssFix fix{};
+    for (const auto byte : stream) {
+        if (parser.consume(byte)) {
+            assert(gnss::decode_nav_pvt(parser.message(), fix));
+        }
+    }
+    // A checksum only proves the bytes arrived as sent, not that they mean what they
+    // claim. A clock is the one readout where a believable wrong answer is the worst
+    // outcome, so the range is checked rather than trusted.
+    assert(!fix.utc.valid);
+}
+
+void a_resolved_time_cannot_outlive_the_epoch_that_carried_it()
+{
+    const auto good = frame(gnss::kClassNav, gnss::kIdNavPvt, nav_pvt_payload());
+    auto unresolved_payload = nav_pvt_payload();
+    unresolved_payload[11] = 0x00;
+    const auto unresolved = frame(gnss::kClassNav, gnss::kIdNavPvt, unresolved_payload);
+
+    gnss::UbxParser parser;
+    // One fix reused across both epochs, which is how a caller holding a single GnssFix
+    // works. Every other field is assigned unconditionally so staleness could never arise
+    // before; the UTC block is the first that can be skipped, and a clock left showing the
+    // previous epoch's time with `valid` still set is a wrong clock that looks right.
+    domain::GnssFix fix{};
+    for (const auto byte : good) {
+        if (parser.consume(byte)) {
+            assert(gnss::decode_nav_pvt(parser.message(), fix));
+        }
+    }
+    assert(fix.utc.valid);
+    for (const auto byte : unresolved) {
+        if (parser.consume(byte)) {
+            assert(gnss::decode_nav_pvt(parser.message(), fix));
+        }
+    }
+    assert(!fix.utc.valid);
+    assert(fix.utc.hour == 0 && fix.utc.nanosecond == 0);
 }
 
 // The reason the parser is byte-at-a-time: a UART FIFO hands over whatever has arrived, while
@@ -338,6 +431,9 @@ void sustained_traffic_is_bounded()
 int main()
 {
     a_valid_fix_is_framed_and_decoded();
+    a_time_the_receiver_will_not_vouch_for_is_refused();
+    a_date_outside_the_receivers_own_range_is_refused();
+    a_resolved_time_cannot_outlive_the_epoch_that_carried_it();
     chunking_cannot_change_the_result();
     a_corrupt_frame_does_not_stall_the_next_one();
     an_oversized_length_is_refused_and_recovery_continues();
@@ -351,6 +447,6 @@ int main()
     sustained_traffic_is_bounded();
 
     std::cout << "UBX parser: framing, checksums, resynchronisation, bounded storage, "
-                 "chunk independence and NAV-PVT decoding passed\n";
+                 "chunk independence, NAV-PVT decoding and UTC wall-clock extraction passed\n";
     return 0;
 }

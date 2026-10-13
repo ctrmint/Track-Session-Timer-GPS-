@@ -12,7 +12,7 @@ Version 4 stores:
 - launch sensitivity
 - average lap time and lower-display choice
 - day and night brightness presets
-- timer/G-meter operating mode
+- operating mode (timer, G-meter, GPS Only or Clock)
 - Trackday Mode enable/disable state
 - repeating lap boundary (`START LINE` or `FINISH LINE`)
 - independent Pit Exit Auto-Start and Pit Entry Auto-Stop enable/disable states
