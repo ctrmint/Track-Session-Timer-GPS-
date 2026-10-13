@@ -287,6 +287,111 @@ void the_caller_is_given_the_chance_to_wait()
     assert(waits == static_cast<int>(gnss::kAcknowledgementPolls) * 2);
 }
 
+// A receiver already emitting NAV-PVT before anything is written to it is a receiver whose
+// stored configuration survived. That is the only way to tell, because the firmware
+// configures on every boot and a persisted receiver and a reverted one are indistinguishable
+// from the first fix onwards.
+void a_receiver_already_emitting_nav_pvt_is_recognised_without_writing_to_it()
+{
+    class AlreadyConfigured final : public gnss::GnssTransport {
+      public:
+        [[nodiscard]] std::size_t read(std::uint8_t* const output,
+                                       const std::size_t capacity) noexcept override
+        {
+            std::array<std::uint8_t, 92> payload{};
+            std::array<std::uint8_t, 128> framed{};
+            const auto length =
+                gnss::build_frame(gnss::kClassNav, gnss::kIdNavPvt, payload.data(),
+                                  static_cast<std::uint16_t>(payload.size()), framed.data(),
+                                  framed.size());
+            const auto count = length < capacity ? length : capacity;
+            for (std::size_t index = 0; index < count; ++index) {
+                output[index] = framed[index];
+            }
+            return count;
+        }
+        [[nodiscard]] bool healthy() const noexcept override { return true; }
+        [[nodiscard]] bool write(const std::uint8_t*, std::size_t) noexcept override
+        {
+            wrote = true;
+            return true;
+        }
+        bool wrote{false};
+    };
+
+    AlreadyConfigured receiver{};
+    const auto report = gnss::observe_receiver(receiver, gnss::kArrivalPolls);
+    assert(report.already_configured());
+    assert(!report.silent());
+    assert(report.nav_pvt == 1);  // stops as soon as the question is answered
+    // The whole point is that this observes without configuring.
+    assert(!receiver.wrote);
+}
+
+// The factory default emits NMEA, which produces bytes and no frames. That is a receiver
+// that reverted, and it must not be confused with one that is still starting up and has not
+// said anything yet - the second is not an answer.
+void nmea_only_and_silence_are_different_answers()
+{
+    class Nmea final : public gnss::GnssTransport {
+      public:
+        [[nodiscard]] std::size_t read(std::uint8_t* const output,
+                                       const std::size_t capacity) noexcept override
+        {
+            const char* const sentence = "$GNRMC,123519,A,4807.038,N,01131.000,E,0.0,,230394,,,A*6A\r\n";
+            std::size_t index = 0;
+            for (const char* cursor = sentence; *cursor != '\0' && index < capacity; ++cursor) {
+                output[index++] = static_cast<std::uint8_t>(*cursor);
+            }
+            return index;
+        }
+        [[nodiscard]] bool healthy() const noexcept override { return true; }
+    };
+
+    class Silent final : public gnss::GnssTransport {
+      public:
+        [[nodiscard]] std::size_t read(std::uint8_t*, std::size_t) noexcept override { return 0; }
+        [[nodiscard]] bool healthy() const noexcept override { return true; }
+    };
+
+    Nmea nmea{};
+    const auto reverted = gnss::observe_receiver(nmea, 4);
+    assert(!reverted.silent());            // it is talking
+    assert(!reverted.already_configured()); // but not in UBX
+    assert(reverted.nav_pvt == 0);
+    assert(reverted.bytes > 0);
+
+    Silent silent{};
+    const auto nothing = gnss::observe_receiver(silent, 4);
+    assert(nothing.silent());
+    assert(!nothing.already_configured());
+    assert(nothing.bytes == 0);
+}
+
+// An absent receiver must not cost a boot delay. The I2C driver accepts the address whether
+// or not anything is on the bus, so "no receiver attached" presents as failing reads rather
+// than as an error - and that is the ordinary development case, paid on every boot.
+void an_absent_receiver_does_not_cost_the_whole_window()
+{
+    class Absent final : public gnss::GnssTransport {
+      public:
+        [[nodiscard]] std::size_t read(std::uint8_t*, std::size_t) noexcept override
+        {
+            ++reads;
+            return 0;
+        }
+        [[nodiscard]] bool healthy() const noexcept override { return false; }
+        std::uint32_t reads{0};
+    };
+
+    Absent receiver{};
+    const auto report = gnss::observe_receiver(receiver, gnss::kArrivalPolls);
+    assert(report.silent());
+    assert(!report.already_configured());
+    // One read, then the unhealthy bus ends it - not 120.
+    assert(receiver.reads == 1);
+}
+
 }  // namespace
 
 int main()
@@ -300,6 +405,9 @@ int main()
     a_refusal_a_silence_and_an_unwritable_transport_are_three_different_answers();
     a_refusal_outranks_an_acknowledgement();
     the_caller_is_given_the_chance_to_wait();
+    a_receiver_already_emitting_nav_pvt_is_recognised_without_writing_to_it();
+    nmea_only_and_silence_are_different_answers();
+    an_absent_receiver_does_not_cost_the_whole_window();
 
     std::cout << "GNSS configuration: CFG-VALSET keys written at their declared widths, "
                  "persisted beyond RAM, and acknowledged rather than assumed\n";

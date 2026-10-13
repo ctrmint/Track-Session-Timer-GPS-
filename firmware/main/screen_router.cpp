@@ -589,6 +589,35 @@ class ScreenRouter {
         if (gnss_transport_ == nullptr) {
             return;
         }
+        // What the receiver arrived as, before anything is written to it. This is the only
+        // moment the question can be asked: configuration runs on every boot, so a receiver
+        // whose stored settings survived and one that reverted to its factory default are
+        // indistinguishable from the first fix onwards.
+        const auto arrival = gnss::observe_receiver(
+            *gnss_transport_, gnss::kArrivalPolls,
+            [](void*) { vTaskDelay(pdMS_TO_TICKS(gnss::kAcknowledgementPollIntervalMs)); },
+            nullptr);
+        if (arrival.already_configured()) {
+            ESP_LOGI("track_timer",
+                     "gnss: receiver arrived already configured - nav-pvt in %u bytes, so its "
+                     "stored configuration survived power",
+                     static_cast<unsigned>(arrival.bytes));
+        }
+        else if (arrival.silent()) {
+            // Not an answer either way, and said so rather than guessed at: a receiver still
+            // starting up has not yet revealed what it was configured with.
+            ESP_LOGI("track_timer",
+                     "gnss: receiver said nothing before configuration, so what it had stored "
+                     "is unknown");
+        }
+        else {
+            ESP_LOGW("track_timer",
+                     "gnss: receiver arrived unconfigured - %u bytes and %u ubx frames, so it "
+                     "is in its factory default and did not retain settings",
+                     static_cast<unsigned>(arrival.bytes),
+                     static_cast<unsigned>(arrival.frames));
+        }
+
         gnss::GnssConfigurationRequest request{};
         // 20 Hz first. #16 asks for 25 Hz only once this is stable, and the pipeline's gap
         // detection measures loss against the rate it was told to expect, so the two have

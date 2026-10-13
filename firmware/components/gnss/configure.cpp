@@ -99,6 +99,46 @@ struct AcknowledgementSearch {
 
 }  // namespace
 
+ReceiverArrivalReport observe_receiver(GnssTransport& transport, const std::uint32_t polls,
+                                       const WaitForReply wait, void* const wait_context) noexcept
+{
+    ReceiverArrivalReport report{};
+    UbxParser parser{};
+    std::array<std::uint8_t, 256> buffer{};
+
+    for (std::uint32_t poll = 0; poll < polls; ++poll) {
+        if (wait != nullptr) {
+            wait(wait_context);
+        }
+        const auto read = transport.read(buffer.data(), buffer.size());
+        report.bytes += static_cast<std::uint32_t>(read);
+        for (std::size_t index = 0; index < read; ++index) {
+            if (!parser.consume(buffer[index])) {
+                continue;
+            }
+            ++report.frames;
+            const auto message = parser.message();
+            if (message.message_class == kClassNav && message.message_id == kIdNavPvt) {
+                ++report.nav_pvt;
+            }
+        }
+        // Stop as soon as the question is answered. A receiver that is already configured
+        // says so within an epoch or two, and spending the whole window on it would delay
+        // every boot for an answer already in hand.
+        if (report.nav_pvt > 0) {
+            break;
+        }
+        // Nothing to wait for if the bus itself is failing, which is what an absent receiver
+        // looks like: the I2C driver accepts the address regardless, so without this the
+        // common development case - no receiver attached - would spend the whole window
+        // waiting for a reply from a device that is not there, and pay it on every boot.
+        if (!transport.healthy()) {
+            break;
+        }
+    }
+    return report;
+}
+
 std::size_t build_valset_payload(const GnssConfigurationRequest& request,
                                  std::uint8_t* const output, const std::size_t capacity) noexcept
 {

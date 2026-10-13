@@ -81,6 +81,39 @@ struct GnssConfigurationReport {
 // the wire and the reply has arrived. Null means do not wait.
 using WaitForReply = void (*)(void* context);
 
+// What the receiver was already emitting before anything was written to it.
+//
+// This is the only way to tell whether a stored configuration survived. The firmware
+// configures the receiver on every boot, which makes a device that persisted its settings
+// and one that reverted to defaults behave identically from the first fix onwards - so
+// "written to flash and acknowledged" cannot be upgraded to "observed to persist" without
+// looking before writing.
+//
+// It also matters beyond verification: a receiver that loses power independently of the
+// board comes back in its factory default, and nothing can handle a reconnect it cannot
+// detect.
+struct ReceiverArrivalReport {
+    std::uint32_t bytes{0};
+    std::uint32_t frames{0};
+    std::uint32_t nav_pvt{0};
+    // True when the receiver said nothing at all in the window, which is neither of the
+    // interesting answers: a receiver still starting up has not yet revealed its
+    // configuration, and reporting that as "arrived in defaults" would be a guess.
+    [[nodiscard]] bool silent() const noexcept { return bytes == 0; }
+    // NAV-PVT before anything was written means the stored configuration is still in force.
+    [[nodiscard]] bool already_configured() const noexcept { return nav_pvt > 0; }
+};
+
+// Listens to the receiver without writing to it.
+[[nodiscard]] ReceiverArrivalReport observe_receiver(GnssTransport& transport,
+                                                     std::uint32_t polls,
+                                                     WaitForReply wait = nullptr,
+                                                     void* wait_context = nullptr) noexcept;
+
+// Long enough for a receiver emitting at 1 Hz - the factory NMEA default - to say something,
+// since a shorter window would report a healthy default-configured receiver as silent.
+inline constexpr std::uint32_t kArrivalPolls = 120;
+
 // Configures the receiver and reports whether it agreed. Never blocks indefinitely: the
 // acknowledgement search is bounded, so a receiver that says nothing costs a known delay
 // once at startup rather than a stalled boot.

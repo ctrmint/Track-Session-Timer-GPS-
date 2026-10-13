@@ -8,6 +8,15 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- the firmware reports what the receiver arrived as, before writing anything to it. This is
+  the only moment the question can be asked: configuration runs on every boot, so a receiver
+  whose stored settings survived and one that reverted to its factory default behave
+  identically from the first fix onwards, and "written to flash and acknowledged" cannot
+  become "observed to persist" without looking first. It also matters beyond verification -
+  a receiver that loses power independently of the board comes back in its default, and
+  nothing can handle a reconnect it cannot detect. Three answers, including "said nothing",
+  which is not an answer and is reported as such rather than guessed at
+
 - the firmware configures the receiver at boot and confirms it agreed. A NEO-M9N in its
   factory default emits NMEA, which this firmware does not parse, so the device read a
   healthy receiver and understood none of it. `UBX-CFG-VALSET` now enables UBX NAV-PVT on
