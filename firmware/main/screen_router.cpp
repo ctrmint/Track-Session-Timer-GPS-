@@ -589,6 +589,40 @@ class ScreenRouter {
         if (gnss_transport_ == nullptr) {
             return;
         }
+        // What the receiver arrived as, before anything is written to it. This is the only
+        // moment the question can be asked: configuration runs on every boot, so a receiver
+        // whose stored settings survived and one that reverted to its factory default are
+        // indistinguishable from the first fix onwards.
+        const auto arrival = gnss::observe_receiver(
+            *gnss_transport_, gnss::kArrivalPolls,
+            [](void*) { vTaskDelay(pdMS_TO_TICKS(gnss::kAcknowledgementPollIntervalMs)); },
+            nullptr);
+        if (arrival.already_configured()) {
+            // Deliberately does not claim this proves persistence. On a chip reset the
+            // receiver never lost power, so it would be emitting NAV-PVT here even if the
+            // configuration were only in RAM. It is evidence of persistence only across a
+            // real power cycle, and that boot's log cannot be captured (#181) - which is why
+            // the stored configuration is read back below instead.
+            ESP_LOGI("track_timer",
+                     "gnss: receiver was already emitting nav-pvt unprompted (%u bytes), so it "
+                     "did not need configuring",
+                     static_cast<unsigned>(arrival.bytes));
+        }
+        else if (arrival.silent()) {
+            // Not an answer either way, and said so rather than guessed at: a receiver still
+            // starting up has not yet revealed what it was configured with.
+            ESP_LOGI("track_timer",
+                     "gnss: receiver said nothing before configuration, so what it had stored "
+                     "is unknown");
+        }
+        else {
+            ESP_LOGW("track_timer",
+                     "gnss: receiver arrived unconfigured - %u bytes and %u ubx frames, so it "
+                     "is in its factory default and did not retain settings",
+                     static_cast<unsigned>(arrival.bytes),
+                     static_cast<unsigned>(arrival.frames));
+        }
+
         gnss::GnssConfigurationRequest request{};
         // 20 Hz first. #16 asks for 25 Hz only once this is stable, and the pipeline's gap
         // detection measures loss against the rate it was told to expect, so the two have
@@ -622,6 +656,37 @@ class ScreenRouter {
                      static_cast<unsigned>(report.acks), static_cast<unsigned>(report.naks),
                      static_cast<unsigned>(report.frames_seen),
                      static_cast<unsigned>(report.bytes_read));
+        }
+
+        // What the receiver has in the layer that outlives power, read back rather than
+        // inferred from the acknowledgement. An ACK says the write was accepted; this says
+        // the value is there. It is the only way to make the claim without the log from a
+        // power-on boot, which is the one boot this hardware cannot capture (#181).
+        const auto stored = gnss::read_stored_configuration(
+            *gnss_transport_, gnss::ConfigurationLayer::flash,
+            [](void*) { vTaskDelay(pdMS_TO_TICKS(gnss::kAcknowledgementPollIntervalMs)); },
+            nullptr);
+        if (!stored.answered) {
+            ESP_LOGW("track_timer",
+                     "gnss: the receiver did not report its stored configuration, so whether "
+                     "it survives a power cycle is unknown");
+        }
+        else if (stored.nav_pvt_enabled && stored.nmea_silenced) {
+            ESP_LOGI("track_timer",
+                     "gnss: stored in flash - nav-pvt on, nmea off, %u ms (%u keys), so this "
+                     "survives a power cycle",
+                     static_cast<unsigned>(stored.measurement_period_ms),
+                     static_cast<unsigned>(stored.keys_returned));
+        }
+        else {
+            // The configuration is live but only in volatile memory: it works now and the
+            // device comes up unconfigured in the car.
+            ESP_LOGW("track_timer",
+                     "gnss: flash holds nav-pvt %s, nmea %s, %u ms - this will NOT survive a "
+                     "power cycle",
+                     stored.nav_pvt_enabled ? "on" : "off",
+                     stored.nmea_silenced ? "off" : "on",
+                     static_cast<unsigned>(stored.measurement_period_ms));
         }
     }
 

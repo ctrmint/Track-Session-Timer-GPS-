@@ -81,6 +81,77 @@ struct GnssConfigurationReport {
 // the wire and the reply has arrived. Null means do not wait.
 using WaitForReply = void (*)(void* context);
 
+// Which copy of a setting to read. These are layer *numbers* for CFG-VALGET, not the
+// bitmask CFG-VALSET writes with, and the difference is easy to miss: VALSET takes a mask
+// because it writes several at once, VALGET takes one number because a value can differ
+// between layers and a read has to say which it means.
+enum class ConfigurationLayer : std::uint8_t {
+    ram = 0,
+    battery_backed = 1,
+    flash = 2,
+    factory_default = 7,
+};
+
+// What the receiver says it has stored, read back rather than inferred.
+//
+// This is what settles whether a configuration survives being unplugged. Observing it any
+// other way needs the log from a power-on boot, and that is the one boot this hardware
+// cannot capture: the USB device is inside the chip, so cutting power destroys the port a
+// listener would be holding (#181). Asking the receiver what is in its flash needs no power
+// cycle and no listener, and is a stronger claim than an acknowledgement - an ACK says the
+// write was accepted, this says the value is there.
+struct StoredConfiguration {
+    bool answered{false};  // false means the receiver did not reply at all
+    bool nav_pvt_enabled{false};
+    bool nmea_silenced{false};
+    std::uint16_t measurement_period_ms{0};
+    std::uint32_t keys_returned{0};
+};
+
+// Reads the settings this firmware writes, from one layer.
+[[nodiscard]] StoredConfiguration read_stored_configuration(GnssTransport& transport,
+                                                            ConfigurationLayer layer,
+                                                            WaitForReply wait = nullptr,
+                                                            void* wait_context = nullptr) noexcept;
+
+// What the receiver was already emitting before anything was written to it.
+//
+// This is the only way to tell whether a stored configuration survived. The firmware
+// configures the receiver on every boot, which makes a device that persisted its settings
+// and one that reverted to defaults behave identically from the first fix onwards - so
+// "written to flash and acknowledged" cannot be upgraded to "observed to persist" without
+// looking before writing.
+//
+// It also matters beyond verification: a receiver that loses power independently of the
+// board comes back in its factory default, and nothing can handle a reconnect it cannot
+// detect.
+struct ReceiverArrivalReport {
+    std::uint32_t bytes{0};
+    std::uint32_t frames{0};
+    std::uint32_t nav_pvt{0};
+    // True when the receiver said nothing at all in the window, which is neither of the
+    // interesting answers: a receiver still starting up has not yet revealed its
+    // configuration, and reporting that as "arrived in defaults" would be a guess.
+    [[nodiscard]] bool silent() const noexcept { return bytes == 0; }
+    // NAV-PVT before anything was written means the receiver did not need configuring.
+    //
+    // Not by itself proof that a configuration persisted: across a chip reset the receiver
+    // never lost power, so a RAM-only setting would look identical. It is evidence only
+    // across a real power cycle, whose log this hardware cannot capture (#181), which is
+    // what read_stored_configuration is for.
+    [[nodiscard]] bool already_configured() const noexcept { return nav_pvt > 0; }
+};
+
+// Listens to the receiver without writing to it.
+[[nodiscard]] ReceiverArrivalReport observe_receiver(GnssTransport& transport,
+                                                     std::uint32_t polls,
+                                                     WaitForReply wait = nullptr,
+                                                     void* wait_context = nullptr) noexcept;
+
+// Long enough for a receiver emitting at 1 Hz - the factory NMEA default - to say something,
+// since a shorter window would report a healthy default-configured receiver as silent.
+inline constexpr std::uint32_t kArrivalPolls = 120;
+
 // Configures the receiver and reports whether it agreed. Never blocks indefinitely: the
 // acknowledgement search is bounded, so a receiver that says nothing costs a known delay
 // once at startup rather than a stalled boot.
