@@ -392,6 +392,105 @@ void an_absent_receiver_does_not_cost_the_whole_window()
     assert(receiver.reads == 1);
 }
 
+// Reading back what the receiver has stored is the only way to claim a configuration
+// survives being unplugged. An acknowledgement says a write was accepted; this says the
+// value is actually there, in the layer that outlives power.
+void the_stored_configuration_is_read_back_from_the_layer_asked_for()
+{
+    class Storing final : public gnss::GnssTransport {
+      public:
+        [[nodiscard]] std::size_t read(std::uint8_t* const output,
+                                       const std::size_t capacity) noexcept override
+        {
+            const auto count = pending_.size() < capacity ? pending_.size() : capacity;
+            for (std::size_t index = 0; index < count; ++index) {
+                output[index] = pending_[index];
+            }
+            pending_.erase(pending_.begin(),
+                           pending_.begin() + static_cast<std::ptrdiff_t>(count));
+            return count;
+        }
+        [[nodiscard]] bool healthy() const noexcept override { return true; }
+
+        [[nodiscard]] bool write(const std::uint8_t* const data,
+                                 const std::size_t length) noexcept override
+        {
+            // Only answer a VALGET, and remember which layer was asked for.
+            if (length < 8 || data[2] != gnss::kClassCfg || data[3] != gnss::kIdCfgValget) {
+                return true;
+            }
+            layer_asked = data[6 + 1];
+
+            // version 1 marks a reply, then the key-value pairs in any order.
+            std::vector<std::uint8_t> payload{0x01, layer_asked, 0x00, 0x00};
+            const auto append_key = [&payload](const std::uint32_t key) {
+                payload.push_back(static_cast<std::uint8_t>(key & 0xFFU));
+                payload.push_back(static_cast<std::uint8_t>((key >> 8U) & 0xFFU));
+                payload.push_back(static_cast<std::uint8_t>((key >> 16U) & 0xFFU));
+                payload.push_back(static_cast<std::uint8_t>((key >> 24U) & 0xFFU));
+            };
+            append_key(gnss::kKeyRateMeas);      // two bytes wide
+            payload.push_back(50);
+            payload.push_back(0);
+            append_key(gnss::kKeyMsgOutNavPvtI2c);  // one byte
+            payload.push_back(1);
+            append_key(gnss::kKeyI2cOutProtNmea);   // one byte, zero means silenced
+            payload.push_back(0);
+
+            std::array<std::uint8_t, 128> framed{};
+            const auto framed_length = gnss::build_frame(
+                gnss::kClassCfg, gnss::kIdCfgValget, payload.data(),
+                static_cast<std::uint16_t>(payload.size()), framed.data(), framed.size());
+            pending_.insert(pending_.end(), framed.begin(),
+                            framed.begin() + static_cast<std::ptrdiff_t>(framed_length));
+            return true;
+        }
+
+        std::uint8_t layer_asked{0xFF};
+
+      private:
+        std::vector<std::uint8_t> pending_{};
+    };
+
+    Storing receiver{};
+    const auto stored = gnss::read_stored_configuration(receiver, gnss::ConfigurationLayer::flash);
+    assert(stored.answered);
+    // The layer is a number here, not the bitmask VALSET writes with. Flash is 2, and
+    // sending the mask value 4 by mistake would ask for a layer that does not exist.
+    assert(receiver.layer_asked == 2);
+    assert(stored.nav_pvt_enabled);
+    assert(stored.nmea_silenced);
+    assert(stored.measurement_period_ms == 50);
+    // All three walked, which is what proves the widths were taken from the keys: getting
+    // one wrong puts the walk out of step and the later keys are read from inside a value.
+    assert(stored.keys_returned == 3);
+}
+
+// A receiver that says nothing must not read as a receiver with nothing stored. The first is
+// unknown; the second is a configuration that will not survive a power cycle, and reporting
+// one as the other is exactly the confusion this read-back exists to remove.
+void a_silent_receiver_is_not_a_receiver_with_an_empty_configuration()
+{
+    class Mute final : public gnss::GnssTransport {
+      public:
+        [[nodiscard]] std::size_t read(std::uint8_t*, std::size_t) noexcept override { return 0; }
+        [[nodiscard]] bool healthy() const noexcept override { return true; }
+        [[nodiscard]] bool write(const std::uint8_t*, std::size_t) noexcept override
+        {
+            return true;
+        }
+    };
+
+    Mute receiver{};
+    const auto stored = gnss::read_stored_configuration(receiver, gnss::ConfigurationLayer::flash);
+    assert(!stored.answered);
+    assert(stored.keys_returned == 0);
+    // The defaults must be the pessimistic ones, so a caller that ignores `answered` cannot
+    // accidentally conclude the receiver is configured.
+    assert(!stored.nav_pvt_enabled);
+    assert(stored.measurement_period_ms == 0);
+}
+
 }  // namespace
 
 int main()
@@ -408,6 +507,8 @@ int main()
     a_receiver_already_emitting_nav_pvt_is_recognised_without_writing_to_it();
     nmea_only_and_silence_are_different_answers();
     an_absent_receiver_does_not_cost_the_whole_window();
+    the_stored_configuration_is_read_back_from_the_layer_asked_for();
+    a_silent_receiver_is_not_a_receiver_with_an_empty_configuration();
 
     std::cout << "GNSS configuration: CFG-VALSET keys written at their declared widths, "
                  "persisted beyond RAM, and acknowledged rather than assumed\n";

@@ -81,6 +81,39 @@ struct GnssConfigurationReport {
 // the wire and the reply has arrived. Null means do not wait.
 using WaitForReply = void (*)(void* context);
 
+// Which copy of a setting to read. These are layer *numbers* for CFG-VALGET, not the
+// bitmask CFG-VALSET writes with, and the difference is easy to miss: VALSET takes a mask
+// because it writes several at once, VALGET takes one number because a value can differ
+// between layers and a read has to say which it means.
+enum class ConfigurationLayer : std::uint8_t {
+    ram = 0,
+    battery_backed = 1,
+    flash = 2,
+    factory_default = 7,
+};
+
+// What the receiver says it has stored, read back rather than inferred.
+//
+// This is what settles whether a configuration survives being unplugged. Observing it any
+// other way needs the log from a power-on boot, and that is the one boot this hardware
+// cannot capture: the USB device is inside the chip, so cutting power destroys the port a
+// listener would be holding (#181). Asking the receiver what is in its flash needs no power
+// cycle and no listener, and is a stronger claim than an acknowledgement - an ACK says the
+// write was accepted, this says the value is there.
+struct StoredConfiguration {
+    bool answered{false};  // false means the receiver did not reply at all
+    bool nav_pvt_enabled{false};
+    bool nmea_silenced{false};
+    std::uint16_t measurement_period_ms{0};
+    std::uint32_t keys_returned{0};
+};
+
+// Reads the settings this firmware writes, from one layer.
+[[nodiscard]] StoredConfiguration read_stored_configuration(GnssTransport& transport,
+                                                            ConfigurationLayer layer,
+                                                            WaitForReply wait = nullptr,
+                                                            void* wait_context = nullptr) noexcept;
+
 // What the receiver was already emitting before anything was written to it.
 //
 // This is the only way to tell whether a stored configuration survived. The firmware
@@ -100,7 +133,12 @@ struct ReceiverArrivalReport {
     // interesting answers: a receiver still starting up has not yet revealed its
     // configuration, and reporting that as "arrived in defaults" would be a guess.
     [[nodiscard]] bool silent() const noexcept { return bytes == 0; }
-    // NAV-PVT before anything was written means the stored configuration is still in force.
+    // NAV-PVT before anything was written means the receiver did not need configuring.
+    //
+    // Not by itself proof that a configuration persisted: across a chip reset the receiver
+    // never lost power, so a RAM-only setting would look identical. It is evidence only
+    // across a real power cycle, whose log this hardware cannot capture (#181), which is
+    // what read_stored_configuration is for.
     [[nodiscard]] bool already_configured() const noexcept { return nav_pvt > 0; }
 };
 

@@ -99,6 +99,113 @@ struct AcknowledgementSearch {
 
 }  // namespace
 
+namespace {
+
+// A configuration key carries the width of its own value in bits 28-30, which is what makes
+// a VALGET reply walkable: the reply is a flat run of key-value pairs with nothing marking
+// where one ends, so the only way to find the next key is to know how wide this value is.
+[[nodiscard]] std::size_t value_width_bytes(const std::uint32_t key) noexcept
+{
+    switch ((key >> 28U) & 0x7U) {
+    case 0x1:  // one bit, carried in a whole byte
+    case 0x2:
+        return 1;
+    case 0x3:
+        return 2;
+    case 0x4:
+        return 4;
+    case 0x5:
+        return 8;
+    default:
+        return 0;  // unknown width: the reply cannot be walked past this point
+    }
+}
+
+[[nodiscard]] std::uint32_t read_u32_le(const std::uint8_t* const data) noexcept
+{
+    return static_cast<std::uint32_t>(data[0]) | static_cast<std::uint32_t>(data[1]) << 8U |
+           static_cast<std::uint32_t>(data[2]) << 16U | static_cast<std::uint32_t>(data[3]) << 24U;
+}
+
+}  // namespace
+
+StoredConfiguration read_stored_configuration(GnssTransport& transport,
+                                              const ConfigurationLayer layer,
+                                              const WaitForReply wait,
+                                              void* const wait_context) noexcept
+{
+    StoredConfiguration stored{};
+
+    // version 0, the layer to read, a two-byte position, then the keys being asked for.
+    constexpr std::array<std::uint32_t, 3> keys{kKeyMsgOutNavPvtI2c, kKeyI2cOutProtNmea,
+                                                kKeyRateMeas};
+    std::array<std::uint8_t, 4 + keys.size() * 4> payload{};
+    payload[0] = 0x00;
+    payload[1] = static_cast<std::uint8_t>(layer);
+    std::size_t offset = 4;
+    for (const auto key : keys) {
+        put_key(payload.data(), offset, key);
+    }
+
+    std::array<std::uint8_t, 64> frame{};
+    const auto frame_length =
+        build_frame(kClassCfg, kIdCfgValget, payload.data(),
+                    static_cast<std::uint16_t>(payload.size()), frame.data(), frame.size());
+    if (frame_length == 0 || !transport.write(frame.data(), frame_length)) {
+        return stored;
+    }
+
+    UbxParser parser{};
+    std::array<std::uint8_t, 256> buffer{};
+    for (std::uint32_t poll = 0; poll < kAcknowledgementPolls; ++poll) {
+        if (wait != nullptr) {
+            wait(wait_context);
+        }
+        const auto read = transport.read(buffer.data(), buffer.size());
+        for (std::size_t index = 0; index < read; ++index) {
+            if (!parser.consume(buffer[index])) {
+                continue;
+            }
+            const auto message = parser.message();
+            if (message.message_class != kClassCfg || message.message_id != kIdCfgValget ||
+                message.length < 4 || message.payload == nullptr) {
+                continue;
+            }
+            stored.answered = true;
+
+            // Walk the key-value pairs. Each value's width comes from its own key, so an
+            // unrecognised key stops the walk rather than letting it slide out of step and
+            // read the next key out of the middle of a value.
+            std::size_t cursor = 4;
+            while (cursor + 4U <= message.length) {
+                const auto key = read_u32_le(message.payload + cursor);
+                const auto width = value_width_bytes(key);
+                if (width == 0 || cursor + 4U + width > message.length) {
+                    break;
+                }
+                const auto* const value = message.payload + cursor + 4U;
+                ++stored.keys_returned;
+                if (key == kKeyMsgOutNavPvtI2c) {
+                    stored.nav_pvt_enabled = value[0] != 0;
+                }
+                else if (key == kKeyI2cOutProtNmea) {
+                    stored.nmea_silenced = value[0] == 0;
+                }
+                else if (key == kKeyRateMeas) {
+                    stored.measurement_period_ms = static_cast<std::uint16_t>(
+                        static_cast<std::uint16_t>(value[0]) |
+                        static_cast<std::uint16_t>(value[1]) << 8U);
+                }
+                cursor += 4U + width;
+            }
+        }
+        if (stored.answered) {
+            break;
+        }
+    }
+    return stored;
+}
+
 ReceiverArrivalReport observe_receiver(GnssTransport& transport, const std::uint32_t polls,
                                        const WaitForReply wait, void* const wait_context) noexcept
 {

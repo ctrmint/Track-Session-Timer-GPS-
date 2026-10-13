@@ -29,6 +29,7 @@ inline constexpr std::uint16_t kNavPvtLength = 92;
 // silence, which is why configuration is acknowledged rather than assumed.
 inline constexpr std::uint8_t kClassCfg = 0x06;
 inline constexpr std::uint8_t kIdCfgValset = 0x8A;
+inline constexpr std::uint8_t kIdCfgValget = 0x8B;
 inline constexpr std::uint8_t kClassAck = 0x05;
 inline constexpr std::uint8_t kIdAckNak = 0x00;
 inline constexpr std::uint8_t kIdAckAck = 0x01;

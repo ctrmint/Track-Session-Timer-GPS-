@@ -8,6 +8,13 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- the receiver's stored configuration is read back from its flash layer with
+  `UBX-CFG-VALGET` and reported at boot. This is what makes "survives a power cycle" an
+  observation rather than an inference: an acknowledgement says a write was accepted, a
+  read-back says the value is actually in the layer that outlives power. It also needs no
+  power cycle to establish, which matters because the log from a power-on boot is the one
+  this hardware cannot capture - the USB device is inside the chip, so cutting power destroys
+  the port a listener would be holding. Confirmed on hardware: nav-pvt on, nmea off, 50 ms
 - the firmware reports what the receiver arrived as, before writing anything to it. This is
   the only moment the question can be asked: configuration runs on every boot, so a receiver
   whose stored settings survived and one that reverted to its factory default behave
