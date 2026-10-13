@@ -70,6 +70,25 @@ std::size_t I2cGnssTransport::read(std::uint8_t* const output, const std::size_t
     return wanted;
 }
 
+bool I2cGnssTransport::write(const std::uint8_t* const data, const std::size_t length) noexcept
+{
+    if (data == nullptr || length == 0) {
+        return false;
+    }
+    ++counters_.writes;
+    // No reply: a read length of zero tells the bus this is a transmit-only transaction.
+    if (!bus_.transfer(device_address_, data, length, nullptr, 0)) {
+        // A refused write is a bus fault like any other, and is counted as one so that a
+        // receiver that cannot be configured and a receiver that cannot be read do not have
+        // to be diagnosed separately.
+        note_transfer(false);
+        return false;
+    }
+    note_transfer(true);
+    counters_.bytes_written += static_cast<std::uint32_t>(length);
+    return true;
+}
+
 bool I2cGnssTransport::healthy() const noexcept
 {
     return counters_.consecutive_bus_errors < kUnhealthyAfterConsecutiveErrors;

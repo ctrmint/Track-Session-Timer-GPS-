@@ -61,7 +61,9 @@ std::vector<std::uint8_t> nav_pvt_payload()
     std::vector<std::uint8_t> payload(gnss::kNavPvtLength, 0);
     put_u32(payload, 0, 123'456'789);        // iTOW ms
     payload[11] = 0x07;                      // validDate | validTime | fullyResolved
-    put_i32(payload, 16, -500'000);          // nano, -0.5 ms
+    // The UTC second's fractional part. Large and negative, because that is what breaks
+    // monotonicity if it is ever folded into iTOW, and small values hid this for a long time.
+    put_i32(payload, 16, -500'000'000);
     payload[20] = 3;                         // 3D fix
     payload[21] = 0x01;                      // gnssFixOK
     payload[23] = 14;                        // numSV
@@ -110,8 +112,16 @@ void a_valid_fix_is_framed_and_decoded()
 
     assert(fixes.size() == 1);
     const auto& fix = fixes.front();
-    // iTOW in ns plus the signed sub-millisecond correction.
-    assert(fix.measurement_time_ns == 123'456'789LL * 1'000'000 - 500'000);
+    // iTOW in nanoseconds, and nothing else.
+    //
+    // This assertion previously expected the payload's `nano` field to be added, which is
+    // what the decode did. Both were wrong in the same way, so the test agreed with the bug
+    // instead of catching it: `nano` is the fractional part of the UTC second in this
+    // message, not a correction to iTOW, and it ranges a full second either way. On
+    // hardware that made measurement time run backwards on valid frames.
+    //
+    // The fixture's `nano` is negative on purpose, so adding it would fail here.
+    assert(fix.measurement_time_ns == 123'456'789LL * 1'000'000);
     assert(near(fix.latitude_deg, 52.0619, 1e-7));
     assert(near(fix.longitude_deg, -1.0238, 1e-7));
     assert(near(fix.height_m, 120.5, 0.001));

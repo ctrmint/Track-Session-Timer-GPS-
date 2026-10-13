@@ -21,7 +21,10 @@ namespace {
 // Offsets within the NAV-PVT payload, from UBX-21022436 section 3.15.11.
 constexpr std::size_t kOffsetITow = 0;
 constexpr std::size_t kOffsetValid = 11;
-constexpr std::size_t kOffsetNano = 16;
+// Offset 16 is the UTC second's fractional part, not a correction to iTOW. Named so that
+// the next person to look for a sub-millisecond term finds the reason it is unused rather
+// than an unexplained gap in the offsets.
+constexpr std::size_t kOffsetUtcNanosecond [[maybe_unused]] = 16;
 constexpr std::size_t kOffsetFixType = 20;
 constexpr std::size_t kOffsetFlags = 21;
 constexpr std::size_t kOffsetNumSv = 23;
@@ -172,12 +175,29 @@ bool decode_nav_pvt(const UbxMessage& message, domain::GnssFix& fix) noexcept
     }
     const auto* payload = message.payload;
 
-    // Time of week plus the signed sub-millisecond correction. Relative durations are what lap
-    // timing needs, and both crossings use this same clock, so a week rollover cannot change a
-    // lap time computed across it.
+    // GPS time of week, and only that.
+    //
+    // The `nano` field at offset 16 is deliberately *not* added. It reads like a
+    // sub-millisecond correction to iTOW and is not one: it is the fractional part of the
+    // UTC second reported in this message's own date and time fields, and the interface
+    // description gives its range as -1e9 to +1e9 nanoseconds. iTOW already carries its own
+    // sub-second part, so adding `nano` double-counts the fraction and moves the timestamp
+    // by up to a second in either direction.
+    //
+    // That was the original reading here, and on real hardware it made measurement time run
+    // backwards: observed jumping 760 ms into the past on checksum-valid frames, which the
+    // quality gate then correctly refused as non-monotonic - about half of every epoch - and
+    // which also halved the cadence the pipeline derived from those timestamps. The receiver
+    // was emitting exactly the rate it had been configured for throughout.
+    //
+    // Host tests could not have caught it: a zero-initialised NAV-PVT payload has nano = 0,
+    // so the term was invisible until a real receiver sent a non-zero one.
+    //
+    // One known limit remains: iTOW wraps to zero at the end of the GPS week, so a lap
+    // spanning that instant has no valid duration on this clock. The quality gate refuses
+    // the backwards step rather than producing a wrong lap time.
     const auto itow_ms = static_cast<std::int64_t>(read_u32(payload + kOffsetITow));
-    const auto nano = static_cast<std::int64_t>(read_i32(payload + kOffsetNano));
-    fix.measurement_time_ns = itow_ms * 1'000'000 + nano;
+    fix.measurement_time_ns = itow_ms * 1'000'000;
 
     fix.latitude_deg = static_cast<double>(read_i32(payload + kOffsetLatitude)) * 1e-7;
     fix.longitude_deg = static_cast<double>(read_i32(payload + kOffsetLongitude)) * 1e-7;
@@ -203,6 +223,41 @@ bool decode_nav_pvt(const UbxMessage& message, domain::GnssFix& fix) noexcept
     fix.valid_flags = static_cast<std::uint32_t>(payload[kOffsetValid]) |
                       static_cast<std::uint32_t>(payload[kOffsetFlags]) << 8U;
     return true;
+}
+
+std::size_t build_frame(const std::uint8_t message_class, const std::uint8_t message_id,
+                        const std::uint8_t* const payload, const std::uint16_t payload_length,
+                        std::uint8_t* const output, const std::size_t capacity) noexcept
+{
+    // Sync pair, class, id, two length bytes, the payload, two checksum bytes.
+    const std::size_t total = 8U + static_cast<std::size_t>(payload_length);
+    if (output == nullptr || capacity < total) {
+        return 0;
+    }
+    if (payload_length > 0 && payload == nullptr) {
+        return 0;
+    }
+
+    output[0] = kSyncChar1;
+    output[1] = kSyncChar2;
+    output[2] = message_class;
+    output[3] = message_id;
+    output[4] = static_cast<std::uint8_t>(payload_length & 0xFFU);
+    output[5] = static_cast<std::uint8_t>(payload_length >> 8U);
+    for (std::uint16_t index = 0; index < payload_length; ++index) {
+        output[6U + index] = payload[index];
+    }
+
+    // 8-bit Fletcher over everything between the sync pair and the checksum itself.
+    std::uint8_t checksum_a = 0;
+    std::uint8_t checksum_b = 0;
+    for (std::size_t index = 2; index < total - 2U; ++index) {
+        checksum_a = static_cast<std::uint8_t>(checksum_a + output[index]);
+        checksum_b = static_cast<std::uint8_t>(checksum_b + checksum_a);
+    }
+    output[total - 2U] = checksum_a;
+    output[total - 1U] = checksum_b;
+    return total;
 }
 
 }  // namespace track_timer::gnss

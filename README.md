@@ -16,17 +16,16 @@ track catalog is read from the card at boot. A session runs end to end - countdo
 overrun and rest - records its duration and peak G on every axis, writes that to the card
 and survives a power cycle.
 
-**GNSS** is the critical path. The whole chain is in the firmware and host tested — an I2C
-transport, a UBX parser, a fix-quality gate and a pipeline that counts every way a fix can
-go missing — and the receiver is now connected over I2C and **proven to talk to the
-device**: the bus carries its traffic and the boot log reports what arrives.
+**GNSS works.** The receiver is connected over I2C, configured by the firmware at boot and
+**delivering accepted fixes on hardware**: 20 Hz as configured, every frame passing the
+quality gate, on 15 satellites. The chain is an I2C transport, a UBX parser, a fix-quality
+gate and a pipeline that counts every way a fix can go missing, and all of it is now
+exercised by a real receiver rather than only by host tests.
 
-It does not yet produce a fix the firmware can use, for one reason: the receiver is in its
-factory default, which emits NMEA, and the firmware parses UBX. So the bytes arrive and no
-frame parses. Configuring the receiver is #16, and until it is done nothing consumes the
-fix queue, so the timing engine, lap state machine and logger have still never seen a fix.
-With nothing attached GPS Only reports "NO RECEIVER", which is the truth rather than a
-fault.
+What remains is that **nothing consumes the fix queue yet**, so the timing engine, lap state
+machine and logger have still never seen a fix. That is the next piece of work, and it is
+software rather than hardware. With nothing attached GPS Only reports "NO RECEIVER", which
+is the truth rather than a fault.
 
 See [ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan:
 I2C is solderless and so is what bring-up uses, and UART is pushed by DMA and so is what

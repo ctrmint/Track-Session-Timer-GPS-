@@ -46,6 +46,12 @@ class EspI2cBus final : public I2cBus {
         if (device_ == nullptr) {
             return false;
         }
+        // A configuration frame has no reply, and transmit_receive with a zero-length read
+        // is not the same call: it would issue a repeated start and a read phase the
+        // receiver has nothing to answer with.
+        if (read == nullptr || read_length == 0) {
+            return i2c_master_transmit(device_, write, write_length, kTimeoutMs) == ESP_OK;
+        }
         return i2c_master_transmit_receive(device_, write, write_length, read, read_length,
                                            kTimeoutMs) == ESP_OK;
     }

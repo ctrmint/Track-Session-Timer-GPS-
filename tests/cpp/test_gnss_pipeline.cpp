@@ -60,6 +60,10 @@ std::vector<std::uint8_t> nav_pvt_payload(const std::uint32_t itow_ms,
 {
     std::vector<std::uint8_t> payload(gnss::kNavPvtLength, 0);
     put_u32(payload, 0, itow_ms);
+    // The UTC second's fractional part, which a real receiver populates and which must not
+    // reach measurement_time_ns: it is not a correction to iTOW and swings a full second
+    // either way. A zero here is what hid that for the whole of this parser's life.
+    put_i32(payload, 16, -760'000'000);
     payload[11] = 0x07;  // validDate | validTime | fullyResolved
     payload[20] = 3;     // 3D fix
     payload[21] = 0x01;  // gnssFixOK
@@ -373,6 +377,46 @@ void a_refused_fix_is_counted_and_never_queued()
     assert(pipeline.health(1'000'000) == domain::GnssHealth::searching);
 }
 
+// The UTC sub-second field must never reach measurement time.
+//
+// It reads like a sub-millisecond correction to iTOW and is not one: it is the fraction of
+// the UTC second in the same message, ranging a full second either way. Added to iTOW it
+// moves the timestamp by up to a second in either direction, which on hardware made
+// measurement time run backwards on checksum-valid frames - refused by the quality gate as
+// non-monotonic, at about half of every epoch, while also halving the cadence derived from
+// those timestamps.
+//
+// Pinned with a large negative value because that is the sign that breaks monotonicity, and
+// because a zero-initialised payload is exactly what hid this until real hardware sent a
+// non-zero one.
+void the_utc_sub_second_field_never_reaches_measurement_time()
+{
+    FakeReceiver receiver{64 * 1024};
+    gnss::GnssPipeline pipeline{};
+
+    std::int64_t now = 1'000'000;
+    for (int epoch = 0; epoch < 10; ++epoch) {
+        receiver.produce_epoch();
+        now += kEpochUs;
+        (void)pipeline.poll(receiver, now);
+    }
+
+    const auto& metrics = pipeline.metrics();
+    // Every epoch accepted: none refused for time running backwards.
+    assert(metrics.frames == 10);
+    assert(metrics.fixes_accepted == 10);
+    assert(metrics.fixes_rejected == 0);
+    const auto& by_reason = pipeline.validator().counters().by_reason;
+    assert(by_reason[static_cast<std::size_t>(domain::FixRejectReason::non_monotonic_time)] == 0);
+
+    // And the derived cadence is the receiver's real one rather than a fraction of it, which
+    // is the other half of what the stray term corrupted.
+    assert(metrics.observed_rate_hz > 24.0F && metrics.observed_rate_hz < 26.0F);
+
+    // Measurement time is exactly iTOW in nanoseconds, with no sub-second term folded in.
+    assert(pipeline.last_accepted().measurement_time_ns % 1'000'000 == 0);
+}
+
 // A cold start is a working receiver that cannot yet be used, and it has to look different
 // from one that is not there. The receiver reports its satellite count from the first epoch,
 // long before it has a position, so that count is the only evidence acquisition is
@@ -517,6 +561,7 @@ int main()
     the_observed_rate_follows_the_receiver();
     a_refused_fix_is_counted_and_never_queued();
     a_searching_receiver_still_reports_its_climbing_satellite_count();
+    the_utc_sub_second_field_never_reaches_measurement_time();
     noise_and_unexpected_messages_are_counted_not_fatal();
     a_failing_bus_is_reported_separately_from_a_silent_receiver();
     work_per_poll_is_bounded();
