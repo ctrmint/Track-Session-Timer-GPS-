@@ -43,6 +43,7 @@
 
 #include <lvgl.h>
 
+#include <array>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -76,6 +77,66 @@ diagnostics::ResetReason translate_reset_reason() noexcept
 
 // Real device telemetry. GNSS, storage and IMU stay unavailable because no driver
 // exists for them yet; memory and uptime are genuine readings.
+// A cold start takes minutes, so one line a second is enough to show the climb without
+// turning a long acquisition into a wall of log.
+constexpr std::int64_t kGnssProgressIntervalUs = 1'000'000;
+
+// How far the receiver has got, in the order the stages actually fail.
+//
+// Bring-up needs this because every one of these looks the same from the outside: the
+// device keeps running and the screen keeps updating. They have entirely different causes,
+// so they are named rather than collapsed into "no fix".
+enum class GnssStage : std::uint8_t {
+    bus_fault,         // the bus itself cannot be read: wiring, address, or pull-ups
+    silent,            // the bus is fine and the receiver declares nothing waiting
+    bytes_not_parsing, // bytes arrive but no frame passes checksum: NMEA, or a baud/bus fault
+    frames_not_pvt,    // valid UBX, but not NAV-PVT: the rate/message configuration (#16)
+    searching,         // NAV-PVT arriving and refused by the quality gate: a cold start
+    fixed,             // accepted for timing
+};
+
+[[nodiscard]] const char* gnss_stage_label(const GnssStage stage) noexcept
+{
+    switch (stage) {
+    case GnssStage::bus_fault:
+        return "bus unreadable";
+    case GnssStage::silent:
+        return "bus ok, receiver silent";
+    case GnssStage::bytes_not_parsing:
+        return "bytes arriving, no valid frame";
+    case GnssStage::frames_not_pvt:
+        return "ubx arriving, no nav-pvt";
+    case GnssStage::searching:
+        return "searching";
+    case GnssStage::fixed:
+        return "fix accepted";
+    }
+    return "unknown";
+}
+
+// No default case anywhere above or below, so a new stage is a compile error rather than a
+// silently mislabelled log line.
+[[nodiscard]] GnssStage gnss_stage(const gnss::GnssPipelineMetrics& metrics,
+                                   const bool has_fix) noexcept
+{
+    if (has_fix) {
+        return GnssStage::fixed;
+    }
+    if (!metrics.transport_healthy) {
+        return GnssStage::bus_fault;
+    }
+    if (metrics.bytes_read == 0) {
+        return GnssStage::silent;
+    }
+    if (metrics.frames == 0) {
+        return GnssStage::bytes_not_parsing;
+    }
+    if (metrics.fixes_accepted == 0 && metrics.fixes_rejected == 0) {
+        return GnssStage::frames_not_pvt;
+    }
+    return GnssStage::searching;
+}
+
 diagnostics::DiagnosticsSnapshot device_snapshot(const gnss::GnssPipeline& gnss_pipeline,
                                                  const domain::GnssHealth gnss_health) noexcept
 {
@@ -123,11 +184,18 @@ diagnostics::DiagnosticsSnapshot device_snapshot(const gnss::GnssPipeline& gnss_
     // Both kinds of loss, because the page has one row for it. queue_drops is this
     // system's own fault; missed_fixes is the receiver's or the bus's.
     snapshot.gnss_queue.dropped = gnss_metrics.queue_drops + gnss_metrics.missed_fixes;
+    // Fix type and satellite count come from the last fix the receiver sent rather than
+    // the last one accepted, because during a cold start nothing is accepted yet: the
+    // receiver reports a climbing satellite count and no position, every fix is rejected,
+    // and a page reading only accepted fixes shows a flat zero. That makes a receiver that
+    // is working and searching indistinguishable from one that is not there.
+    const auto& judged = gnss_pipeline.last_judged();
+    snapshot.gnss_fix_type = judged.fix_type;
+    snapshot.gnss_satellites = static_cast<std::uint8_t>(judged.num_satellites);
+    // Accuracy stays behind the gate. It is the number the gate judges, so reporting a
+    // rejected one here would show the page contradicting its own verdict.
     if (gnss_pipeline.has_fix()) {
-        const auto& fix = gnss_pipeline.last_accepted();
-        snapshot.gnss_fix_type = fix.fix_type;
-        snapshot.gnss_satellites = static_cast<std::uint8_t>(fix.num_satellites);
-        snapshot.gnss_horizontal_accuracy_m = fix.horizontal_accuracy_m;
+        snapshot.gnss_horizontal_accuracy_m = gnss_pipeline.last_accepted().horizontal_accuracy_m;
     }
 
     snapshot.storage = diagnostics::SubsystemState::unavailable;
@@ -443,9 +511,76 @@ class ScreenRouter {
         gps_only_snapshot_.receiver_present = health != domain::GnssHealth::unavailable;
         gps_only_snapshot_.fix_valid =
             health == domain::GnssHealth::good || health == domain::GnssHealth::poor;
+        // Position, speed and accuracy come from the accepted fix, so nothing the quality
+        // gate refused is ever displayed as though it were usable. Fix type and satellite
+        // count are overlaid from the last fix the receiver sent, accepted or not, because
+        // those two are the acquisition signal: the screen shows them as soon as bytes
+        // arrive (see gps_only.cpp), and before the first acceptance there is nothing in
+        // the accepted fix to show. Without the overlay a searching receiver reads as
+        // NO FIX / 0 SATS, which is also what an unplugged one reads as.
         gps_only_snapshot_.fix = gnss_pipeline_.last_accepted();
+        const auto& judged = gnss_pipeline_.last_judged();
+        gps_only_snapshot_.fix.fix_type = judged.fix_type;
+        gps_only_snapshot_.fix.num_satellites = judged.num_satellites;
         gps_only_snapshot_.observed_rate_hz = gnss_pipeline_.metrics().observed_rate_hz;
         gps_only_snapshot_.dropped_fixes = gnss_pipeline_.metrics().missed_fixes;
+
+        log_gnss_progress(now_us);
+    }
+
+    // Puts the receiver's progress in the log, so bring-up is captured rather than read off
+    // the screen and retyped. #178 asks for a climbing satellite count and for a bus fault
+    // to be distinguishable from a silent receiver; neither was observable from the host
+    // before this, because nothing about the receiver was logged at all after the line
+    // saying a transport had been attached - which only ever meant the I2C driver accepted
+    // an address, since adding a device to the bus never talks to the chip.
+    void log_gnss_progress(const std::int64_t now_us) noexcept
+    {
+        const auto& metrics = gnss_pipeline_.metrics();
+        const auto stage = gnss_stage(metrics, gnss_pipeline_.has_fix());
+        const auto satellites = gnss_pipeline_.last_judged().num_satellites;
+
+        // Every stage change is logged. While searching, so is the satellite count as it
+        // moves, because that climb is the only evidence a cold start is progressing. The
+        // count can flicker at the fix rate, so it is rate-limited; stage changes are not,
+        // being rare and the more interesting of the two.
+        const bool stage_changed = stage != logged_gnss_stage_;
+        const bool climbed = stage == GnssStage::searching && satellites != logged_satellites_ &&
+                             now_us - logged_gnss_us_ >= kGnssProgressIntervalUs;
+        if (!stage_changed && !climbed) {
+            return;
+        }
+        logged_gnss_stage_ = stage;
+        logged_satellites_ = satellites;
+        logged_gnss_us_ = now_us;
+
+        ESP_LOGI("track_timer",
+                 "gnss: %s (sats %u, polls %u, bytes %u, frames %u, bad-crc %u, "
+                 "non-pvt %u, accepted %u, rejected %u, %.1f Hz)",
+                 gnss_stage_label(stage), static_cast<unsigned>(satellites),
+                 static_cast<unsigned>(metrics.polls), static_cast<unsigned>(metrics.bytes_read),
+                 static_cast<unsigned>(metrics.frames),
+                 static_cast<unsigned>(metrics.checksum_errors),
+                 static_cast<unsigned>(metrics.unsupported_messages),
+                 static_cast<unsigned>(metrics.fixes_accepted),
+                 static_cast<unsigned>(metrics.fixes_rejected),
+                 static_cast<double>(metrics.observed_rate_hz));
+
+        // Bytes with no frame in them is the one stage the counters cannot diagnose, so the
+        // bytes themselves are shown. NMEA reads as text; a corrupted bus does not.
+        if (stage == GnssStage::bytes_not_parsing) {
+            const auto& sample = gnss_pipeline_.traffic_sample();
+            const auto length =
+                std::min(gnss_pipeline_.traffic_sample_length(), sample.size());
+            std::array<char, gnss::kTrafficSampleBytes + 1> printable{};
+            for (std::size_t index = 0; index < length; ++index) {
+                const auto byte = sample[index];
+                printable[index] =
+                    (byte >= 0x20 && byte < 0x7F) ? static_cast<char>(byte) : '.';
+            }
+            ESP_LOGI("track_timer", "gnss: first traffic [%u bytes] \"%s\"",
+                     static_cast<unsigned>(length), printable.data());
+        }
     }
 
     void service_imu() noexcept
@@ -1565,6 +1700,10 @@ class ScreenRouter {
     ui::GpsOnlySnapshot gps_only_snapshot_{};
     gnss::GnssTransport* gnss_transport_{nullptr};
     gnss::GnssPipeline gnss_pipeline_{};
+    // Deliberately not a valid stage, so the first poll always logs where it got to.
+    GnssStage logged_gnss_stage_{static_cast<GnssStage>(0xFF)};
+    std::uint16_t logged_satellites_{0};
+    std::int64_t logged_gnss_us_{0};
     ui::TrackdayScreen* trackday_{nullptr};
     lv_obj_t* trackday_root_{nullptr};
     ui::TimeRollerScreen* roller_{nullptr};

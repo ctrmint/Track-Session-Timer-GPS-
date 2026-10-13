@@ -176,6 +176,44 @@ The track counts depend on what is on the card. The settings source reports wher
 stored configuration came from, and a non-zero value means it was migrated from an older
 format on this boot.
 
+### Reading the GNSS stage line
+
+`gnss: transport attached over i2c` means only that the I2C driver accepted an address:
+adding a device to the bus never talks to the chip, so that line says nothing about whether
+a receiver is present. What follows it does. The firmware logs the receiver's stage whenever
+it changes, and the satellite count once a second while searching:
+
+```text
+gnss: bus ok, receiver silent (sats 0, polls 1, bytes 0, frames 0, ...)
+gnss: searching (sats 7, polls 412, bytes 38104, frames 331, ..., rejected 331, 24.9 Hz)
+gnss: fix accepted (sats 11, ..., accepted 1, rejected 331, 25.0 Hz)
+```
+
+The stages are ordered the way the link actually fails, and each has a different cause:
+
+| Stage | What it means |
+|---|---|
+| `bus unreadable` | the bus itself cannot be read: wiring, address, or pull-ups |
+| `bus ok, receiver silent` | the bus works and the receiver declares nothing waiting |
+| `bytes arriving, no valid frame` | bytes arrive but nothing passes checksum - usually NMEA |
+| `ubx arriving, no nav-pvt` | valid UBX, but not the message asked for: configuration (#16) |
+| `searching` | NAV-PVT arriving and refused by the quality gate: a normal cold start |
+| `fix accepted` | usable for timing |
+
+`bytes arriving, no valid frame` is the one stage the counters cannot diagnose on their own,
+because neither NMEA nor a corrupted bus produces a checksum error - a checksum is only
+reached after a sync pair, and neither has one. So that stage also logs the first bytes
+received, as text:
+
+```text
+gnss: first traffic [64 bytes] "$GNRMC,..."
+```
+
+A readable NMEA sentence means the receiver is healthy and in its factory default, which is
+a receiver to configure rather than wiring to re-check. Unreadable bytes mean the opposite.
+Note that an NMEA sentence contains a position, so a captured log is as sensitive as the
+place it was captured.
+
 If flashing waits for download, use the board's documented BOOT/RESET sequence. Do
 not freeze board GPIO assignments until the exact 2.41-B schematic and physical board
 revision have been checked.

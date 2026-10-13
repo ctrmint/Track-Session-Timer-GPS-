@@ -373,6 +373,43 @@ void a_refused_fix_is_counted_and_never_queued()
     assert(pipeline.health(1'000'000) == domain::GnssHealth::searching);
 }
 
+// A cold start is a working receiver that cannot yet be used, and it has to look different
+// from one that is not there. The receiver reports its satellite count from the first epoch,
+// long before it has a position, so that count is the only evidence acquisition is
+// progressing - but every one of those fixes is refused, so nothing reaches last_accepted().
+// Anything that displays acquisition therefore has to read last_judged(), and this pins the
+// difference: the climb is visible while the timing path stays empty.
+void a_searching_receiver_still_reports_its_climbing_satellite_count()
+{
+    FakeReceiver receiver{64 * 1024};
+    gnss::GnssPipeline pipeline{};
+
+    std::int64_t now = 1'000'000;
+    for (std::uint8_t satellites = 3; satellites <= 6; ++satellites) {
+        auto payload = nav_pvt_payload(400'000 + satellites * 40U, kBaseLatitudeE7);
+        payload[20] = 0;            // no fix yet
+        payload[21] = 0x00;         // gnssFixOK clear, so the gate refuses it
+        payload[23] = satellites;   // numSV, which the receiver reports regardless
+        receiver.produce_raw(frame(gnss::kClassNav, gnss::kIdNavPvt, payload));
+        now += kEpochUs;
+        (void)pipeline.poll(receiver, now);
+
+        // Visible to anything showing acquisition...
+        assert(pipeline.last_judged().num_satellites == satellites);
+        assert(pipeline.last_judged().fix_type == domain::FixType::no_fix);
+        // ...and invisible to anything that times a lap.
+        assert(!pipeline.has_fix());
+        assert(pipeline.queue().empty());
+        assert(pipeline.last_accepted().num_satellites == 0);
+    }
+    assert(pipeline.metrics().fixes_rejected == 4);
+    assert(pipeline.metrics().fixes_accepted == 0);
+
+    // A reset forgets the climb too, or a stale count would survive the receiver going away.
+    pipeline.reset();
+    assert(pipeline.last_judged().num_satellites == 0);
+}
+
 // A receiver still emitting NMEA, or sending a message nobody asked for, is a configuration
 // that did not take (#16) rather than a fault. Both are counted, neither stalls the stream.
 void noise_and_unexpected_messages_are_counted_not_fatal()
@@ -479,6 +516,7 @@ int main()
     draining_the_queue_preserves_order();
     the_observed_rate_follows_the_receiver();
     a_refused_fix_is_counted_and_never_queued();
+    a_searching_receiver_still_reports_its_climbing_satellite_count();
     noise_and_unexpected_messages_are_counted_not_fatal();
     a_failing_bus_is_reported_separately_from_a_silent_receiver();
     work_per_poll_is_bounded();

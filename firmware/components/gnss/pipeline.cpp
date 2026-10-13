@@ -112,6 +112,8 @@ void GnssPipeline::ingest(const std::uint8_t byte, const std::int64_t now_monoto
 
     const auto judged = validator_.evaluate(decoded, now_monotonic_us);
     status_.observe(judged);
+    // Before the acceptance branch, so a searching receiver's satellite count is visible.
+    last_judged_ = judged;
 
     if (!judged.accepted_for_timing) {
         ++metrics_.fixes_rejected;
@@ -156,6 +158,13 @@ std::size_t GnssPipeline::poll(GnssTransport& transport,
         }
         metrics_.bytes_read += static_cast<std::uint32_t>(count);
         status_.note_traffic(now_monotonic_us);
+        // Kept from the first traffic only, so this costs nothing once the link is working
+        // and cannot be overwritten later by the stream it is meant to identify.
+        while (traffic_sample_length_ < traffic_sample_.size() &&
+               traffic_sample_length_ < count) {
+            traffic_sample_[traffic_sample_length_] = buffer[traffic_sample_length_];
+            ++traffic_sample_length_;
+        }
         for (std::size_t index = 0; index < count && index < buffer.size(); ++index) {
             ingest(buffer[index], now_monotonic_us);
         }
@@ -192,6 +201,15 @@ const domain::GnssFix& GnssPipeline::last_accepted() const noexcept
     return validator_.last_accepted();
 }
 
+const domain::GnssFix& GnssPipeline::last_judged() const noexcept { return last_judged_; }
+
+const std::array<std::uint8_t, kTrafficSampleBytes>& GnssPipeline::traffic_sample() const noexcept
+{
+    return traffic_sample_;
+}
+
+std::size_t GnssPipeline::traffic_sample_length() const noexcept { return traffic_sample_length_; }
+
 bool GnssPipeline::has_fix() const noexcept { return validator_.has_accepted(); }
 
 domain::GnssHealth GnssPipeline::health(const std::int64_t now_monotonic_us) const noexcept
@@ -204,6 +222,9 @@ void GnssPipeline::reset() noexcept
     parser_.reset();
     validator_.reset();
     status_.reset();
+    last_judged_ = {};
+    traffic_sample_ = {};
+    traffic_sample_length_ = 0;
     queue_.clear();
     metrics_ = {};
     previous_parser_counters_ = {};
