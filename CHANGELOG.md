@@ -8,6 +8,25 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- the GNSS fix queue has a consumer. Accepted fixes are handed to the timing task, lap
+  events and gate records are drained from it, and lap index, current, previous and best
+  lap reach `domain::UiSnapshot` - which the router previously built with only
+  `session_remaining_ms` set. The timing runtime, its engine, its lap state machine and its
+  three bounded queues had all been built and host-tested, and nothing in the tree called
+  any of them: every fix the device ever produced was read, validated, counted and dropped
+  on the floor
+- the circuit can be changed while the timing task is running. `start_embedded_timing_runtime`
+  refuses a second call, so until now the first circuit selected would have been the only
+  one the device could ever time. The swap takes the engine under a mutex and discards every
+  queued fix, lap event and gate record with the old geometry, counting the abandoned fixes
+  separately from queue drops - one is a deliberate loss, the other is a consumer that could
+  not keep up
+- `timing::lap_display_times` converts a lap snapshot into the milliseconds a display works
+  in. Separated and host-tested because it is where "no lap yet" becomes a wrong number:
+  every field is nanoseconds and may be `kUnavailableTime`, which is -1, and dividing that
+  by a million yields 0 ms - a believable lap time and the same class of mistake as showing
+  an absent receiver as 0 mph
+
 - a **Clock** mode, selectable from the mode carousel, showing a 24-hour GMT clock from the
   receiver's own UTC time. The hour and minute fill the panel at 170 px with the seconds at
   100 px beneath them; the face's own metrics put a single line of `HH:MM:SS` at a 112 px
