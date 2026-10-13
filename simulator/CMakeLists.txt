@@ -579,7 +579,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-lap-state-machine
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Deterministic lap lifecycle, rearm, and minimum-time rules passed"
+            PASS_REGULAR_EXPRESSION "Deterministic lap lifecycle, rearm, minimum-time rules, and lap times converted for display"
             TIMEOUT 20
     )
 
