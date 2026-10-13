@@ -8,6 +8,23 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- the firmware configures the receiver at boot and confirms it agreed. A NEO-M9N in its
+  factory default emits NMEA, which this firmware does not parse, so the device read a
+  healthy receiver and understood none of it. `UBX-CFG-VALSET` now enables UBX NAV-PVT on
+  I2C, silences NMEA and sets a 20 Hz measurement rate, written to RAM, battery-backed RAM
+  and flash so it survives a power cycle rather than working only until the device is
+  unplugged
+- configuration is acknowledged rather than assumed: the receiver's `UBX-ACK-ACK` or
+  `ACK-NAK` is matched against the frame that was sent, and a refusal, a silence, a bus that
+  would not carry the frame and a transport that cannot write at all are four different
+  reported outcomes. A configuration that silently did not take is the failure most likely
+  to pass on the bench and reappear in the car
+- `GnssTransport` gained a write path, defaulting to "cannot write" so a transport that
+  replays a recorded fixture stays legitimately read-only
+- the measured fix cadence is logged whenever it changes, and the dominant rejection reason
+  whenever fixes are being refused. The rate is derived from the receiver's own measurement
+  timestamps, so it reports what arrived rather than what was requested
+
 - the receiver's stage is logged whenever it changes, and its satellite count once a second
   while searching, so bring-up is captured rather than read off the screen. Six named stages
   ordered the way the link actually fails, from an unreadable bus to an accepted fix. The
@@ -132,6 +149,23 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - initial GitHub issue plan
 
 ### Fixed
+
+- `decode_nav_pvt` added UBX-NAV-PVT's `nano` field to iTOW when building
+  `measurement_time_ns`. It reads like a sub-millisecond correction and is not one: it is
+  the fractional part of the UTC second in the same message, ranging a full second either
+  way. Added to a time of week that already carries its own sub-second part, it moved the
+  timestamp by up to a second in either direction.
+  On hardware this made measurement time run *backwards* - observed jumping 760 ms into the
+  past on checksum-valid frames - which the quality gate correctly refused as non-monotonic
+  at roughly every other epoch, and which also halved the cadence the pipeline derived from
+  those same timestamps. The receiver had been emitting exactly its configured rate
+  throughout. With the term removed: 49 frames, 49 accepted, 0 rejected, 19.9 Hz measured
+  against 20 Hz configured.
+  Every lap time this would have produced was going to be computed from a clock that moved
+  backwards twice a second. It was invisible to the host tests because a zero-initialised
+  NAV-PVT payload has `nano` of zero - and worse, `test_ubx_parser.cpp` asserted the stray
+  term was present, so the test agreed with the bug rather than catching it. Both fixtures
+  now carry a large negative value, which is the sign that breaks monotonicity
 
 - GPS Only and the Diagnostics GNSS page took the satellite count and fix type from the last
   *accepted* fix, so neither could climb during acquisition: a cold start reports a rising

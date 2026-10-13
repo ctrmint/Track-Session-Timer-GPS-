@@ -53,6 +53,8 @@ struct I2cTransportCounters {
     std::uint32_t consecutive_bus_errors{0};
     std::uint32_t implausible_counts{0};
     std::uint32_t empty_polls{0};
+    std::uint32_t writes{0};
+    std::uint32_t bytes_written{0};
 };
 
 class I2cGnssTransport : public GnssTransport {
@@ -62,6 +64,16 @@ class I2cGnssTransport : public GnssTransport {
 
     [[nodiscard]] std::size_t read(std::uint8_t* output, std::size_t capacity) noexcept override;
     [[nodiscard]] bool healthy() const noexcept override;
+
+    // Writes a framed UBX message to the receiver.
+    //
+    // Sent as raw bytes to the device address, with no register prefix. The DDC register map
+    // governs reads - 0xFD/0xFE for the count and 0xFF for the stream - and the receiver
+    // takes an incoming message as a plain byte stream. Whether a 0xFF prefix is also
+    // tolerated is not settled by the documentation available, and does not need to be:
+    // configuration is acknowledged by the receiver, so the form that works is established
+    // by ACK rather than by assumption.
+    [[nodiscard]] bool write(const std::uint8_t* data, std::size_t length) noexcept override;
 
     [[nodiscard]] const I2cTransportCounters& counters() const noexcept;
     void reset() noexcept;

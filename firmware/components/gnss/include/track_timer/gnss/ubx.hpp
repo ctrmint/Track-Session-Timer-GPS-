@@ -21,6 +21,48 @@ inline constexpr std::uint8_t kClassNav = 0x01;
 inline constexpr std::uint8_t kIdNavPvt = 0x07;
 inline constexpr std::uint16_t kNavPvtLength = 92;
 
+// Configuration, and the receiver's answer to it.
+//
+// ACK-NAK is not merely "it failed". It is the receiver saying it understood the frame and
+// refused its contents, which separates a wrong key or value from a frame that never
+// arrived - and those have opposite fixes. Both must therefore be distinguishable from
+// silence, which is why configuration is acknowledged rather than assumed.
+inline constexpr std::uint8_t kClassCfg = 0x06;
+inline constexpr std::uint8_t kIdCfgValset = 0x8A;
+inline constexpr std::uint8_t kClassAck = 0x05;
+inline constexpr std::uint8_t kIdAckNak = 0x00;
+inline constexpr std::uint8_t kIdAckAck = 0x01;
+
+// The M9 is a configuration-interface generation part: settings are keyed values written
+// with CFG-VALSET, not the CFG-MSG and CFG-RATE messages of older u-blox guides, which this
+// generation does not implement.
+//
+// A key carries its own storage size in bits 28-30, which makes these self-checking: 0x1 is
+// one bit, 0x2 one byte, 0x3 two bytes, 0x4 four. A constant whose size nibble disagrees
+// with the width written for it is wrong, and the receiver answers ACK-NAK rather than
+// silently storing something else.
+inline constexpr std::uint32_t kKeyI2cOutProtUbx = 0x1072'0001;   // L
+inline constexpr std::uint32_t kKeyI2cOutProtNmea = 0x1072'0002;  // L
+inline constexpr std::uint32_t kKeyMsgOutNavPvtI2c = 0x2091'0006; // U1, messages per cycle
+inline constexpr std::uint32_t kKeyRateMeas = 0x3021'0001;        // U2, milliseconds
+inline constexpr std::uint32_t kKeyRateNav = 0x3021'0002;         // U2, cycles per fix
+
+// Where a written setting is kept. RAM alone is lost on the next power cycle, which would
+// make the device work on the bench and fail in the car.
+inline constexpr std::uint8_t kLayerRam = 0x01;
+inline constexpr std::uint8_t kLayerBatteryBacked = 0x02;
+inline constexpr std::uint8_t kLayerFlash = 0x04;
+
+// Builds a framed UBX message - sync pair, header, payload and both checksum bytes - into
+// `output`, returning its total length, or 0 if it would not fit.
+//
+// The parser is incremental because it cannot choose how bytes arrive; this is the opposite
+// direction, where the whole frame is known at once and the checksum is over a contiguous
+// buffer.
+[[nodiscard]] std::size_t build_frame(std::uint8_t message_class, std::uint8_t message_id,
+                                      const std::uint8_t* payload, std::uint16_t payload_length,
+                                      std::uint8_t* output, std::size_t capacity) noexcept;
+
 struct UbxMessage {
     std::uint8_t message_class{0};
     std::uint8_t message_id{0};

@@ -2,6 +2,8 @@
 
 #include "esp_app_desc.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_timer.h"
@@ -16,6 +18,7 @@
 #include "track_timer/ui/carousel_screen.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
 #include "track_timer/ui/g_radar_screen.hpp"
+#include "track_timer/gnss/configure.hpp"
 #include "track_timer/gnss/i2c_transport.hpp"
 #include "track_timer/gnss/pipeline.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
@@ -77,6 +80,49 @@ diagnostics::ResetReason translate_reset_reason() noexcept
 
 // Real device telemetry. GNSS, storage and IMU stay unavailable because no driver
 // exists for them yet; memory and uptime are genuine readings.
+// Which rule refused the most fixes, and how many. Reported because a rejection rate is
+// not self-explaining: a receiver refused for poor accuracy needs a better sky view, one
+// refused as stale is sending the same epoch twice, and one refused for non-monotonic time
+// has a clock problem. The same number means three different things.
+[[nodiscard]] const char* reject_reason_label(const domain::FixRejectReason reason) noexcept
+{
+    switch (reason) {
+    case domain::FixRejectReason::none:
+        return "none";
+    case domain::FixRejectReason::invalid_status:
+        return "invalid-status";
+    case domain::FixRejectReason::stale:
+        return "stale-epoch";
+    case domain::FixRejectReason::non_monotonic_sequence:
+        return "out-of-order-arrival";
+    case domain::FixRejectReason::non_monotonic_time:
+        return "out-of-order-time";
+    case domain::FixRejectReason::excessive_accuracy:
+        return "accuracy";
+    case domain::FixRejectReason::implausible_motion:
+        return "implausible-motion";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] const char* configuration_outcome_label(
+    const gnss::ConfigurationOutcome outcome) noexcept
+{
+    switch (outcome) {
+    case gnss::ConfigurationOutcome::not_attempted:
+        return "not attempted: this transport cannot write";
+    case gnss::ConfigurationOutcome::write_failed:
+        return "the bus refused the frame";
+    case gnss::ConfigurationOutcome::unacknowledged:
+        return "sent, no acknowledgement";
+    case gnss::ConfigurationOutcome::rejected:
+        return "refused by the receiver";
+    case gnss::ConfigurationOutcome::acknowledged:
+        return "acknowledged";
+    }
+    return "unknown";
+}
+
 // A cold start takes minutes, so one line a second is enough to show the climb without
 // turning a long acquisition into a wall of log.
 constexpr std::int64_t kGnssProgressIntervalUs = 1'000'000;
@@ -526,6 +572,57 @@ class ScreenRouter {
         gps_only_snapshot_.dropped_fixes = gnss_pipeline_.metrics().missed_fixes;
 
         log_gnss_progress(now_us);
+
+    }
+
+    // Tells the receiver what to emit, before anything starts reading it.
+    //
+    // A NEO-M9N in its factory default emits NMEA, which this firmware does not parse, so
+    // without this the device reads a healthy receiver and understands none of it (#16).
+    //
+    // Runs once at startup and is deliberately allowed to fail: a receiver that cannot be
+    // configured is a degraded device rather than a broken one, and the session timer does
+    // not depend on GNSS at all. What is not allowed is failing silently, so every outcome
+    // is logged and kept for the diagnostics page.
+    void configure_receiver() noexcept
+    {
+        if (gnss_transport_ == nullptr) {
+            return;
+        }
+        gnss::GnssConfigurationRequest request{};
+        // 20 Hz first. #16 asks for 25 Hz only once this is stable, and the pipeline's gap
+        // detection measures loss against the rate it was told to expect, so the two have
+        // to be changed together.
+        request.measurement_period_ms = 50;
+
+        gnss_configuration_ = gnss::configure_receiver(
+            *gnss_transport_, request,
+            [](void*) { vTaskDelay(pdMS_TO_TICKS(gnss::kAcknowledgementPollIntervalMs)); },
+            nullptr);
+
+        const auto& report = gnss_configuration_;
+        const bool configured = report.outcome == gnss::ConfigurationOutcome::acknowledged;
+        // Logged at warning level when it did not take, because every later symptom - no
+        // satellites, no fix, no lap - traces back here, and this is the line that explains
+        // them.
+        if (configured) {
+            ESP_LOGI("track_timer",
+                     "gnss: configuration %s (20 Hz, nav-pvt on, nmea off, %s write form, "
+                     "frames %u, bytes %u)",
+                     configuration_outcome_label(report.outcome),
+                     report.stream_prefixed ? "stream-prefixed" : "raw",
+                     static_cast<unsigned>(report.frames_seen),
+                     static_cast<unsigned>(report.bytes_read));
+        }
+        else {
+            ESP_LOGW("track_timer",
+                     "gnss: configuration %s (acks %u, naks %u, frames %u, bytes %u) - the "
+                     "receiver will emit whatever it was already set to",
+                     configuration_outcome_label(report.outcome),
+                     static_cast<unsigned>(report.acks), static_cast<unsigned>(report.naks),
+                     static_cast<unsigned>(report.frames_seen),
+                     static_cast<unsigned>(report.bytes_read));
+        }
     }
 
     // Puts the receiver's progress in the log, so bring-up is captured rather than read off
@@ -547,11 +644,21 @@ class ScreenRouter {
         const bool stage_changed = stage != logged_gnss_stage_;
         const bool climbed = stage == GnssStage::searching && satellites != logged_satellites_ &&
                              now_us - logged_gnss_us_ >= kGnssProgressIntervalUs;
-        if (!stage_changed && !climbed) {
+        // Once fixed, the measured cadence is logged whenever it changes. #16 requires the
+        // effective rate to be measured rather than assumed, and the first fix arrives
+        // before there are two measurements to derive a rate from - so the stage line that
+        // announces a fix always carries 0.0 Hz. This is what reports the real figure, and
+        // it stops on its own: a settled rate does not change, and one that starts changing
+        // later is a receiver or a poll that has gone wrong and is worth a line.
+        const auto rate = static_cast<std::uint16_t>(metrics.observed_rate_hz + 0.5F);
+        const bool rate_moved = stage == GnssStage::fixed && rate != logged_rate_hz_ &&
+                                now_us - logged_gnss_us_ >= kGnssProgressIntervalUs;
+        if (!stage_changed && !climbed && !rate_moved) {
             return;
         }
         logged_gnss_stage_ = stage;
         logged_satellites_ = satellites;
+        logged_rate_hz_ = rate;
         logged_gnss_us_ = now_us;
 
         ESP_LOGI("track_timer",
@@ -565,6 +672,28 @@ class ScreenRouter {
                  static_cast<unsigned>(metrics.fixes_accepted),
                  static_cast<unsigned>(metrics.fixes_rejected),
                  static_cast<double>(metrics.observed_rate_hz));
+
+        // Which rule is doing the refusing, whenever anything is being refused. Without it
+        // a rejection count says only that fixes are being lost, not why, and the causes
+        // have nothing in common.
+        if (metrics.fixes_rejected > 0) {
+            // Starting at `none` would be wrong: that slot counts the fixes that were
+            // *accepted*, so it usually outnumbers every rejection and the line would
+            // report "rejecting mostly none".
+            const auto& by_reason = gnss_pipeline_.validator().counters().by_reason;
+            constexpr auto first_rejection =
+                static_cast<std::size_t>(domain::FixRejectReason::none) + 1U;
+            std::size_t dominant = first_rejection;
+            for (std::size_t index = first_rejection + 1U; index < by_reason.size(); ++index) {
+                if (by_reason[index] > by_reason[dominant]) {
+                    dominant = index;
+                }
+            }
+            ESP_LOGI("track_timer", "gnss: rejecting mostly %s (%u of %u refused)",
+                     reject_reason_label(static_cast<domain::FixRejectReason>(dominant)),
+                     static_cast<unsigned>(by_reason[dominant]),
+                     static_cast<unsigned>(metrics.fixes_rejected));
+        }
 
         // Bytes with no frame in them is the one stage the counters cannot diagnose, so the
         // bytes themselves are shown. NMEA reads as text; a corrupted bus does not.
@@ -713,6 +842,7 @@ class ScreenRouter {
         gnss_transport_ = gnss::shared_bus_gnss_transport();
         ESP_LOGI("track_timer", "gnss: transport %s",
                  gnss_transport_ != nullptr ? "attached over i2c" : "unavailable");
+        configure_receiver();
 
         // The time fields are edited on their own screen: no list of twelve choices can
         // span 0 to 59:59, so they roll rather than pick.
@@ -1700,9 +1830,11 @@ class ScreenRouter {
     ui::GpsOnlySnapshot gps_only_snapshot_{};
     gnss::GnssTransport* gnss_transport_{nullptr};
     gnss::GnssPipeline gnss_pipeline_{};
+    gnss::GnssConfigurationReport gnss_configuration_{};
     // Deliberately not a valid stage, so the first poll always logs where it got to.
     GnssStage logged_gnss_stage_{static_cast<GnssStage>(0xFF)};
     std::uint16_t logged_satellites_{0};
+    std::uint16_t logged_rate_hz_{0};
     std::int64_t logged_gnss_us_{0};
     ui::TrackdayScreen* trackday_{nullptr};
     lv_obj_t* trackday_root_{nullptr};

@@ -184,10 +184,21 @@ a receiver is present. What follows it does. The firmware logs the receiver's st
 it changes, and the satellite count once a second while searching:
 
 ```text
+gnss: configuration acknowledged (20 Hz, nav-pvt on, nmea off, raw write form, frames 1, bytes 10)
 gnss: bus ok, receiver silent (sats 0, polls 1, bytes 0, frames 0, ...)
-gnss: searching (sats 7, polls 412, bytes 38104, frames 331, ..., rejected 331, 24.9 Hz)
-gnss: fix accepted (sats 11, ..., accepted 1, rejected 331, 25.0 Hz)
+gnss: fix accepted (sats 15, polls 31, bytes 4900, frames 49, ..., accepted 49, rejected 0, 19.9 Hz)
 ```
+
+The configuration line comes first and matters most: a NEO-M9N in its factory default emits
+NMEA, which this firmware does not parse, so without a successful configuration every line
+after it reports a healthy receiver nobody can read. `acknowledged` means the receiver
+answered `UBX-ACK-ACK`; anything else is logged as a warning, because every later symptom -
+no satellites, no fix, no lap - traces back to it.
+
+Once fixed, the measured cadence is logged whenever it changes. That figure is derived from
+the receiver's own measurement timestamps, so it reports what arrived rather than what was
+asked for, and `rejected` climbing alongside `accepted` means fixes are being refused by the
+quality gate - the next line names which rule.
 
 The stages are ordered the way the link actually fails, and each has a different cause:
 

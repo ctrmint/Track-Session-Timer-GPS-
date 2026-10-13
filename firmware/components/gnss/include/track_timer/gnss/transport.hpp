@@ -29,6 +29,22 @@ class GnssTransport {
     // say. A transport that cannot be read at all is a different fault from a receiver
     // without a fix, and the two must not be reported as one.
     [[nodiscard]] virtual bool healthy() const noexcept = 0;
+
+    // Sends bytes to the receiver, returning false if they could not all be delivered.
+    //
+    // Needed because a receiver in its factory default does not emit what this timer reads,
+    // so it has to be told (#16). Default false rather than pure virtual: a transport that
+    // replays a recorded fixture is legitimately read-only, and such a transport should
+    // report that configuration is impossible rather than be unable to exist. A caller that
+    // gets false has a receiver it cannot configure, which is a degraded state to report
+    // rather than a fault to retry.
+    //
+    // Both staged transports can carry this. I2C writes the frame as a transaction; UART
+    // writes it to the same line it reads.
+    [[nodiscard]] virtual bool write(const std::uint8_t*, std::size_t) noexcept
+    {
+        return false;
+    }
 };
 
 }  // namespace track_timer::gnss
