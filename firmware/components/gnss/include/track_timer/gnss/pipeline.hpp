@@ -99,6 +99,10 @@ class FixQueue {
     std::size_t count_{0};
 };
 
+// How much of the receiver's first traffic to keep for identification. Enough to hold a
+// whole NMEA sentence, which is what the receiver emits if its configuration never took.
+inline constexpr std::size_t kTrafficSampleBytes = 64;
+
 class GnssPipeline {
   public:
     GnssPipeline() noexcept = default;
@@ -115,6 +119,27 @@ class GnssPipeline {
     [[nodiscard]] const GnssPipelineMetrics& metrics() const noexcept;
     [[nodiscard]] const FixValidator& validator() const noexcept;
     [[nodiscard]] const domain::GnssFix& last_accepted() const noexcept;
+    // The most recent fix the receiver sent, whether or not the quality gate passed it.
+    //
+    // Distinct from last_accepted() on purpose, and the distinction is what makes a cold
+    // start observable. During acquisition the receiver reports a climbing satellite count
+    // with no position, so every fix is rejected and last_accepted() stays empty. Anything
+    // that displays acquisition has to read this instead, or a receiver that is working
+    // perfectly and searching looks identical to one that is not talking at all.
+    //
+    // Never use it for timing: it is unjudged by definition.
+    [[nodiscard]] const domain::GnssFix& last_judged() const noexcept;
+
+    // The first bytes the receiver ever sent, kept verbatim.
+    //
+    // Only useful in one situation, and decisive in it: bytes arriving while no frame ever
+    // parses. The counters cannot tell NMEA from a corrupted bus, because neither produces
+    // a checksum error - a checksum is only reached after a sync pair, and neither has one.
+    // The bytes themselves say immediately which it is, and the two have nothing in common
+    // as fixes: one is a receiver to reconfigure, the other is wiring.
+    [[nodiscard]] const std::array<std::uint8_t, kTrafficSampleBytes>& traffic_sample()
+        const noexcept;
+    [[nodiscard]] std::size_t traffic_sample_length() const noexcept;
     [[nodiscard]] bool has_fix() const noexcept;
     [[nodiscard]] domain::GnssHealth health(std::int64_t now_monotonic_us) const noexcept;
 
@@ -128,6 +153,9 @@ class GnssPipeline {
     UbxParser parser_{};
     FixValidator validator_{};
     ReceiverStatus status_{};
+    domain::GnssFix last_judged_{};
+    std::array<std::uint8_t, kTrafficSampleBytes> traffic_sample_{};
+    std::size_t traffic_sample_length_{0};
     FixQueue queue_{};
     GnssPipelineMetrics metrics_{};
     UbxParserCounters previous_parser_counters_{};

@@ -8,6 +8,17 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- the receiver's stage is logged whenever it changes, and its satellite count once a second
+  while searching, so bring-up is captured rather than read off the screen. Six named stages
+  ordered the way the link actually fails, from an unreadable bus to an accepted fix. The
+  line that existed before this said a transport had been attached, which only ever meant
+  the I2C driver accepted an address - adding a device to the bus never talks to the chip
+- the first bytes the receiver sends are kept and logged as text when bytes arrive but no
+  frame parses. That is the one stage the counters cannot diagnose, because neither NMEA nor
+  a corrupted bus produces a checksum error: a checksum is only reached after a sync pair,
+  and neither has one. On the first run against real hardware it printed `$GNRMC,...`, which
+  identified the fault as a receiver in its factory NMEA default rather than anything wired
+  wrongly
 - `make check` now checks CHANGELOG.md's structure: a mistyped, duplicated, out-of-order or
   empty section fails rather than silently starting a section nobody reads. It found the
   Unreleased section's own headings were out of order on the first run
@@ -121,6 +132,14 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - initial GitHub issue plan
 
 ### Fixed
+
+- GPS Only and the Diagnostics GNSS page took the satellite count and fix type from the last
+  *accepted* fix, so neither could climb during acquisition: a cold start reports a rising
+  satellite count and no position, every fix is refused by the quality gate, and the screens
+  showed a flat `NO FIX / 0`. A receiver that was working and searching looked exactly like
+  one that was not plugged in - the distinction GPS Only exists to draw. Both now read the
+  last fix the receiver *sent* for those two fields, while position, speed and accuracy stay
+  behind the gate, so nothing refused is ever shown as usable
 
 - `CONTRIBUTING.md` told contributors to install the pinned requirements into whatever
   `python` resolved to, which is exactly the drift that was silently disabling date
