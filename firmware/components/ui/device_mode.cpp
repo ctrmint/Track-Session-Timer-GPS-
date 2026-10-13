@@ -17,6 +17,11 @@ ModeVisibility visibility_for(const DeviceMode mode) noexcept
         // A diagnostic view of the receiver alone. Showing a session timer here would
         // invite using it to time something, which is the one thing this mode is not for.
         return {false, false, false, false, true};
+    case DeviceMode::clock:
+        // A clock and nothing else. It reads the receiver's time, which is why gnss_data is
+        // set, but it is not a session view and must not offer a timer: a device showing a
+        // clock is not a device being used to time something.
+        return {false, false, false, false, true};
     }
     return {true, false, false, false, false};
 }
@@ -30,6 +35,9 @@ DeviceMode mode_from_settings(const settings::DeviceSettings& settings) noexcept
     }
     if (settings.operating_mode == settings::OperatingMode::gps_only) {
         return DeviceMode::gps_only;
+    }
+    if (settings.operating_mode == settings::OperatingMode::clock) {
+        return DeviceMode::clock;
     }
     return settings.trackday_mode_enabled ? DeviceMode::track_day : DeviceMode::race;
 }
@@ -53,6 +61,10 @@ void apply_mode(const DeviceMode mode, settings::DeviceSettings& settings) noexc
         settings.operating_mode = settings::OperatingMode::gps_only;
         settings.trackday_mode_enabled = false;
         break;
+    case DeviceMode::clock:
+        settings.operating_mode = settings::OperatingMode::clock;
+        settings.trackday_mode_enabled = false;
+        break;
     }
 }
 
@@ -67,6 +79,8 @@ const char* device_mode_name(const DeviceMode mode) noexcept
         return "g-only";
     case DeviceMode::gps_only:
         return "gps-only";
+    case DeviceMode::clock:
+        return "clock";
     }
     return "unknown";
 }
@@ -82,6 +96,8 @@ const char* device_mode_label(const DeviceMode mode) noexcept
         return "G-ONLY";
     case DeviceMode::gps_only:
         return "GPS ONLY";
+    case DeviceMode::clock:
+        return "CLOCK";
     }
     return "";
 }
@@ -97,6 +113,8 @@ const char* device_mode_summary(const DeviceMode mode) noexcept
         return "Graphical G meter only.";
     case DeviceMode::gps_only:
         return "Road speed, position and receiver data. Diagnosis, not timing.";
+    case DeviceMode::clock:
+        return "A 24-hour GMT clock from the receiver's own UTC time.";
     }
     return "";
 }

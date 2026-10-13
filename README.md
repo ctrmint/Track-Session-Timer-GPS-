@@ -27,6 +27,12 @@ machine and logger have still never seen a fix. That is the next piece of work, 
 software rather than hardware. With nothing attached GPS Only reports "NO RECEIVER", which
 is the truth rather than a fault.
 
+The first thing built on those fixes is **Clock** mode: a 24-hour GMT clock taken from the
+receiver's own UTC time, fixed to GMT for now and labelled so, since for half the year that
+is an hour behind every other clock in the UK. It shows dashes rather than a time whenever
+the receiver has not resolved one, and free-runs visibly rather than freezing if the
+receiver goes quiet - on a clock, a believable wrong answer is the worst available failure.
+
 See [ADR-005](docs/decisions/ADR-005-gnss-transport.md) for the staged I2C-then-UART plan:
 I2C is solderless and so is what bring-up uses, and UART is pushed by DMA and so is what
 the car uses. The RTC is not driven yet.

@@ -113,6 +113,27 @@ void test_gps_only_operating_mode_round_trips()
     auto beyond = settings;
     beyond.operating_mode = static_cast<OperatingMode>(
         static_cast<std::uint8_t>(OperatingMode::gps_only) + 1);
+    // No longer out of range - gps_only has a successor now. The bound still has to be a
+    // bound, so it moves with the enum rather than being deleted.
+    assert(valid_settings(beyond));
+}
+
+// Clock mode, appended after gps_only for the same reasons and with the same obligations.
+void test_clock_operating_mode_round_trips()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::clock;
+    assert(valid_settings(settings));
+
+    const auto blob = encode_settings(settings);
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+    assert(decoded.operating_mode == OperatingMode::clock);
+    assert(settings_equal(settings, decoded));
+
+    auto beyond = settings;
+    beyond.operating_mode = static_cast<OperatingMode>(
+        static_cast<std::uint8_t>(OperatingMode::clock) + 1);
     assert(!valid_settings(beyond));
 }
 
@@ -365,6 +386,7 @@ int main()
 {
     test_validation_and_codec();
     test_gps_only_operating_mode_round_trips();
+    test_clock_operating_mode_round_trips();
     test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();
     test_migration_corruption_and_storage_errors();

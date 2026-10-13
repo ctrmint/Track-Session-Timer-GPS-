@@ -18,7 +18,12 @@ struct Entry {
     lv_font_t* font{nullptr};
 };
 
-constexpr std::size_t kMaximumSizes = 4;
+// Three sizes are live today - the countdown's 170, which Clock mode shares, GPS Only's
+// 120, and whichever of 140 or 120 the time roller settles on - but the margin matters more
+// than the count. Running out does not fail loudly: countdown_font returns nullptr, the
+// caller's label keeps the 14 px default, and a screen that should carry a 170 px numeral
+// renders a tiny one with nothing in the log to say why.
+constexpr std::size_t kMaximumSizes = 6;
 std::array<Entry, kMaximumSizes> cache{};
 std::size_t cached = 0;
 

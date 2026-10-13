@@ -8,6 +8,24 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- a **Clock** mode, selectable from the mode carousel, showing a 24-hour GMT clock from the
+  receiver's own UTC time. The hour and minute fill the panel at 170 px with the seconds at
+  100 px beneath them; the face's own metrics put a single line of `HH:MM:SS` at a 112 px
+  ceiling, so splitting the seconds off is what buys the size. GMT is fixed for now and the
+  label says so, because for half the year it reads an hour behind every other clock in the
+  UK - correct, and guaranteed to look like a fault without the label
+- the UTC date and time are decoded from NAV-PVT into `GnssFix::utc`. They were in every
+  message and the decoder read straight past them, so nothing reaching the UI was a wall
+  clock: `measurement_time_ns` is GPS time of week, which has no date, rolls over weekly and
+  runs ahead of UTC by the leap-second count. The receiver already applies that correction,
+  so the firmware reads its answer rather than reconstructing one. `nano` - the field #193
+  was about - is finally used for what it is: the fraction of the UTC second, and the reason
+  a clock shows the second it is actually in rather than the one it is rounding towards
+- Clock mode free-runs and says so when the receiver goes quiet, rather than freezing. A
+  frozen clock looks completely correct and is wrong by however long it has been frozen,
+  with nothing on screen to contradict it; a held one shows how long it has been holding and
+  stops claiming a time after an hour, at which point "this is GNSS time" is no longer true
+
 - the receiver's stored configuration is read back from its flash layer with
   `UBX-CFG-VALGET` and reported at boot. This is what makes "survives a power cycle" an
   observation rather than an inference: an acknowledgement says a write was accepted, a
