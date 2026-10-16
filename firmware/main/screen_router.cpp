@@ -12,7 +12,9 @@
 #include "track_timer/diagnostics/snapshot.hpp"
 #include "track_timer/storage/sd_card.hpp"
 #include "track_timer/storage/sd_track_store.hpp"
+#include "track_timer/timing/embedded_runtime.hpp"
 #include "track_timer/timing/engine.hpp"
+#include "track_timer/timing/settings_adapter.hpp"
 #include "track_timer/display/panel.hpp"
 #include "track_timer/ui/diagnostics.hpp"
 #include "track_timer/ui/carousel_screen.hpp"
@@ -417,6 +419,22 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     {LV_SYMBOL_BELL, "CLOCK", kAmber, "GMT from GNSS"},
 };
 
+[[nodiscard]] const char* reconfigure_result_label(
+    const timing::TimingReconfigureResult result) noexcept
+{
+    switch (result) {
+    case timing::TimingReconfigureResult::not_started:
+        return "runtime not started";
+    case timing::TimingReconfigureResult::busy:
+        return "timing task busy";
+    case timing::TimingReconfigureResult::rejected:
+        return "geometry rejected";
+    case timing::TimingReconfigureResult::reconfigured:
+        return "reconfigured";
+    }
+    return "unknown";
+}
+
 constexpr bool mode_entry_is(const ui::DeviceMode mode, const char* const label) noexcept
 {
     return same_text(kModeEntries[static_cast<std::size_t>(mode)].label, label);
@@ -515,6 +533,7 @@ class ScreenRouter {
         domain::UiSnapshot ui_snapshot{};
         ui_snapshot.session_active = true;
         ui_snapshot.session_remaining_ms = snapshot.session_remaining_ms;
+        apply_lap_state(ui_snapshot);
 
         ui::ActiveSessionDisplayConfig display{};
         display.average_lap_seconds = settings_.average_lap_seconds;
@@ -556,13 +575,22 @@ class ScreenRouter {
         const auto now_us = esp_timer_get_time();
         (void)gnss_pipeline_.poll(*gnss_transport_, now_us);
 
-        // Nothing consumes fixes yet: the timing engine is not wired to this queue. Drain
-        // explicitly rather than let a bounded queue fill and report drops that say
-        // nothing about the receiver - a drop should mean a consumer was too slow, and
-        // there is no consumer to blame yet.
+        // Hand every accepted fix to the timing task. Until now this queue was drained to
+        // the floor because nothing consumed it, so every fix the receiver has ever
+        // produced on this device was read, validated, counted and thrown away.
+        //
+        // Still drained unconditionally, even with no track armed. A bounded queue left to
+        // fill would report drops that say nothing about the receiver, and
+        // enqueue_timing_fix is a no-op until the runtime starts - so the pop has to
+        // happen either way and the push is what changes.
         domain::GnssFix fix{};
         while (gnss_pipeline_.queue().pop(fix)) {
+            // A refusal is counted inside the runtime as a fix queue drop, and is not
+            // counted again here: the timing task is the slow consumer in that case, and
+            // recording the same loss twice would make one dropped fix look like two.
+            (void)timing::enqueue_timing_fix(fix);
         }
+        drain_timing_output();
 
         const auto health = gnss_pipeline_.health(now_us);
         gps_only_snapshot_.receiver_present = health != domain::GnssHealth::unavailable;
@@ -1135,6 +1163,7 @@ class ScreenRouter {
         ui_snapshot.session_active = true;
         ui_snapshot.session_remaining_ms =
             static_cast<std::int64_t>(settings_.session_duration_seconds) * 1'000;
+        apply_lap_state(ui_snapshot);
 
         ui::ActiveSessionDisplayConfig display{};
         display.average_lap_seconds = settings_.average_lap_seconds;
@@ -1178,6 +1207,102 @@ class ScreenRouter {
         ESP_LOGI("track_timer", "session start: %d over %u s", static_cast<int>(started),
                  static_cast<unsigned>(settings_.session_duration_seconds));
         describe_mode();
+    }
+
+    // Hands the circuit that has just armed to the timing task, starting it on the first.
+    //
+    // The configuration is rebuilt from the definition catalog::apply_track parsed and the
+    // settings it used, through the same make_timing_engine_config, so the task's engine
+    // and the pre-flight engine cannot end up configured from different geometry.
+    void arm_timing_runtime() noexcept
+    {
+        const auto config = timing::make_timing_engine_config(active_track_, settings_);
+        if (!timing_started_) {
+            timing_started_ = timing::start_embedded_timing_runtime(config);
+            ESP_LOGI("track_timer", "timing: runtime %s",
+                     timing_started_ ? "started, fixes now reach the engine"
+                                     : "failed to start - no laps will be timed");
+            return;
+        }
+        const auto result = timing::reconfigure_embedded_timing(config);
+        // A refusal here leaves no circuit loaded at all, because TimingEngine::configure
+        // resets on every failure path. Saying so matters: the alternative reading is that
+        // the device is still timing the previous track, which it is not.
+        if (result != timing::TimingReconfigureResult::reconfigured) {
+            track_armed_ = false;
+        }
+        ESP_LOGI("track_timer", "timing: %s", reconfigure_result_label(result));
+    }
+
+    // Takes everything the timing task has produced since the last tick.
+    //
+    // Drained every tick rather than only while a session runs. A queue nobody reads is a
+    // queue that fills and then reports drops, and a drop there would be this code's
+    // fault rather than the engine's or the receiver's - which is exactly the distinction
+    // the loss counters exist to preserve.
+    void drain_timing_output() noexcept
+    {
+        if (!timing_started_) {
+            return;
+        }
+        domain::LapEvent event{};
+        while (timing::try_receive_lap_event(event)) {
+            const auto duration_ms = event.lap_duration_ns / 1'000'000;
+            ESP_LOGI("track_timer", "lap %u: %lld:%02llu.%03llu",
+                     static_cast<unsigned>(event.lap_index),
+                     static_cast<long long>(duration_ms / 60'000),
+                     static_cast<unsigned long long>(duration_ms / 1'000 % 60),
+                     static_cast<unsigned long long>(duration_ms % 1'000));
+        }
+        // Drained and discarded for now. The records are the raw material for the offline
+        // replay in #43 and belong in the log rather than on the screen, but the queue has
+        // to be emptied either way: one left to fill would report drops that mean only
+        // that nobody was reading it. The runtime counts what passes through.
+        timing::GateCrossingDecision decision{};
+        while (timing::try_receive_gate_crossing_record(decision)) {
+        }
+        log_timing_progress();
+    }
+
+    // The two counters that mean something has gone wrong, reported the first time each
+    // moves. Neither should ever be non-zero: a fix queue drop means the timing task could
+    // not keep up with 20 Hz, and a deadline miss means one fix took longer than the 40 ms
+    // budget the engine was sized against.
+    void log_timing_progress() noexcept
+    {
+        const auto metrics = timing::embedded_timing_metrics();
+        if (metrics.fix_queue_drops == logged_timing_drops_ &&
+            metrics.deadline_misses == logged_deadline_misses_) {
+            return;
+        }
+        logged_timing_drops_ = metrics.fix_queue_drops;
+        logged_deadline_misses_ = metrics.deadline_misses;
+        ESP_LOGW("track_timer",
+                 "timing: %llu fix drops, %llu deadline misses (processed %llu, peak %lld us, "
+                 "queue high-water %u)",
+                 static_cast<unsigned long long>(metrics.fix_queue_drops),
+                 static_cast<unsigned long long>(metrics.deadline_misses),
+                 static_cast<unsigned long long>(metrics.fixes_processed),
+                 static_cast<long long>(metrics.maximum_processing_us),
+                 static_cast<unsigned>(metrics.fix_queue_high_water_mark));
+    }
+
+    // The lap in progress, as the engine last saw it.
+    //
+    // Deliberately not a free-running stopwatch. Every figure here was measured from a
+    // GNSS crossing, and between fixes it stands still for up to a tick rather than
+    // counting on alone - which is the honest behaviour, because a lap time that keeps
+    // advancing after the fixes stop is a lap time nothing is measuring.
+    void apply_lap_state(domain::UiSnapshot& snapshot) const noexcept
+    {
+        if (!timing_started_) {
+            return;
+        }
+        const auto times = timing::lap_display_times(timing::embedded_lap_snapshot());
+        snapshot.lap_index = times.lap_index;
+        snapshot.current_lap_ms = times.current_lap_ms;
+        snapshot.previous_lap_ms = times.previous_lap_ms;
+        snapshot.best_lap_ms = times.best_lap_ms;
     }
 
     // The track name and mode note are the same whether the session is running or waiting
@@ -1420,11 +1545,17 @@ class ScreenRouter {
 
         const auto report =
             catalog::apply_track(identifier, track_store_, settings_, false,
-                                 timing_engine_, *load_scratch_, active_track_);
+                                 timing_preflight_, *load_scratch_, active_track_);
         track_armed_ = report.ok();
         last_apply_result_ = report.result;
+        if (track_armed_) {
+            // May clear track_armed_ again: the live engine gets its own look at the
+            // geometry, and the pre-flight copy agreeing does not bind it.
+            arm_timing_runtime();
+        }
         if (!track_armed_) {
-            // Keep the name so the dashboard can report the circuit and its state.
+            // Keep the name so the dashboard can report the circuit and its state. Reached
+            // both when the definition never loaded and when the live engine refused it.
             active_track_ = chosen;
         }
 
@@ -2075,7 +2206,17 @@ class ScreenRouter {
     storage::SdTrackStore track_store_{};
     catalog::TrackCatalog track_catalog_{nullptr, 0};
     catalog::TrackLoadScratch* load_scratch_{nullptr};
-    timing::TimingEngine timing_engine_{};
+    // Not the engine that times laps. That one belongs to the timing task and is never
+    // touched from here. This is the pre-flight copy catalog::apply_track configures, and
+    // its value is the ordering it guarantees: the definition is read, parsed and checked
+    // against a real engine before the live one is disturbed, so a corrupt file on the
+    // card leaves the circuit already loaded running untouched.
+    timing::TimingEngine timing_preflight_{};
+    bool timing_started_{false};
+    // Logged once each when they first appear. A count that has stopped moving is not news
+    // every tick, and a count that starts moving at all is.
+    std::uint64_t logged_timing_drops_{0};
+    std::uint64_t logged_deadline_misses_{0};
     std::array<ui::CarouselEntry, track::kMaximumCatalogTracks> track_entries_{};
     std::array<std::array<char, track::kTrackNameCapacity>,
                track::kMaximumCatalogTracks> track_names_{};

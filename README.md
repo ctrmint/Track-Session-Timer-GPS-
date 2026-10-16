@@ -22,10 +22,17 @@ quality gate, on 15 satellites. The chain is an I2C transport, a UBX parser, a f
 gate and a pipeline that counts every way a fix can go missing, and all of it is now
 exercised by a real receiver rather than only by host tests.
 
-What remains is that **nothing consumes the fix queue yet**, so the timing engine, lap state
-machine and logger have still never seen a fix. That is the next piece of work, and it is
-software rather than hardware. With nothing attached GPS Only reports "NO RECEIVER", which
-is the truth rather than a fault.
+Those fixes now reach the timing task. The high-priority timing task, its engine, its lap
+state machine and its bounded queues were all built and host-tested long before a receiver
+existed, and until recently **nothing called any of them** - every fix the device had ever
+produced was read, validated, counted and thrown away. The queue has a consumer now, and
+lap times reach the screen.
+
+What remains before a lap can actually be timed is a circuit the engine will accept. No
+definition on the card is timing-ready: all 24 UK layouts are provisional (#139), so the
+device loads them and runs timer-only. #184's test loop is the route to a first real lap.
+With nothing attached GPS Only reports "NO RECEIVER", which is the truth rather than a
+fault.
 
 Two modes are built on those fixes. **Speed Only** shows road speed in mph at 248 px -
 two thirds of the panel's height - with a stationary car reading `0` and an absent or

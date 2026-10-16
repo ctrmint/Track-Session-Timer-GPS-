@@ -69,6 +69,21 @@ struct LapStateSnapshot {
     std::uint32_t previous_lap_suspect_flags{lap_suspect_none};
 };
 
+// The lap times a display needs, in the units a display works in.
+//
+// Separated from the snapshot because the conversion is where a "no lap yet" turns into a
+// wrong number. Every field of LapStateSnapshot is nanoseconds and may be
+// domain::kUnavailableTime, which is -1: divide that by a million without checking and an
+// unstarted lap renders as 0 ms, which is a believable lap time and the wrong answer.
+struct LapDisplayTimes {
+    std::int64_t current_lap_ms{domain::kUnavailableTime};
+    std::int64_t previous_lap_ms{domain::kUnavailableTime};
+    std::int64_t best_lap_ms{domain::kUnavailableTime};
+    std::uint32_t lap_index{0};
+};
+
+[[nodiscard]] LapDisplayTimes lap_display_times(const LapStateSnapshot& snapshot) noexcept;
+
 struct LapStateUpdate {
     LapStateResult result{LapStateResult::no_change};
     LapStateSnapshot snapshot{};

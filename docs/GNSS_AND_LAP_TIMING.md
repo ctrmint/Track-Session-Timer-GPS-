@@ -263,6 +263,14 @@ wait, and the task does not call UI or storage code. Runtime metrics expose queu
 drops, high-water marks, accepted gate counts, maximum per-fix processing time, and
 misses of the 40 ms (25 Hz) deadline.
 
+Changing circuit while that task is running is a deliberate operation rather than a
+reconfiguration in place. The engine is taken under a mutex - not a spinlock, since
+`process_fix` runs for far longer than interrupts may be disabled - and every queued fix,
+lap event and gate record is discarded with the old geometry. A fix measured against one
+circuit and evaluated against another is not a stale reading but a crossing computed across
+two different tracks, and the discarded fixes are counted separately from queue drops
+because one is a deliberate loss and the other is a consumer that could not keep up.
+
 A deterministic 25 Hz walking-speed loop is replayed with two arrival-latency
 patterns. Both paths must emit exactly three laps and identical typed gate records
 with receiver-time timestamps, while every measured host processing call remains

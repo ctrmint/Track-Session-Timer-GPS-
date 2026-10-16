@@ -163,5 +163,31 @@ int main()
         assert(track_timer::timing::lap_state_result_name(result)[0] != '\0');
     }
 
-    std::cout << "Deterministic lap lifecycle, rearm, and minimum-time rules passed\n";
+    // A fresh machine has no lap times at all, and that must not render as zeroes. Every
+    // field here is kUnavailableTime, which is -1: divided by a million without a check it
+    // becomes 0 ms, which is a believable lap time and the wrong answer - the same class of
+    // mistake as showing an absent receiver as 0 mph.
+    LapStateMachine display({20 * kSecond, 10.0});
+    auto times = lap_display_times(display.snapshot());
+    assert(times.current_lap_ms == kUnavailableTime);
+    assert(times.previous_lap_ms == kUnavailableTime);
+    assert(times.best_lap_ms == kUnavailableTime);
+    assert(times.lap_index == 0);
+
+    // Once there are laps, nanoseconds become the milliseconds a display works in.
+    start_lap(display, 10 * kSecond);
+    times = lap_display_times(display.snapshot());
+    assert(times.previous_lap_ms == kUnavailableTime);  // no lap has finished yet
+    auto completed = display.update(fix(70 * kSecond, 0.0, true));
+    assert(completed.result == LapStateResult::lap_completed);
+    times = lap_display_times(completed.snapshot);
+    assert(times.previous_lap_ms == 60'000);
+    assert(times.best_lap_ms == 60'000);
+    assert(times.lap_index == 2);
+    // A lap in progress that has not been fed a fix yet is zero elapsed, not unavailable.
+    // Those are different states and the display shows them differently.
+    assert(times.current_lap_ms == 0);
+
+    std::cout << "Deterministic lap lifecycle, rearm, minimum-time rules, and lap times "
+                 "converted for display without turning an absent lap into a zero passed\n";
 }

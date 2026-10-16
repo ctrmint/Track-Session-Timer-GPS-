@@ -230,4 +230,21 @@ const char* lap_state_result_name(const LapStateResult result) noexcept
     return "unknown";
 }
 
+LapDisplayTimes lap_display_times(const LapStateSnapshot& snapshot) noexcept
+{
+    // kUnavailableTime is -1, not a large negative, so it survives the division as 0 and
+    // would read as a completed lap of no duration. Each field is therefore passed
+    // through rather than converted when it is unavailable.
+    const auto to_ms = [](const std::int64_t nanoseconds) {
+        return nanoseconds == domain::kUnavailableTime ? domain::kUnavailableTime
+                                                       : nanoseconds / 1'000'000;
+    };
+    LapDisplayTimes times{};
+    times.current_lap_ms = to_ms(snapshot.current_lap_elapsed_ns);
+    times.previous_lap_ms = to_ms(snapshot.previous_lap_duration_ns);
+    times.best_lap_ms = to_ms(snapshot.best_lap_duration_ns);
+    times.lap_index = snapshot.lap_index;
+    return times;
+}
+
 }  // namespace track_timer::timing
