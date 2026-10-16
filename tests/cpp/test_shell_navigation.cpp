@@ -280,7 +280,31 @@ void names_are_stable_for_logging_and_replay()
     assert(std::strcmp(shell_level_name(ShellLevel::value), "value") == 0);
     assert(std::strcmp(shell_outcome_name(ShellOutcome::mode_selected), "mode-selected") == 0);
     assert(std::strcmp(menu_item_name(MenuItem::mode), "mode") == 0);
-    assert(std::strcmp(setup_item_name(SetupItem::track_selection), "track-selection") == 0);
+    assert(std::strcmp(setup_item_name(SetupItem::gate_capture), "gate-capture") == 0);
+    assert(std::strcmp(shell_outcome_name(ShellOutcome::gate_capture_selected),
+                       "gate-capture-selected") == 0);
+}
+
+// Gate capture is reached from Setup and then drives itself: the shell reports the choice
+// and stops, as it does for a mode or a trigger, rather than descending a level it has no
+// children for. Without this the entry draws and does nothing, which is how it sat for
+// months - built, tested, and unreachable on the device.
+void gate_capture_is_reachable_from_setup()
+{
+    auto shell = opened();
+    to_menu(shell, MenuItem::setup);
+    auto result = shell.dispatch(InputAction::press);
+    assert(result.outcome == ShellOutcome::entered);
+    assert(result.state.level == ShellLevel::section);
+
+    shell.set_section_count(2);
+    result = shell.dispatch(InputAction::swipe_left);
+    assert(result.state.section_index == static_cast<std::size_t>(SetupItem::gate_capture));
+    result = shell.dispatch(InputAction::press);
+    assert(result.outcome == ShellOutcome::gate_capture_selected);
+    // The shell stays where it is. What happens next belongs to the capture screen, which
+    // has its own buttons and its own way out.
+    assert(result.state.level == ShellLevel::section);
 }
 
 // A menu that always opens on its first item cannot tell the driver what is set, only let
@@ -342,6 +366,7 @@ int main()
     names_are_stable_for_logging_and_replay();
 
     a_section_opens_on_the_item_in_force();
+    gate_capture_is_reachable_from_setup();
     an_out_of_range_section_falls_back_to_the_first();
 
     std::cout << "Hold gate, Mode selection, descending editor levels, and session lock "

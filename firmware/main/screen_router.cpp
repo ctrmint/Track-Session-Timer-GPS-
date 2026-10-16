@@ -26,6 +26,7 @@
 #include "track_timer/ui/clock_screen.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/compass_screen.hpp"
+#include "track_timer/ui/gate_capture_screen.hpp"
 #include "track_timer/ui/speed_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/imu_meter.hpp"
@@ -459,6 +460,10 @@ static_assert(mode_entry_is(ui::DeviceMode::clock, "CLOCK"));
 // Track selection has moved to the top level, so Setup keeps only what belongs there.
 constexpr ui::CarouselEntry kSetupEntries[] = {
     {LV_SYMBOL_EDIT, "DEVICE SETTINGS", kAmber},
+    // Second, because SetupItem::gate_capture is second and the shell matches a carousel
+    // position against that enum. Capture works on the circuit already loaded, so the
+    // order of operations is choose the track, then capture its gates.
+    {LV_SYMBOL_GPS, "CAPTURE GATES", kRuby, "promote a provisional circuit"},
     {LV_SYMBOL_REFRESH, "G-METER", kViolet},
     {LV_SYMBOL_EYE_OPEN, "DISPLAY", kGreen},
 };
@@ -608,6 +613,14 @@ class ScreenRouter {
             (void)timing::enqueue_timing_fix(fix);
         }
         drain_timing_output();
+
+        // Only while the capture screen is up. The controller judges accuracy, fix age and
+        // whether the car is moving from this, so it has to see the same fixes the rest of
+        // the device does - but feeding it when nothing is capturing is work for nobody.
+        if (capturing_) {
+            gate_capture_.update_fix(gnss_pipeline_.last_accepted(), now_us);
+            refresh_gate_capture();
+        }
 
         const auto health = gnss_pipeline_.health(now_us);
         gps_only_snapshot_.receiver_present = health != domain::GnssHealth::unavailable;
@@ -1016,6 +1029,16 @@ class ScreenRouter {
         compass_ = new (compass_storage_) ui::CompassScreen(compass_root_);
         ui::attach_gesture_input(compass_root_, on_input, this);
 
+        // Gate capture drives itself from its own buttons rather than from the carousel
+        // gestures, so this root deliberately gets no gesture binding: a swipe here must
+        // not navigate away from a half-captured line.
+        gate_capture_root_ = lv_obj_create(nullptr);
+        if (gate_capture_root_ == nullptr) {
+            return false;
+        }
+        gate_capture_screen_ = new (gate_capture_storage_)
+            ui::GateCaptureScreen(gate_capture_root_, on_gate_capture, this);
+
         // Clock owns the whole panel as well, and for the same reason: there is nothing on
         // it to press, so the hold gesture still reaches the shell.
         clock_root_ = lv_obj_create(nullptr);
@@ -1244,6 +1267,109 @@ class ScreenRouter {
         ESP_LOGI("track_timer", "session start: %d over %u s", static_cast<int>(started),
                  static_cast<unsigned>(settings_.session_duration_seconds));
         describe_mode();
+    }
+
+    static void on_gate_capture(const ui::GateCaptureAction action, void* context) noexcept
+    {
+        static_cast<ScreenRouter*>(context)->handle_gate_capture(action);
+    }
+
+    // Opens capture against the circuit already loaded.
+    //
+    // The simulator reaches this from its track-selection screen; the device's track list
+    // is a carousel with no equivalent action, and working on the loaded circuit is the
+    // clearer order of operations anyway - choose the track, then capture its gates.
+    void open_gate_capture() noexcept
+    {
+        if (gate_capture_screen_ == nullptr || gate_capture_root_ == nullptr) {
+            return;
+        }
+        if (active_track_.track_id[0] == '\0') {
+            // Nothing to capture against. Saying so beats opening a screen whose every
+            // field would be blank.
+            ESP_LOGW("track_timer", "capture: no circuit loaded - choose a track first");
+            return;
+        }
+        gate_capture_.begin(active_track_, &track_store_, session_was_active_);
+        capturing_ = true;
+        refresh_gate_capture();
+        lv_screen_load(gate_capture_root_);
+        ESP_LOGI("track_timer", "capture: opened for %s", active_track_.track_id.data());
+    }
+
+    void refresh_gate_capture() noexcept
+    {
+        if (gate_capture_screen_ != nullptr) {
+            gate_capture_screen_->update(gate_capture_.view_model());
+        }
+    }
+
+    void handle_gate_capture(const ui::GateCaptureAction action) noexcept
+    {
+        switch (action) {
+        case ui::GateCaptureAction::previous_gate:
+            gate_capture_.previous_gate();
+            break;
+        case ui::GateCaptureAction::next_gate:
+            gate_capture_.next_gate();
+            break;
+        case ui::GateCaptureAction::toggle_endpoint:
+            gate_capture_.toggle_endpoint();
+            break;
+        case ui::GateCaptureAction::capture:
+            gate_capture_.capture(session_was_active_);
+            break;
+        case ui::GateCaptureAction::save:
+            // The second press is the confirmation. The controller asks for one when it is
+            // about to replace a definition that already exists.
+            gate_capture_.save(gate_capture_.status() ==
+                               ui::GateCaptureStatus::overwrite_confirmation);
+            if (gate_capture_.status() == ui::GateCaptureStatus::saved) {
+                finish_gate_capture();
+                return;
+            }
+            break;
+        case ui::GateCaptureAction::cancel:
+            gate_capture_.cancel();
+            leave_gate_capture();
+            return;
+        }
+        // The status rather than the action, because the status is the part that answers
+        // why nothing happened: "moving" and "stale-fix" are refusals with different
+        // causes, and from outside they look identical.
+        ESP_LOGI("track_timer", "capture: %s - gate %u %s, %u of 8 endpoints",
+                 ui::gate_capture_status_name(gate_capture_.status()),
+                 static_cast<unsigned>(gate_capture_.gate_index()),
+                 gate_capture_.right_endpoint_selected() ? "right" : "left",
+                 static_cast<unsigned>(gate_capture_.captured_endpoint_count()));
+        refresh_gate_capture();
+    }
+
+    // A saved capture is only useful if the device picks it up. Rebuilding the catalogue
+    // and re-applying the circuit is what turns a provisional track into an armed one
+    // without a restart - which matters because this is done at the circuit, where
+    // restarting to find out whether it worked is a poor way to spend the session.
+    void finish_gate_capture() noexcept
+    {
+        ESP_LOGI("track_timer", "capture: saved %s", active_track_.track_id.data());
+        (void)build_catalog();
+        const auto index = track_catalog_.find(
+            std::string_view{active_track_.track_id.data(),
+                             ::strnlen(active_track_.track_id.data(),
+                                       active_track_.track_id.size())});
+        if (index < track_catalog_.view().count) {
+            apply_selected_track(index);
+        }
+        ESP_LOGI("track_timer", "capture: circuit now %s",
+                 track_armed_ ? "armed for timing" : "still timer only");
+        leave_gate_capture();
+    }
+
+    void leave_gate_capture() noexcept
+    {
+        capturing_ = false;
+        shell_.close();
+        lv_screen_load(home_screen());
     }
 
     // Hands the circuit that has just armed to the timing task, starting it on the first.
@@ -2048,6 +2174,9 @@ class ScreenRouter {
             shell_.close();
             lv_screen_load(home_screen());
             break;
+        case ui::ShellOutcome::gate_capture_selected:
+            open_gate_capture();
+            break;
         case ui::ShellOutcome::trigger_selected: {
             const auto chosen =
                 static_cast<settings::SessionTrigger>(result.state.section_index);
@@ -2195,6 +2324,12 @@ class ScreenRouter {
     lv_obj_t* speed_only_root_{nullptr};
     ui::CompassScreen* compass_{nullptr};
     lv_obj_t* compass_root_{nullptr};
+    ui::GateCaptureScreen* gate_capture_screen_{nullptr};
+    lv_obj_t* gate_capture_root_{nullptr};
+    // Holds a TrackDefinition draft of its own, which is 3.6 KB - the same reason the
+    // active definition is a member rather than a local.
+    ui::GateCaptureController gate_capture_{};
+    bool capturing_{false};
     ui::ClockScreen* clock_{nullptr};
     lv_obj_t* clock_root_{nullptr};
     // The last wall clock the receiver vouched for, and when it arrived.
@@ -2282,6 +2417,8 @@ class ScreenRouter {
     alignas(ui::SpeedOnlyScreen) std::byte
         speed_only_storage_[sizeof(ui::SpeedOnlyScreen)]{};
     alignas(ui::CompassScreen) std::byte compass_storage_[sizeof(ui::CompassScreen)]{};
+    alignas(ui::GateCaptureScreen) std::byte
+        gate_capture_storage_[sizeof(ui::GateCaptureScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
     alignas(ui::TimeRollerScreen) std::byte
         roller_storage_[sizeof(ui::TimeRollerScreen)]{};
