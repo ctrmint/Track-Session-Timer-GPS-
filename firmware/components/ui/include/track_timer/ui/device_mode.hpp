@@ -13,6 +13,7 @@ namespace track_timer::ui {
 //   Track Day  operating_mode = timer,    trackday_mode_enabled = true
 //   Race       operating_mode = timer,    trackday_mode_enabled = false
 //   G-Only     operating_mode = g_meter
+//   Speed Only operating_mode = speed_only
 //   GPS Only   operating_mode = gps_only
 //   Clock      operating_mode = clock
 //
@@ -20,16 +21,22 @@ namespace track_timer::ui {
 // so no schema version bump and no migration, and the existing tested Trackday Mode
 // behaviour in ActiveSessionController is reused as-is. The first three modes exhausted
 // the combinations of the two existing fields, so GPS Only is the one that needed a new
-// OperatingMode enumerator - appended, so no stored value changes meaning. Clock needed
-// one for the same reason.
+// OperatingMode enumerator - appended, so no stored value changes meaning. Clock and
+// Speed Only needed one for the same reason.
+//
+// This enum's order is the carousel's running order and nothing else. What persists is the
+// OperatingMode, which mode_from_settings maps here explicitly, so inserting a mode in the
+// middle of this list cannot change what a value already in NVS means - which is why Speed
+// Only sits with the driving modes rather than being appended after the diagnostics.
 enum class DeviceMode : std::uint8_t {
     track_day,
     race,
     g_only,
+    speed_only,
     gps_only,
     clock,
 };
-inline constexpr std::size_t kDeviceModeCount = 5;
+inline constexpr std::size_t kDeviceModeCount = 6;
 
 // What each mode is permitted to show while a session is running.
 struct ModeVisibility {

@@ -134,6 +134,29 @@ void test_clock_operating_mode_round_trips()
     auto beyond = settings;
     beyond.operating_mode = static_cast<OperatingMode>(
         static_cast<std::uint8_t>(OperatingMode::clock) + 1);
+    // No longer out of range - clock has a successor now, as gps_only did before it. This
+    // assertion moving on every added mode is the point of it: the bound has to stay a
+    // bound, and a mode added without widening it would make every setting on the device
+    // revert rather than be corrected.
+    assert(valid_settings(beyond));
+}
+
+// Speed Only, appended after Clock, with the same obligations as the two before it.
+void test_speed_only_operating_mode_round_trips()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::speed_only;
+    assert(valid_settings(settings));
+
+    const auto blob = encode_settings(settings);
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+    assert(decoded.operating_mode == OperatingMode::speed_only);
+    assert(settings_equal(settings, decoded));
+
+    auto beyond = settings;
+    beyond.operating_mode = static_cast<OperatingMode>(
+        static_cast<std::uint8_t>(OperatingMode::speed_only) + 1);
     assert(!valid_settings(beyond));
 }
 
@@ -387,6 +410,7 @@ int main()
     test_validation_and_codec();
     test_gps_only_operating_mode_round_trips();
     test_clock_operating_mode_round_trips();
+    test_speed_only_operating_mode_round_trips();
     test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();
     test_migration_corruption_and_storage_errors();

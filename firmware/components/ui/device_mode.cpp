@@ -13,6 +13,11 @@ ModeVisibility visibility_for(const DeviceMode mode) noexcept
     case DeviceMode::g_only:
         // The G meter owns the whole panel; no timer, no laps.
         return {false, false, false, true, false};
+    case DeviceMode::speed_only:
+        // Road speed alone. gnss_data is set because that is where the number comes from,
+        // not because a position is drawn; like the two below it, this is not a session
+        // view and must not offer a timer.
+        return {false, false, false, false, true};
     case DeviceMode::gps_only:
         // A diagnostic view of the receiver alone. Showing a session timer here would
         // invite using it to time something, which is the one thing this mode is not for.
@@ -32,6 +37,9 @@ DeviceMode mode_from_settings(const settings::DeviceSettings& settings) noexcept
     // the UI never writes still resolve to something definite.
     if (settings.operating_mode == settings::OperatingMode::g_meter) {
         return DeviceMode::g_only;
+    }
+    if (settings.operating_mode == settings::OperatingMode::speed_only) {
+        return DeviceMode::speed_only;
     }
     if (settings.operating_mode == settings::OperatingMode::gps_only) {
         return DeviceMode::gps_only;
@@ -57,6 +65,10 @@ void apply_mode(const DeviceMode mode, settings::DeviceSettings& settings) noexc
         settings.operating_mode = settings::OperatingMode::g_meter;
         settings.trackday_mode_enabled = false;
         break;
+    case DeviceMode::speed_only:
+        settings.operating_mode = settings::OperatingMode::speed_only;
+        settings.trackday_mode_enabled = false;
+        break;
     case DeviceMode::gps_only:
         settings.operating_mode = settings::OperatingMode::gps_only;
         settings.trackday_mode_enabled = false;
@@ -77,6 +89,8 @@ const char* device_mode_name(const DeviceMode mode) noexcept
         return "race";
     case DeviceMode::g_only:
         return "g-only";
+    case DeviceMode::speed_only:
+        return "speed-only";
     case DeviceMode::gps_only:
         return "gps-only";
     case DeviceMode::clock:
@@ -94,6 +108,8 @@ const char* device_mode_label(const DeviceMode mode) noexcept
         return "RACE";
     case DeviceMode::g_only:
         return "G-ONLY";
+    case DeviceMode::speed_only:
+        return "SPEED";
     case DeviceMode::gps_only:
         return "GPS ONLY";
     case DeviceMode::clock:
@@ -111,6 +127,8 @@ const char* device_mode_summary(const DeviceMode mode) noexcept
         return "Lap times, delta and session remaining.";
     case DeviceMode::g_only:
         return "Graphical G meter only.";
+    case DeviceMode::speed_only:
+        return "Road speed in mph, as large as the panel allows.";
     case DeviceMode::gps_only:
         return "Road speed, position and receiver data. Diagnosis, not timing.";
     case DeviceMode::clock:

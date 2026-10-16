@@ -58,6 +58,7 @@ add_library(
     ../firmware/components/ui/gate_capture.cpp
     ../firmware/components/ui/clock.cpp
     ../firmware/components/ui/gps_only.cpp
+    ../firmware/components/ui/speed_only.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/imu_meter.cpp
@@ -122,6 +123,7 @@ add_library(
     ../firmware/components/ui/g_meter_screen.cpp
     ../firmware/components/ui/clock_screen.cpp
     ../firmware/components/ui/gps_only_screen.cpp
+    ../firmware/components/ui/speed_only_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     src/host_timer_font.cpp
     ../firmware/components/ui/ready_screen.cpp
@@ -1291,6 +1293,43 @@ if(BUILD_TESTING)
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
             PASS_REGULAR_EXPRESSION "gps-state=fixed.*gps-speed=[0-9]+"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-speed-only-screen
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen speed-only
+            --frames 20
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/speed-only.ppm"
+    )
+    set_tests_properties(
+        simulator-speed-only-screen
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "screen=setup.*setup-page=speed-only.*speed-only=---"
+            TIMEOUT 20
+    )
+
+    # Same limitation as the GPS Only pair above, and the same answer: every scenario that
+    # replays fixes also runs a session, which hides the page. This asserts the view model
+    # against the real replayed stream and takes no snapshot, so it cannot be read as
+    # evidence about what is drawn.
+    add_test(
+        NAME simulator-speed-only-fixed-view
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --screen speed-only
+            --frames 30
+    )
+    set_tests_properties(
+        simulator-speed-only-fixed-view
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "gps-state=fixed.*speed-only=[0-9]+"
             TIMEOUT 20
     )
 

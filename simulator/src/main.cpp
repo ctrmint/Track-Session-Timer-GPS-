@@ -190,12 +190,13 @@ Options parse_options(const int argc, char** argv)
                 options.initial_screen != "gate-capture" &&
                 options.initial_screen != "g-meter" &&
                 options.initial_screen != "gps-only" &&
+                options.initial_screen != "speed-only" &&
                 options.initial_screen != "clock" &&
                 options.initial_screen != "review" &&
                 options.initial_screen != "diagnostics") {
                 throw std::invalid_argument(
                     "--screen must be ready, setup, settings, tracks, gate-capture, g-meter, "
-                    "gps-only, clock, review, or diagnostics");
+                    "gps-only, speed-only, clock, review, or diagnostics");
             }
         }
         else if (argument == "--imu-state") {
@@ -254,7 +255,7 @@ Options parse_options(const int argc, char** argv)
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|gate-capture|g-meter|gps-only|clock|review|diagnostics] "
+                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|gate-capture|g-meter|gps-only|speed-only|clock|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
                          "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] [--workflow-state STATE] [--trackday-mode saved|enabled|disabled] "
                          "[--snapshot FILE]\n"
@@ -660,6 +661,9 @@ int run(const Options& options)
             else if (options.initial_screen == "gps-only") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::gps_only);
             }
+            else if (options.initial_screen == "speed-only") {
+                screen.open_setup_page(track_timer::simulator::SetupPage::speed_only);
+            }
             else if (options.initial_screen == "clock") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::clock);
             }
@@ -784,6 +788,8 @@ int run(const Options& options)
                      track_timer::ui::gps_only_state(screen.gps_only()))
               << " gps-speed="
               << track_timer::ui::gps_only_view(screen.gps_only()).speed.data()
+              << " speed-only="
+              << track_timer::ui::speed_only_view(screen.gps_only()).speed.data()
               << " clock-state="
               << track_timer::ui::clock_state_name(
                      track_timer::ui::clock_state(screen.clock()))
