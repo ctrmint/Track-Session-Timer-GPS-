@@ -31,9 +31,14 @@ struct ConfigurationLayers {
 };
 
 struct GnssConfigurationRequest {
-    // Milliseconds between measurements. 50 is 20 Hz, which ADR-005 and #16 both want
-    // proven before 25 Hz is attempted.
-    std::uint16_t measurement_period_ms{50};
+    // Milliseconds between measurements. 40 is 25 Hz.
+    //
+    // 20 Hz came first and was proven on hardware - 20.0 Hz observed, every frame accepted,
+    // nothing refused - which is what #16 and ADR-005 asked for before this was attempted.
+    // The receiver was separately measured at 25.3 frames/s, so the part was never the
+    // question; what had to move with this is the poll, which was rate-limited to 20 Hz and
+    // would otherwise have been slower than the receiver it reads.
+    std::uint16_t measurement_period_ms{40};
     ConfigurationLayers layers{};
     // Leaving NMEA enabled costs bus bandwidth on a bus shared with the display's touch
     // controller, the IMU and the RTC, and every byte of it has to be discarded by the

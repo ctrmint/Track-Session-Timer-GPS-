@@ -562,14 +562,30 @@ class ScreenRouter {
         trackday_->update(active_session_.view_model().trackday);
     }
 
-    // Pulls a sample and refreshes the radar. Called from the LVGL task so LVGL is only
-    // ever touched by its owner.
-    // One entry point for everything the LVGL service tick drives.
+    // Two cadences out of one tick, because the receiver's deadline is not the display's.
+    //
+    // The GNSS poll has to outpace the fix rate or fixes sit in the receiver's buffer
+    // waiting to be collected - at 25 Hz that is every 40 ms, and the tick runs at 25.
+    // Screens, the IMU and the session lifecycle gain nothing from running that often, and
+    // redrawing live views at 40 Hz costs the task that has starved twice (#133, #141).
+    //
+    // GNSS first, so the screens below render the fixes collected this tick rather than
+    // the previous one.
     void service() noexcept
     {
-        service_imu();
         service_gnss();
+
+        const auto now_us = esp_timer_get_time();
+        if (now_us - last_display_service_us_ < kDisplayServicePeriodUs) {
+            return;
+        }
+        last_display_service_us_ = now_us;
+        service_imu();
         service_roller();
+        if (capturing_) {
+            // Drawn at the display's cadence; the controller above is fed every tick.
+            refresh_gate_capture();
+        }
     }
 
     // Polled from the LVGL service tick for now, which is deliberately the arrangement
@@ -605,9 +621,12 @@ class ScreenRouter {
         // Only while the capture screen is up. The controller judges accuracy, fix age and
         // whether the car is moving from this, so it has to see the same fixes the rest of
         // the device does - but feeding it when nothing is capturing is work for nobody.
+        //
+        // Fed here and drawn in service(), because this runs every tick and the drawing
+        // does not need to: the judgement wants every fix, the screen wants the display's
+        // cadence like every other screen.
         if (capturing_) {
             gate_capture_.update_fix(gnss_pipeline_.last_accepted(), now_us);
-            refresh_gate_capture();
         }
 
         const auto health = gnss_pipeline_.health(now_us);
@@ -690,11 +709,11 @@ class ScreenRouter {
                      static_cast<unsigned>(arrival.frames));
         }
 
-        gnss::GnssConfigurationRequest request{};
-        // 20 Hz first. #16 asks for 25 Hz only once this is stable, and the pipeline's gap
-        // detection measures loss against the rate it was told to expect, so the two have
-        // to be changed together.
-        request.measurement_period_ms = 50;
+        // The request's own default, which is the rate this firmware asks for. It was
+        // pinned to 50 here while 20 Hz was being proven, and a second place naming the
+        // rate is a second place to forget: changing the default alone did nothing, and
+        // the line below went on reporting 20 Hz because it said so in the format string.
+        const gnss::GnssConfigurationRequest request{};
 
         gnss_configuration_ = gnss::configure_receiver(
             *gnss_transport_, request,
@@ -707,10 +726,17 @@ class ScreenRouter {
         // satellites, no fix, no lap - traces back here, and this is the line that explains
         // them.
         if (configured) {
+            // The rate is read from the request rather than written into the string. A log
+            // that states a constant cannot report a change, and this one claimed 20 Hz
+            // while the firmware was asking for 25.
             ESP_LOGI("track_timer",
-                     "gnss: configuration %s (20 Hz, nav-pvt on, nmea off, %s write form, "
-                     "frames %u, bytes %u)",
+                     "gnss: configuration %s (%u ms / %u Hz, nav-pvt on, nmea off, %s write "
+                     "form, frames %u, bytes %u)",
                      configuration_outcome_label(report.outcome),
+                     static_cast<unsigned>(request.measurement_period_ms),
+                     static_cast<unsigned>(request.measurement_period_ms == 0
+                                               ? 0U
+                                               : 1000U / request.measurement_period_ms),
                      report.stream_prefixed ? "stream-prefixed" : "raw",
                      static_cast<unsigned>(report.frames_seen),
                      static_cast<unsigned>(report.bytes_read));
@@ -2326,6 +2352,9 @@ class ScreenRouter {
     // but has stopped resolving the time looking live while showing a frozen clock.
     std::int64_t clock_utc_monotonic_us_{domain::kUnavailableTime};
     ui::ClockState logged_clock_state_{ui::ClockState::no_receiver};
+    // Everything that is not the GNSS poll runs at this period rather than the tick's.
+    static constexpr std::int64_t kDisplayServicePeriodUs = 50'000;
+    std::int64_t last_display_service_us_{0};
     gnss::GnssTransport* gnss_transport_{nullptr};
     gnss::GnssPipeline gnss_pipeline_{};
     gnss::GnssConfigurationReport gnss_configuration_{};
