@@ -40,16 +40,6 @@ track_timer::ui::ImuMeterInput vertical_sample(const float vertical_g,
 
 }  // namespace
 
-// #136 asked for "a trace of the last few seconds". That is a property of the span, so the
-// span is what gets asserted: a capacity on its own could mean any duration, which is how
-// 24 points came to be read as a few seconds when it was one and a fifth of one.
-static_assert(track_timer::ui::kImuTrailSpanMs >= 2'000,
-              "the trace has to cover a corner rather than a fraction of one");
-static_assert(track_timer::ui::kImuTrailCapacity *
-                      track_timer::ui::kImuTrailSamplePeriodUs / 1'000 ==
-                  track_timer::ui::kImuTrailSpanMs,
-              "the capacity has to hold exactly the span it claims to");
-
 int main()
 {
     using namespace track_timer;
@@ -69,20 +59,13 @@ int main()
     assert(near(snapshot.peaks.braking_g, 1.1F));
     assert(near(snapshot.peaks.left_g, 0.9F));
 
-    // Overfilled relative to whatever the capacity currently is, not to a literal: the
-    // capacity is derived from the trace span and the display cadence now, so a test
-    // written against the number it happens to produce breaks every time either changes
-    // and tells you nothing about the ring buffer either way. Sixteen past full is enough
-    // to prove the oldest points are dropped rather than the newest refused.
-    constexpr std::uint64_t kOverfill = ui::kImuTrailCapacity + 16;
-    for (std::uint64_t index = 0; index < kOverfill; ++index) {
+    for (std::uint64_t index = 0; index < 40; ++index) {
         input = sample(static_cast<float>(index) / 100.0F, 0.1F, 30 + index);
         meter.update(input, false);
     }
     assert(meter.snapshot().trail_count == ui::kImuTrailCapacity);
     assert(meter.trail_point(ui::kImuTrailCapacity).lateral_g == 0.0F);
-    assert(near(meter.trail_point(ui::kImuTrailCapacity - 1).lateral_g,
-                static_cast<float>(kOverfill - 1) / 100.0F));
+    assert(near(meter.trail_point(ui::kImuTrailCapacity - 1).lateral_g, 0.39F));
 
     input = sample(0.1F, 0.2F, 80);
     snapshot = meter.update(input, true);

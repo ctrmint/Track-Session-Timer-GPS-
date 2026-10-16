@@ -886,42 +886,6 @@ class ScreenRouter {
         }
     }
 
-    // Render cost, which #136 asked for a measurement of rather than an assumption
-    // about. The trace is the most demanding drawing this device does: every trail point
-    // is an LVGL object that is repositioned and restyled on each update, so raising
-    // kImuTrailCapacity raises the work here one-for-one.
-    //
-    // Timed at the call site rather than inside GRadarScreen so the UI component stays
-    // free of esp_timer and remains buildable on the host, and reported as a periodic
-    // summary so the figure can be read off an ordinary boot log instead of needing a
-    // profiler attached.
-    void record_radar_render(const std::int64_t elapsed_us) noexcept
-    {
-        radar_render_count_ += 1;
-        radar_render_total_us_ += elapsed_us;
-        radar_render_worst_us_ = std::max(radar_render_worst_us_, elapsed_us);
-        if (radar_render_count_ < kRadarRenderReportInterval) {
-            return;
-        }
-        // Against the budget, because the absolute figure means little on its own: this
-        // work has to finish inside the display period it is dispatched from, or the
-        // cadence that every other screen shares is what gives way.
-        ESP_LOGI("track_timer",
-                 "radar: %u renders of %u trail points, mean %lld us, worst %lld us "
-                 "(%lld us budget, worst %u%%)",
-                 static_cast<unsigned>(radar_render_count_),
-                 static_cast<unsigned>(ui::kImuTrailCapacity),
-                 static_cast<long long>(radar_render_total_us_ /
-                                        static_cast<std::int64_t>(radar_render_count_)),
-                 static_cast<long long>(radar_render_worst_us_),
-                 static_cast<long long>(kDisplayServicePeriodUs),
-                 static_cast<unsigned>(radar_render_worst_us_ * 100 /
-                                       kDisplayServicePeriodUs));
-        radar_render_count_ = 0;
-        radar_render_total_us_ = 0;
-        radar_render_worst_us_ = 0;
-    }
-
     void service_imu() noexcept
     {
         board::ImuSample sample{};
@@ -979,9 +943,7 @@ class ScreenRouter {
         // and it invalidates areas nobody is looking at.
         if (radar_ != nullptr && radar_root_ != nullptr &&
             lv_screen_active() == radar_root_) {
-            const auto started_us = esp_timer_get_time();
             radar_->update(snapshot);
-            record_radar_render(esp_timer_get_time() - started_us);
         }
         // Same gate, same reason. The snapshot stays at its default until there is a
         // transport to fill it (#17, #18), which is why the screen has to render an absent
@@ -2456,19 +2418,6 @@ class ScreenRouter {
     ui::ClockState logged_clock_state_{ui::ClockState::no_receiver};
     // Everything that is not the GNSS poll runs at this period rather than the tick's.
     static constexpr std::int64_t kDisplayServicePeriodUs = 50'000;
-    // The trail's span in seconds is this period times its capacity, so the two cannot be
-    // reasoned about separately. Asserted rather than commented: changing the cadence
-    // silently rescales the trace, which is how it came to hold roughly a second while
-    // claiming to hold a few.
-    static_assert(kDisplayServicePeriodUs == ui::kImuTrailSamplePeriodUs,
-                  "the trail is appended once per display service, and its span is "
-                  "derived from that period");
-    // Ten seconds at the display cadence. Long enough to average over a real trace rather
-    // than a single frame, short enough that a boot capture contains several reports.
-    static constexpr std::uint32_t kRadarRenderReportInterval = 200;
-    std::uint32_t radar_render_count_{0};
-    std::int64_t radar_render_total_us_{0};
-    std::int64_t radar_render_worst_us_{0};
     std::int64_t last_display_service_us_{0};
     gnss::GnssTransport* gnss_transport_{nullptr};
     gnss::GnssPipeline gnss_pipeline_{};

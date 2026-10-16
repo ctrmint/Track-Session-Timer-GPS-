@@ -13,20 +13,7 @@ namespace track_timer::ui {
 // gyroscope latched tilt as acceleration and had left and right swapped, so they are wrong
 // rather than merely old and are not migrated.
 inline constexpr std::uint32_t kImuMeterSchemaVersion = 2;
-// The trail is appended once per display service, so a capacity on its own says nothing
-// about how much of a drive the trace shows: 24 points is two and a half seconds at 10 Hz
-// and a fifth of a second at 120 Hz. The span is therefore the figure that gets chosen and
-// the capacity is derived from it, with screen_router static_asserting that the cadence it
-// dispatches at is the one assumed here.
-inline constexpr std::int64_t kImuTrailSamplePeriodUs = 50'000;
-// Three seconds. Chosen against what the trace is for rather than as a round number: a
-// corner in a Seven runs roughly two to four seconds from turn-in to unwinding, so three
-// seconds shows the driver the corner they have just taken. The previous 24 points were
-// 1.2 s at this cadence, which showed them the middle of it.
-inline constexpr std::int64_t kImuTrailSpanMs = 3'000;
-inline constexpr std::size_t kImuTrailCapacity =
-    static_cast<std::size_t>(kImuTrailSpanMs * 1'000 / kImuTrailSamplePeriodUs);
-static_assert(kImuTrailCapacity > 1, "a trace needs more than one point");
+inline constexpr std::size_t kImuTrailCapacity = 24;
 inline constexpr float kStandardGravityMps2 = 9.80665F;
 // What the radar can draw. A dot has to stay on the display, so the drawn value is held
 // inside this - but a recorded peak is a different quantity with a different purpose, and
