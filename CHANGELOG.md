@@ -246,6 +246,30 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Changed
 
+- the G radar's trace is back to **1.2 seconds**, reverting an increase to three that was
+  merged on a bad measurement and then measured properly. Both figures below are with the
+  device untouched, which is when the meter reaches `ready` and the trace is actually
+  drawn:
+
+  | | 24 points | 60 points |
+  |---|---|---|
+  | object work, mean | 4,889-6,252 us | 13,658-18,303 us |
+  | share of the 50 ms display period | 12-16% | 36-41% |
+  | worst repaint | 38,532-41,095 us | 53,101-55,442 us |
+  | repaints per 10 s | 147-152 | 166-170 |
+
+  The first measurement was taken while the device was being moved by hand, on the
+  reasoning that a moving dot dirties more screen area than a parked one. Motion keeps the
+  gravity calibration from completing, so `resolve()` stays invalid, the meter state is not
+  `ready`, and `update()` takes the branch that hides every dot without positioning or
+  restyling it. The clean 1,727 to 2,395 us scaling that appeared to make three seconds
+  nearly free was the cost of drawing nothing
+
+- the repaint figures above are a pre-existing problem this work measured rather than
+  caused: **40 ms against a 25 ms service period at the current 24 points**, on the task
+  that also dispatches the receiver poll. At 25 Hz a fix is due every 40 ms. Tracked
+  separately; the trace cannot grow until it is addressed
+
 - the receiver now runs at **25 Hz**. Measured on hardware: 24.9 Hz observed, 57 frames,
   57 accepted, nothing rejected, no checksum errors, and 40 ms read back from the
   receiver's flash layer. The part was never in doubt - it was separately measured at
