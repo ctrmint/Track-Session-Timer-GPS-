@@ -34,7 +34,9 @@ device loads them and runs timer-only. #184's test loop is the route to a first 
 With nothing attached GPS Only reports "NO RECEIVER", which is the truth rather than a
 fault.
 
-The first thing built on those fixes is **Clock** mode: a 24-hour GMT clock taken from the
+Two modes are built on those fixes. **Speed Only** shows road speed in mph at 248 px -
+two thirds of the panel's height - with a stationary car reading `0` and an absent or
+unfixed receiver reading `---` rather than a believable zero. **Clock** mode: a 24-hour GMT clock taken from the
 receiver's own UTC time, fixed to GMT for now and labelled so, since for half the year that
 is an hour behind every other clock in the UK. It shows dashes rather than a time whenever
 the receiver has not resolved one, and free-runs visibly rather than freezing if the

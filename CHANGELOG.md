@@ -8,6 +8,17 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- a **Speed Only** mode: road speed in mph at 248 px, which is the arithmetic ceiling for
+  three digits across this panel and two thirds of its height. Reaching it meant centring
+  the block on the digits actually shown rather than right-aligning into three fixed cells
+  - with the cells pinned, only a two-digit reading can be centred and both `0` and `140`
+  sit 67 px off to one side, `0` being the reading on the panel whenever the car is
+  standing still. The cells stay fixed width, so no digit shuffles against its neighbour;
+  only the block moves, and only at 9 to 10 and 99 to 100
+- Speed Only reuses `gps_only_state()` and `kMetresPerSecondToMph` rather than restating
+  them, so there is one definition on the device of what "no fix" means and one conversion
+  out of metres per second. A stationary car with a good fix reads `0`; an absent or
+  unfixed receiver reads `---` and says which
 - the GNSS fix queue has a consumer. Accepted fixes are handed to the timing task, lap
   events and gate records are drained from it, and lap index, current, previous and best
   lap reach `domain::UiSnapshot` - which the router previously built with only

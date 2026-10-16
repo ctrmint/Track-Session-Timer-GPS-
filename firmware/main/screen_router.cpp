@@ -25,6 +25,7 @@
 #include "track_timer/gnss/pipeline.hpp"
 #include "track_timer/ui/clock_screen.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
+#include "track_timer/ui/speed_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/imu_meter.hpp"
 #include "track_timer/imu/calibration.hpp"
@@ -408,6 +409,9 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     {LV_SYMBOL_LOOP, "TRACK DAY", kGreen},
     {LV_SYMBOL_PLAY, "RACE", kRuby},
     {LV_SYMBOL_CHARGE, "G-ONLY", kViolet},
+    // Before the diagnostic, because it is a driving display rather than something
+    // reached when a thing has gone wrong.
+    {LV_SYMBOL_RIGHT, "SPEED", kGreen, "MPH from GNSS"},
     {LV_SYMBOL_GPS, "GPS ONLY", kAzure},
     // Last, after the diagnostic. It is the mode least likely to be wanted on a track day,
     // and the caption says where the time comes from - a clock that is an hour off BST for
@@ -443,6 +447,7 @@ static_assert(std::size(kModeEntries) == ui::kDeviceModeCount,
 static_assert(mode_entry_is(ui::DeviceMode::track_day, "TRACK DAY"));
 static_assert(mode_entry_is(ui::DeviceMode::race, "RACE"));
 static_assert(mode_entry_is(ui::DeviceMode::g_only, "G-ONLY"));
+static_assert(mode_entry_is(ui::DeviceMode::speed_only, "SPEED"));
 static_assert(mode_entry_is(ui::DeviceMode::gps_only, "GPS ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::clock, "CLOCK"));
 
@@ -892,6 +897,12 @@ class ScreenRouter {
             lv_screen_active() == gps_only_root_) {
             gps_only_->update(ui::gps_only_view(gps_only_snapshot_));
         }
+        // The same gate and the same snapshot: Speed Only is a second reading of what GPS
+        // Only already assembles, so there is one place where "no fix" is decided.
+        if (speed_only_ != nullptr && speed_only_root_ != nullptr &&
+            lv_screen_active() == speed_only_root_) {
+            speed_only_->update(ui::speed_only_view(gps_only_snapshot_));
+        }
         // Same gate again, with one difference: the clock's snapshot has to be rebuilt
         // here rather than reused from service_gnss, because what it shows depends on how
         // long ago the reading arrived and that changes between polls. A clock refreshed
@@ -959,6 +970,15 @@ class ScreenRouter {
         gps_only_ = new (gps_only_storage_) ui::GpsOnlyScreen(gps_only_root_);
         ui::attach_gesture_input(gps_only_root_, on_input, this);
 
+        // Speed Only owns the whole panel too, and like the others has nothing on it to
+        // press, so the hold gesture still reaches the shell.
+        speed_only_root_ = lv_obj_create(nullptr);
+        if (speed_only_root_ == nullptr) {
+            return false;
+        }
+        speed_only_ = new (speed_only_storage_) ui::SpeedOnlyScreen(speed_only_root_);
+        ui::attach_gesture_input(speed_only_root_, on_input, this);
+
         // Clock owns the whole panel as well, and for the same reason: there is nothing on
         // it to press, so the hold gesture still reaches the shell.
         clock_root_ = lv_obj_create(nullptr);
@@ -1004,6 +1024,17 @@ class ScreenRouter {
             ui::bubble_gestures_to_parent(start);
         }
         ui::attach_gesture_input(carousel_root_, on_input, this);
+
+        // Every screen has now asked for input. A refusal here is not a degradation: the
+        // screen draws, swipes through its chevrons and ignores every tap for the life of
+        // the device, which is how the carousel became unselectable when Speed Only took
+        // the binding table to nine.
+        if (const auto refused = ui::gesture_counters().refused_bindings; refused > 0) {
+            ESP_LOGE("track_timer",
+                     "input: %u screen(s) got no gesture binding - they will ignore every "
+                     "touch. Raise kMaximumBindings.",
+                     static_cast<unsigned>(refused));
+        }
 
         // Restore the track that was selected before the last reboot.
         restore_selected_track();
@@ -1295,6 +1326,9 @@ class ScreenRouter {
         case ui::DeviceMode::g_only:
             trackday_->set_mode_note("G-ONLY  -  session timer");
             break;
+        case ui::DeviceMode::speed_only:
+            trackday_->set_mode_note("SPEED  -  road speed in mph");
+            break;
         case ui::DeviceMode::gps_only:
             trackday_->set_mode_note("GPS ONLY  -  receiver diagnosis, not timing");
             break;
@@ -1316,6 +1350,8 @@ class ScreenRouter {
         switch (ui::mode_from_settings(settings_)) {
         case ui::DeviceMode::g_only:
             return radar_root_;
+        case ui::DeviceMode::speed_only:
+            return speed_only_root_;
         case ui::DeviceMode::gps_only:
             return gps_only_root_;
         case ui::DeviceMode::clock:
@@ -1926,6 +1962,15 @@ class ScreenRouter {
         }
 
         const auto result = shell_.dispatch(action);
+        // The shell is otherwise silent, which is why a gesture that goes nowhere is
+        // invisible from the log: every outcome below either redraws something or does
+        // nothing, and both look identical from outside. One line per dispatch says which
+        // gesture arrived, what the shell made of it, and where it ended up.
+        ESP_LOGI("track_timer", "shell: %s -> %s (level %s, menu %u, section %u)",
+                 ui::input_action_name(action), ui::shell_outcome_name(result.outcome),
+                 ui::shell_level_name(result.state.level),
+                 static_cast<unsigned>(result.state.menu_index),
+                 static_cast<unsigned>(result.state.section_index));
         switch (result.outcome) {
         case ui::ShellOutcome::menu_opened:
             show_menu(result.state);
@@ -2104,6 +2149,8 @@ class ScreenRouter {
     // Nothing writes this yet: there is no GNSS transport on the device. It reads as "no
     // receiver", which is the truth, and becomes live when the pipeline lands.
     ui::GpsOnlySnapshot gps_only_snapshot_{};
+    ui::SpeedOnlyScreen* speed_only_{nullptr};
+    lv_obj_t* speed_only_root_{nullptr};
     ui::ClockScreen* clock_{nullptr};
     lv_obj_t* clock_root_{nullptr};
     // The last wall clock the receiver vouched for, and when it arrived.
@@ -2185,6 +2232,8 @@ class ScreenRouter {
     alignas(ui::GRadarScreen) std::byte radar_storage_[sizeof(ui::GRadarScreen)]{};
     alignas(ui::GpsOnlyScreen) std::byte gps_only_storage_[sizeof(ui::GpsOnlyScreen)]{};
     alignas(ui::ClockScreen) std::byte clock_storage_[sizeof(ui::ClockScreen)]{};
+    alignas(ui::SpeedOnlyScreen) std::byte
+        speed_only_storage_[sizeof(ui::SpeedOnlyScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
     alignas(ui::TimeRollerScreen) std::byte
         roller_storage_[sizeof(ui::TimeRollerScreen)]{};

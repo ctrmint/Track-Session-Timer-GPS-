@@ -21,6 +21,10 @@ enum class OperatingMode : std::uint8_t {
     // A wall clock from the receiver's own UTC time. Appended for the same reason, and
     // the same two consequences: no migration, one wider bound in valid_settings.
     clock,
+    // Road speed in mph and nothing else. Appended again, for the same reason: the order
+    // of this enum is the stored format, so a new mode goes on the end whatever order it
+    // is offered to the driver in.
+    speed_only,
 };
 
 enum class OrientationMode : std::uint8_t {

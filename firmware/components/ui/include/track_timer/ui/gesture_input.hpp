@@ -56,6 +56,11 @@ struct GestureCounters {
     std::uint32_t short_clicked{0};
     std::uint32_t dispatched{0};
     std::uint32_t suppressed{0};
+    // Screens that asked for input and did not get it, because the binding table was
+    // full. Counted rather than ignored because the consequence is total: a screen with
+    // no binding cannot be tapped at all, and nothing about it looks wrong - it draws
+    // perfectly and swallows every press.
+    std::uint32_t refused_bindings{0};
 };
 [[nodiscard]] GestureCounters gesture_counters() noexcept;
 
