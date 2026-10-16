@@ -12,6 +12,13 @@ float clamp_g(const float value) noexcept
     return std::max(-kImuDisplayLimitG, std::min(kImuDisplayLimitG, value));
 }
 
+// The same shape, a different bound, and a different reason. This one exists to keep a
+// sensor fault out of the session record; the display's exists to keep a dot on screen.
+float clamp_recorded_g(const float value) noexcept
+{
+    return std::max(-kImuRecordedLimitG, std::min(kImuRecordedLimitG, value));
+}
+
 PlanarAcceleration rotate_sample(const ImuMeterInput& input) noexcept
 {
     const auto x = input.sample.acceleration_x_mps2 / kStandardGravityMps2;
@@ -33,8 +40,12 @@ PlanarAcceleration rotate_sample(const ImuMeterInput& input) noexcept
         break;
     }
 
-    point.lateral_g = point.lateral_valid ? clamp_g(point.lateral_g) : 0.0F;
-    point.longitudinal_g = point.longitudinal_valid ? clamp_g(point.longitudinal_g) : 0.0F;
+    // Deliberately unclamped. This is the measurement, and it feeds both the radar and the
+    // recorded peaks - clamping here is what made a session's peak bounded by what the
+    // dial could draw rather than by what the car did (#162). The display clamps its own
+    // copy below, where the limit belongs.
+    point.lateral_g = point.lateral_valid ? point.lateral_g : 0.0F;
+    point.longitudinal_g = point.longitudinal_valid ? point.longitudinal_g : 0.0F;
     return point;
 }
 
@@ -73,17 +84,24 @@ const ImuMeterSnapshot& ImuMeterController::update(const ImuMeterInput& input,
         return snapshot_;
     }
 
-    const auto point = rotate_sample(input);
-    snapshot_.current = point;
-    append(point);
+    const auto measured = rotate_sample(input);
     // Vertical does not rotate with the display: up is up however the unit is mounted.
     snapshot_.vertical_valid = input.sample_available && input.z_axis_valid;
-    snapshot_.vertical_g =
-        snapshot_.vertical_valid
-            ? clamp_g(input.sample.acceleration_z_mps2 / kStandardGravityMps2)
-            : 0.0F;
+    const auto measured_vertical_g =
+        snapshot_.vertical_valid ? input.sample.acceleration_z_mps2 / kStandardGravityMps2
+                                 : 0.0F;
 
-    update_peaks(point);
+    // Peaks first, from the measurement, before anything is held back for the dial.
+    update_peaks(measured, measured_vertical_g);
+
+    // Now the drawn copy. The radar and the trail take the clamped values, because a dot
+    // beyond the outer ring is not a reading the display can place.
+    auto point = measured;
+    point.lateral_g = point.lateral_valid ? clamp_g(point.lateral_g) : 0.0F;
+    point.longitudinal_g = point.longitudinal_valid ? clamp_g(point.longitudinal_g) : 0.0F;
+    snapshot_.current = point;
+    append(point);
+    snapshot_.vertical_g = snapshot_.vertical_valid ? clamp_g(measured_vertical_g) : 0.0F;
     increment_saturated(snapshot_.accepted_samples);
 
     if (!point.lateral_valid || !point.longitudinal_valid) {
@@ -154,28 +172,45 @@ void ImuMeterController::append(const PlanarAcceleration point) noexcept
     }
 }
 
-void ImuMeterController::update_peaks(const PlanarAcceleration& point) noexcept
+void ImuMeterController::update_peaks(const PlanarAcceleration& point,
+                                      const float vertical_g) noexcept
 {
+    // Anything past the recorded bound is a sensor fault, not a lap. Recording it would
+    // put the fault in the session summary looking like a measurement, and the summary
+    // validator refuses the record outright beyond 10 g - so it is bounded here and the
+    // fact that it was bounded is kept alongside.
+    const auto record = [this](const float value) {
+        if (std::fabs(value) > kImuRecordedLimitG) {
+            snapshot_.peaks.truncated = true;
+        }
+        return clamp_recorded_g(value);
+    };
+
     if (snapshot_.vertical_valid) {
-        snapshot_.peaks.up_g = std::max(snapshot_.peaks.up_g, snapshot_.vertical_g);
-        snapshot_.peaks.down_g = std::max(snapshot_.peaks.down_g, -snapshot_.vertical_g);
+        const auto vertical = record(vertical_g);
+        snapshot_.peaks.up_g = std::max(snapshot_.peaks.up_g, vertical);
+        snapshot_.peaks.down_g = std::max(snapshot_.peaks.down_g, -vertical);
     }
     if (point.longitudinal_valid) {
+        const auto longitudinal = record(point.longitudinal_g);
         snapshot_.peaks.acceleration_g =
-            std::max(snapshot_.peaks.acceleration_g, point.longitudinal_g);
-        snapshot_.peaks.braking_g =
-            std::max(snapshot_.peaks.braking_g, -point.longitudinal_g);
+            std::max(snapshot_.peaks.acceleration_g, longitudinal);
+        snapshot_.peaks.braking_g = std::max(snapshot_.peaks.braking_g, -longitudinal);
     }
     if (point.lateral_valid) {
-        snapshot_.peaks.left_g = std::max(snapshot_.peaks.left_g, -point.lateral_g);
-        snapshot_.peaks.right_g = std::max(snapshot_.peaks.right_g, point.lateral_g);
+        const auto lateral = record(point.lateral_g);
+        snapshot_.peaks.left_g = std::max(snapshot_.peaks.left_g, -lateral);
+        snapshot_.peaks.right_g = std::max(snapshot_.peaks.right_g, lateral);
     }
     if (point.lateral_valid && point.longitudinal_valid) {
-        const auto total = std::sqrt(point.lateral_g * point.lateral_g +
-                                     point.longitudinal_g * point.longitudinal_g);
+        const auto lateral = clamp_recorded_g(point.lateral_g);
+        const auto longitudinal = clamp_recorded_g(point.longitudinal_g);
+        const auto total = std::sqrt(lateral * lateral + longitudinal * longitudinal);
         if (total > snapshot_.peaks.total_g) {
             snapshot_.peaks.total_g = total;
-            snapshot_.peaks.total_position = point;
+            // The position this peak happened at, recorded as measured. It is a record of
+            // where the car was, not a point the radar has to be able to plot.
+            snapshot_.peaks.total_position = {lateral, longitudinal, true, true};
         }
     }
 }

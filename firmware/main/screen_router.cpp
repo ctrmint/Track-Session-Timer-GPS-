@@ -2081,6 +2081,12 @@ class ScreenRouter {
         summary.peaks.up_g = peaks.up_g;
         summary.peaks.down_g = peaks.down_g;
         summary.peaks.total_g = peaks.total_g;
+        // The meter bounds a recorded peak at the same figure the summary validator calls
+        // credible. They are declared in different components, so the agreement is checked
+        // here, where the two actually meet: a meter bound above the validator's would let
+        // a peak through that silently discards the whole record.
+        static_assert(ui::kImuRecordedLimitG <= logger::kMaximumCrediblePeakG,
+                      "a recorded peak must not exceed what the summary will accept");
 
         // The card is not assumed to be there. A failed write costs the durability of this
         // record and nothing else: the session stays in memory and Review shows it either

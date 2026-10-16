@@ -264,6 +264,19 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- recorded G peaks were bounded by what the radar can draw rather than by what the car did.
+  The display clamps a reading to 2 g so the dot stays on the dial, and that clamp was
+  applied before the peaks were taken - so a session summary recorded the limit as though
+  it were a measurement. A hand-shaken session filed `2577 milli-g`, which is two axes
+  pinned at the clamp rather than anything that happened.
+  It bites unevenly, which is why it survived: a car on road tyres reaches about 1.5 g
+  sideways and never approaches the limit, but a kerb strike passes 2 g vertically without
+  trying, and was being filed as exactly 2.00 with nothing to say it had been truncated.
+  The measurement now feeds the peaks and the display clamps its own copy. A credibility
+  bound remains at 10 g, because past that is a sensor fault rather than a lap and the
+  summary validator refuses the record anyway - but a peak that reaches it is now flagged
+  as truncated, since a bound nobody is told about is the defect itself rather than the fix
+
 - the carousel stopped accepting taps, which made every menu, mode, track and setting
   unselectable. `attach_gesture_input` keeps its bindings in a fixed table and refuses
   silently once it is full; Speed Only added a ninth screen to a table of eight, and the
