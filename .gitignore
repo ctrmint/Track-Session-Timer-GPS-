@@ -25,3 +25,8 @@ Thumbs.db
 
 # Core dumps, which a failing host test binary drops in the repository root.
 core.*
+
+# Blog drafts. Written here because the device is the subject and the facts have to come
+# from the repository, but they are Mark's words for caterham7diaries.com and are not part
+# of this project's history.
+blog/
