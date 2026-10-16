@@ -214,6 +214,21 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the carousel stopped accepting taps, which made every menu, mode, track and setting
+  unselectable. `attach_gesture_input` keeps its bindings in a fixed table and refuses
+  silently once it is full; Speed Only added a ninth screen to a table of eight, and the
+  ninth was the carousel.
+  The symptom hid its own cause. The menu still opened, because the hold that opens it
+  lands on the dashboard's binding. The carousel still moved between entries, because its
+  chevrons are real buttons and owe nothing to the gesture layer. It drew correctly. It
+  simply ignored every press, on every entry - which reads as a problem with whichever
+  entry you happened to try.
+  The table now holds sixteen, but the cap was only what tripped this. The defect is that a
+  screen could ask for input, be refused, and go on looking entirely normal while ignoring
+  the driver for the life of the device. Refusals are counted and reported at boot as an
+  error, and every shell gesture is now logged with the outcome it produced, so a press
+  that goes nowhere leaves a trace instead of nothing at all
+
 - `decode_nav_pvt` added UBX-NAV-PVT's `nano` field to iTOW when building
   `measurement_time_ns`. It reads like a sub-millisecond correction and is not one: it is
   the fractional part of the UTC second in the same message, ranging a full second either
