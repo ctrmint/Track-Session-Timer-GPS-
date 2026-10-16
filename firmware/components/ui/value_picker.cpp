@@ -94,6 +94,12 @@ ValueChoiceList choices_for(const SettingsField field,
     case SettingsField::lap_boundary:
         return from_labels(kLapBoundary, 2,
                            static_cast<std::size_t>(current.lap_boundary));
+    case SettingsField::acceleration_target:
+        return from_list(settings::kAccelerationTargetsMph, current.acceleration_target_mph,
+                         [](ValueChoice& c, std::uint8_t v) {
+                             std::snprintf(c.text.data(), c.text.size(), "%u MPH",
+                                           static_cast<unsigned>(v));
+                         });
     case SettingsField::orientation:
         return from_labels(kOrientation, 5,
                            static_cast<std::size_t>(current.orientation));
@@ -118,6 +124,12 @@ bool apply_choice(const SettingsField field, const std::size_t index,
             return false;
         }
         draft.launch_sensitivity_milli_g = settings::kLaunchSensitivityMilliG[index];
+        return true;
+    case SettingsField::acceleration_target:
+        if (index >= settings::kAccelerationTargetsMph.size()) {
+            return false;
+        }
+        draft.acceleration_target_mph = settings::kAccelerationTargetsMph[index];
         return true;
     case SettingsField::day_brightness:
         if (index >= kBrightnessPercent.size()) {
@@ -198,6 +210,8 @@ const char* picker_field_label(const SettingsField field) noexcept
         return "PIT EXIT START";
     case SettingsField::pit_entry_auto_stop:
         return "PIT ENTRY STOP";
+    case SettingsField::acceleration_target:
+        return "0-X TARGET";
     case SettingsField::orientation:
         return "ORIENTATION";
     default:

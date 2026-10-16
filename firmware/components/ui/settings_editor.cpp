@@ -92,6 +92,10 @@ void format_value(const SettingsField field, const settings::DeviceSettings& set
     case SettingsField::rest_duration:
         format_duration_value(output.data(), output.size(), settings.rest_duration_seconds);
         break;
+    case SettingsField::acceleration_target:
+        std::snprintf(output.data(), output.size(), "%u MPH",
+                      static_cast<unsigned>(settings.acceleration_target_mph));
+        break;
     case SettingsField::launch_sensitivity:
         // Always a real threshold now; TRIGGER decides whether it is consulted.
         std::snprintf(output.data(), output.size(), "%u.%02u g",
@@ -316,6 +320,10 @@ bool SettingsEditor::adjust(const bool forward) noexcept
         break;
     case SettingsField::launch_sensitivity:
         adjusted = step_choice(draft_.launch_sensitivity_milli_g, settings::kLaunchSensitivityMilliG, forward);
+        break;
+    case SettingsField::acceleration_target:
+        adjusted = step_choice(draft_.acceleration_target_mph,
+                               settings::kAccelerationTargetsMph, forward);
         break;
     case SettingsField::day_brightness:
         adjusted = step_choice(draft_.day_brightness_percent, kBrightnessPercent, forward);

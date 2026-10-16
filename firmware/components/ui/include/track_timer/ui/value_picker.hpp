@@ -28,14 +28,24 @@ struct ValueChoiceList {
 // The fields the gesture UI offers. operating_mode and trackday_mode are deliberately
 // absent: they are owned by the top-level Mode selection, and offering the same state in
 // two places invites the two disagreeing.
-inline constexpr std::array<SettingsField, 11> kPickerFields{
+// Where acceleration_target sits in kPickerFields. Setup's 0-X entry jumps straight to this
+// field's values rather than walking the driver through the whole list to reach it, and a
+// hand-written index that stopped matching the array is exactly the mistake that made
+// DIAGNOSTICS unreachable in #158 - so it is asserted below rather than trusted.
+inline constexpr std::size_t kAccelerationTargetFieldIndex = 11;
+
+inline constexpr std::array<SettingsField, 12> kPickerFields{
     SettingsField::session_duration,   SettingsField::rest_duration,
     SettingsField::average_lap,        SettingsField::lower_display,
     SettingsField::lap_boundary,       SettingsField::pit_entry_auto_stop,
     SettingsField::launch_sensitivity, SettingsField::day_brightness,
     SettingsField::night_brightness,   SettingsField::auto_dim,
-    SettingsField::orientation,
+    SettingsField::orientation,       SettingsField::acceleration_target,
 };
+
+static_assert(kPickerFields[kAccelerationTargetFieldIndex] ==
+                  SettingsField::acceleration_target,
+              "Setup's 0-X entry opens this index, so it must be the target field");
 
 [[nodiscard]] ValueChoiceList choices_for(SettingsField field,
                                           const settings::DeviceSettings& current) noexcept;

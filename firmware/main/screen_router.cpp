@@ -25,6 +25,7 @@
 #include "track_timer/gnss/pipeline.hpp"
 #include "track_timer/ui/clock_screen.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
+#include "track_timer/ui/acceleration_screen.hpp"
 #include "track_timer/ui/compass_screen.hpp"
 #include "track_timer/ui/gate_capture_screen.hpp"
 #include "track_timer/ui/speed_only_screen.hpp"
@@ -417,6 +418,7 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     // Beside Speed, because it is the same kind of readout from the same fix - and like
     // it, a driving display rather than something reached when a thing has gone wrong.
     {LV_SYMBOL_REFRESH, "COMPASS", kAzure, "course over ground"},
+    {LV_SYMBOL_CHARGE, "0-X", kRuby, "standing start to a target"},
     {LV_SYMBOL_GPS, "GPS ONLY", kAzure},
     // Last, after the diagnostic. It is the mode least likely to be wanted on a track day,
     // and the caption says where the time comes from - a clock that is an hour off BST for
@@ -454,6 +456,7 @@ static_assert(mode_entry_is(ui::DeviceMode::race, "RACE"));
 static_assert(mode_entry_is(ui::DeviceMode::g_only, "G-ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::speed_only, "SPEED"));
 static_assert(mode_entry_is(ui::DeviceMode::compass, "COMPASS"));
+static_assert(mode_entry_is(ui::DeviceMode::acceleration, "0-X"));
 static_assert(mode_entry_is(ui::DeviceMode::gps_only, "GPS ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::clock, "CLOCK"));
 
@@ -464,6 +467,9 @@ constexpr ui::CarouselEntry kSetupEntries[] = {
     // position against that enum. Capture works on the circuit already loaded, so the
     // order of operations is choose the track, then capture its gates.
     {LV_SYMBOL_GPS, "CAPTURE GATES", kRuby, "promote a provisional circuit"},
+    // Third, matching SetupItem::acceleration_target. Named for the mode it belongs to so
+    // it is findable by somebody looking for 0-X rather than for a speed.
+    {LV_SYMBOL_CHARGE, "0-X TARGET", kAmber, "speed a run is timed to"},
     {LV_SYMBOL_REFRESH, "G-METER", kViolet},
     {LV_SYMBOL_EYE_OPEN, "DISPLAY", kGreen},
 };
@@ -628,6 +634,11 @@ class ScreenRouter {
         if (capturing_) {
             gate_capture_.update_fix(gnss_pipeline_.last_accepted(), now_us);
         }
+
+        // Fed every tick rather than only while its screen is up. A run is a measurement
+        // in progress: leaving the mode to glance at the receiver must not lose it, and
+        // the state machine costs nothing when nothing is moving.
+        acceleration_run_.update(acceleration_snapshot());
 
         const auto health = gnss_pipeline_.health(now_us);
         gps_only_snapshot_.receiver_present = health != domain::GnssHealth::unavailable;
@@ -952,6 +963,10 @@ class ScreenRouter {
             lv_screen_active() == compass_root_) {
             compass_->update(ui::compass_view(gps_only_snapshot_));
         }
+        if (acceleration_ != nullptr && acceleration_root_ != nullptr &&
+            lv_screen_active() == acceleration_root_) {
+            acceleration_->update(acceleration_run_.view_model(acceleration_snapshot()));
+        }
         // Same gate again, with one difference: the clock's snapshot has to be rebuilt
         // here rather than reused from service_gnss, because what it shows depends on how
         // long ago the reading arrived and that changes between polls. A clock refreshed
@@ -1035,6 +1050,16 @@ class ScreenRouter {
         }
         compass_ = new (compass_storage_) ui::CompassScreen(compass_root_);
         ui::attach_gesture_input(compass_root_, on_input, this);
+
+        // 0-X owns the whole panel. It does take a tap - that is its reset - which the
+        // shell handler routes before reaching the menu.
+        acceleration_root_ = lv_obj_create(nullptr);
+        if (acceleration_root_ == nullptr) {
+            return false;
+        }
+        acceleration_ = new (acceleration_storage_)
+            ui::AccelerationScreen(acceleration_root_);
+        ui::attach_gesture_input(acceleration_root_, on_input, this);
 
         // Gate capture drives itself from its own buttons rather than from the carousel
         // gestures, so this root deliberately gets no gesture binding: a swipe here must
@@ -1502,6 +1527,9 @@ class ScreenRouter {
         case ui::DeviceMode::compass:
             trackday_->set_mode_note("COMPASS  -  course over ground, needs movement");
             break;
+        case ui::DeviceMode::acceleration:
+            trackday_->set_mode_note("0-X  -  standing start to a target speed");
+            break;
         case ui::DeviceMode::gps_only:
             trackday_->set_mode_note("GPS ONLY  -  receiver diagnosis, not timing");
             break;
@@ -1527,6 +1555,8 @@ class ScreenRouter {
             return speed_only_root_;
         case ui::DeviceMode::compass:
             return compass_root_;
+        case ui::DeviceMode::acceleration:
+            return acceleration_root_;
         case ui::DeviceMode::gps_only:
             return gps_only_root_;
         case ui::DeviceMode::clock:
@@ -1557,6 +1587,15 @@ class ScreenRouter {
         ESP_LOGI("track_timer", "clock: %s (%s:%s gmt, %s)",
                  ui::clock_state_name(state), view.time.data(), view.seconds.data(),
                  view.date[0] != '\0' ? view.date.data() : "no date");
+    }
+
+    [[nodiscard]] ui::AccelerationSnapshot acceleration_snapshot() const noexcept
+    {
+        ui::AccelerationSnapshot snapshot{};
+        snapshot.gnss = gps_only_snapshot_;
+        snapshot.target_mph = settings_.acceleration_target_mph;
+        snapshot.now_monotonic_us = esp_timer_get_time();
+        return snapshot;
     }
 
     // Rebuilt on every render rather than cached, because two of its four fields are about
@@ -2136,6 +2175,20 @@ class ScreenRouter {
             return;
         }
 
+        // A tap on the 0-X panel resets the run, and must not reach the shell - which at
+        // the ready level ignores a press anyway, but would start interpreting it the
+        // moment anything else changed there. Press is "select, enter, commit" everywhere
+        // on this device, and resetting is the only thing there is to commit here.
+        if (action == ui::InputAction::press && acceleration_root_ != nullptr &&
+            lv_screen_active() == acceleration_root_) {
+            acceleration_run_.reset();
+            if (acceleration_ != nullptr) {
+                acceleration_->update(acceleration_run_.view_model(acceleration_snapshot()));
+            }
+            ESP_LOGI("track_timer", "0-x: reset");
+            return;
+        }
+
         const auto result = shell_.dispatch(action);
         // The shell is otherwise silent, which is why a gesture that goes nowhere is
         // invisible from the log: every outcome below either redraws something or does
@@ -2331,6 +2384,11 @@ class ScreenRouter {
     lv_obj_t* speed_only_root_{nullptr};
     ui::CompassScreen* compass_{nullptr};
     lv_obj_t* compass_root_{nullptr};
+    ui::AccelerationScreen* acceleration_{nullptr};
+    lv_obj_t* acceleration_root_{nullptr};
+    // Holds the run across fixes: the start instant has to be remembered, and the finish
+    // computed from the pair that straddles the target rather than whichever is current.
+    ui::AccelerationRun acceleration_run_{};
     ui::GateCaptureScreen* gate_capture_screen_{nullptr};
     lv_obj_t* gate_capture_root_{nullptr};
     // Holds a TrackDefinition draft of its own, which is 3.6 KB - the same reason the
@@ -2424,6 +2482,8 @@ class ScreenRouter {
     alignas(ui::SpeedOnlyScreen) std::byte
         speed_only_storage_[sizeof(ui::SpeedOnlyScreen)]{};
     alignas(ui::CompassScreen) std::byte compass_storage_[sizeof(ui::CompassScreen)]{};
+    alignas(ui::AccelerationScreen) std::byte
+        acceleration_storage_[sizeof(ui::AccelerationScreen)]{};
     alignas(ui::GateCaptureScreen) std::byte
         gate_capture_storage_[sizeof(ui::GateCaptureScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};

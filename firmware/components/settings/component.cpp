@@ -20,7 +20,8 @@ constexpr std::size_t kLegacyV5PayloadSize = 74;
 // v6 appends the session trigger, which nothing before it had.
 // v7 changed what the launch field may hold, not the shape of the payload.
 constexpr std::size_t kLegacyV6PayloadSize = 75;
-constexpr std::size_t kCurrentPayloadSize = 75;
+constexpr std::size_t kLegacyV7PayloadSize = 75;
+constexpr std::size_t kCurrentPayloadSize = 76;
 
 inline constexpr std::uint32_t kMaximumDurationSeconds = 24U * 60U * 60U;
 inline constexpr std::uint32_t kMinimumSessionSeconds = 60U;
@@ -157,6 +158,18 @@ std::uint16_t nearest_launch_sensitivity(const std::uint16_t milli_g) noexcept
     return best;
 }
 
+[[nodiscard]] bool valid_acceleration_target(const std::uint8_t mph) noexcept
+{
+    // One of the offered speeds, not merely a plausible number. A record carrying a target
+    // the picker cannot reach is a record this firmware did not write.
+    for (const auto offered : kAccelerationTargetsMph) {
+        if (offered == mph) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool valid_settings(const DeviceSettings& settings) noexcept
 {
     return settings.session_duration_seconds >= kMinimumSessionSeconds &&
@@ -166,7 +179,8 @@ bool valid_settings(const DeviceSettings& settings) noexcept
            settings.average_lap_seconds <= 59 * 60 + 59 &&
            valid_brightness(settings.day_brightness_percent) &&
            valid_brightness(settings.night_brightness_percent) &&
-           settings.operating_mode <= OperatingMode::compass &&
+           settings.operating_mode <= OperatingMode::acceleration &&
+           valid_acceleration_target(settings.acceleration_target_mph) &&
            settings.orientation <= OrientationMode::automatic &&
            settings.lower_display <= LowerDisplayMode::laps_remaining &&
            (settings.average_lap_seconds > 0 ||
@@ -271,14 +285,26 @@ SettingsBlob encode_legacy_settings_v6(const DeviceSettings& settings) noexcept
     return make_blob(6, payload.data(), payload.size());
 }
 
-SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+SettingsBlob encode_legacy_settings_v7(const DeviceSettings& settings) noexcept
 {
     const auto legacy = encode_legacy_settings_v6(settings);
     if (legacy.size == 0) {
         return {};
     }
-    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::array<std::uint8_t, kLegacyV7PayloadSize> payload{};
     std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV6PayloadSize, payload.data());
+    return make_blob(7, payload.data(), payload.size());
+}
+
+SettingsBlob encode_settings(const DeviceSettings& settings) noexcept
+{
+    const auto legacy = encode_legacy_settings_v7(settings);
+    if (legacy.size == 0) {
+        return {};
+    }
+    std::array<std::uint8_t, kCurrentPayloadSize> payload{};
+    std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV7PayloadSize, payload.data());
+    payload[75] = settings.acceleration_target_mph;
     return make_blob(kCurrentSettingsVersion, payload.data(), payload.size());
 }
 
@@ -322,7 +348,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         return DecodeResult::migrated_v1;
     }
     if (version != 2 && version != 3 && version != 4 && version != 5 && version != 6 &&
-        version != kCurrentSettingsVersion) {
+        version != 7 && version != kCurrentSettingsVersion) {
         return DecodeResult::unsupported_version;
     }
     const auto expected_payload_size =
@@ -331,6 +357,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
         : version == 4 ? kLegacyV4PayloadSize
         : version == 5 ? kLegacyV5PayloadSize
         : version == 6 ? kLegacyV6PayloadSize
+        : version == 7 ? kLegacyV7PayloadSize
                        : kCurrentPayloadSize;
     if (payload_size != expected_payload_size) {
         return DecodeResult::corrupt;
@@ -365,10 +392,20 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     if (version >= 6) {
         candidate.session_trigger = static_cast<SessionTrigger>(payload[74]);
     }
-    if (version < kCurrentSettingsVersion) {
+    if (version >= 8) {
+        candidate.acceleration_target_mph = payload[75];
+    }
+    // Anything older predates 0-X entirely, so it keeps the default rather than being
+    // treated as a device that chose it. A migrated record is a record that never had an
+    // opinion about this, not one whose opinion was zero.
+    if (version < 7) {
         // Before v7 the ladder ran to 4 g and offered zero as "off". Snapping keeps the
         // rest of the blob rather than failing validation over one field and taking every
         // unrelated setting back to defaults.
+        //
+        // Pinned to 7 rather than to kCurrentSettingsVersion: this corrects a v6-and-older
+        // ladder, and a record written by v7 already has a snapped value. Leaving it as
+        // "older than current" would have silently re-snapped every future version too.
         candidate.launch_sensitivity_milli_g =
             nearest_launch_sensitivity(candidate.launch_sensitivity_milli_g);
     }
@@ -389,6 +426,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
            : version == 4 ? DecodeResult::migrated_v4
            : version == 5 ? DecodeResult::migrated_v5
            : version == 6 ? DecodeResult::migrated_v6
+           : version == 7 ? DecodeResult::migrated_v7
                           : DecodeResult::current;
 }
 
@@ -445,6 +483,9 @@ SettingsLoadReport SettingsManager::load() noexcept
     case DecodeResult::migrated_v6:
         current_ = decoded;
         return {SettingsSource::migrated_v6, persist(current_)};
+    case DecodeResult::migrated_v7:
+        current_ = decoded;
+        return {SettingsSource::migrated_v7, persist(current_)};
     case DecodeResult::corrupt:
         current_ = {};
         return {SettingsSource::defaults_corrupt, persist(current_)};

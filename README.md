@@ -34,7 +34,8 @@ device loads them and runs timer-only. #184's test loop is the route to a first 
 With nothing attached GPS Only reports "NO RECEIVER", which is the truth rather than a
 fault.
 
-Three modes are built on those fixes. **Compass** shows course over ground on a fixed card,
+Four modes are built on those fixes. **0-X** times a standing start to a target speed,
+interpolating both ends rather than quantising them to the fix rate. **Compass** shows course over ground on a fixed card,
 and hides its marker entirely when the car is too slow for the receiver to know which way it
 is going - a parked vehicle has no heading, and the board has no magnetometer to supply one.
 **Speed Only** shows road speed in mph at 248 px -

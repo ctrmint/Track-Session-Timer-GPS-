@@ -23,6 +23,7 @@ enum class SettingsField : std::uint8_t {
     auto_dim,
     average_lap,
     lower_display,
+    acceleration_target,
 };
 
 inline constexpr std::size_t kSettingsFieldCount = 14;
