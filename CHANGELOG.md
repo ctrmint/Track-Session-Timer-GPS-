@@ -246,6 +246,32 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Changed
 
+- the G radar's trace now covers **three seconds instead of 1.2**, and its length is
+  derived from the display cadence rather than stated as a bare count. `kImuTrailCapacity`
+  was `24`, which reads like a few seconds and was not: the trail is appended once per
+  display service, so at 20 Hz it held 1.2 s. The span is now what gets chosen
+  (`kImuTrailSpanMs = 3'000`, picked because a corner in a Seven runs two to four seconds,
+  so the driver sees the corner they just took) and the capacity follows from it. A
+  `static_assert` ties the assumed cadence to the real `kDisplayServicePeriodUs`, so
+  changing the display period fails the build instead of silently rescaling the trace
+- **render cost is measured rather than assumed**, which is what let the change above be
+  made safely. Two periodic log lines: `radar:` times the object work at the call site,
+  and `draw:` times `lv_timer_handler` in the panel task, which is where drawing actually
+  happens - repositioning an object only marks an area dirty. Measured on hardware:
+
+  | | 24 points | 60 points |
+  |---|---|---|
+  | object work, mean | 1,727 us | 2,395 us |
+  | share of the 50 ms display period | 3% | 4% |
+  | worst repaint | 23,597-23,813 us | 24,255-24,287 us |
+
+  Tripling the trace cost **2.3% more repaint time**, because 24 dots already spanned the
+  whole radar and the invalidated area was already saturated. Per-point object cost works
+  out at 18.6 us against a fixed 1.28 ms for the rings, labels and markers, so the dots
+  were never the expensive part. Without the measurement the obvious reading - 150% more
+  objects, so expect 150% more work - would have argued against a change that is nearly
+  free
+
 - the receiver now runs at **25 Hz**. Measured on hardware: 24.9 Hz observed, 57 frames,
   57 accepted, nothing rejected, no checksum errors, and 40 ms read back from the
   receiver's flash layer. The part was never in doubt - it was separately measured at
