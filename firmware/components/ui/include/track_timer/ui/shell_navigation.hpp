@@ -48,10 +48,12 @@ inline constexpr std::size_t kMenuItemCount = 6;
 // caller sets the count from the array it is about to show, so the two cannot disagree.
 inline constexpr std::size_t kSectionItemCount = 3;
 
+// The children of Setup, in the order the carousel offers them. Only the ones the shell
+// routes are listed: track selection moved to the top level, and the G-meter and display
+// entries are drawn but not yet wired, which is why neither appears here.
 enum class SetupItem : std::uint8_t {
     device_settings,
-    track_selection,
-    g_meter,
+    gate_capture,
 };
 
 enum class ShellOutcome : std::uint8_t {
@@ -65,6 +67,10 @@ enum class ShellOutcome : std::uint8_t {
     track_selected,  // a track was chosen; the caller loads and applies it
     value_selected,    // a setting value was chosen; the caller applies it
     trigger_selected,  // a session trigger was chosen; the caller persists it
+    // Gate capture was chosen under Setup; the caller opens the capture screen. Like the
+    // four above, choosing it is the whole interaction as far as the shell is concerned -
+    // what follows is driven by the capture screen's own buttons, not by the carousel.
+    gate_capture_selected,
 };
 
 struct ShellState {
