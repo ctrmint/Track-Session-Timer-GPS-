@@ -157,6 +157,28 @@ void test_speed_only_operating_mode_round_trips()
     auto beyond = settings;
     beyond.operating_mode = static_cast<OperatingMode>(
         static_cast<std::uint8_t>(OperatingMode::speed_only) + 1);
+    // Valid now: compass follows it. This assertion moving on every mode added is the
+    // whole point of it - the bound has to stay a bound, and a mode appended without
+    // widening valid_settings would make every setting on the device revert.
+    assert(valid_settings(beyond));
+}
+
+// Compass, appended after Speed Only, with the same obligations as the three before it.
+void test_compass_operating_mode_round_trips()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::compass;
+    assert(valid_settings(settings));
+
+    const auto blob = encode_settings(settings);
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+    assert(decoded.operating_mode == OperatingMode::compass);
+    assert(settings_equal(settings, decoded));
+
+    auto beyond = settings;
+    beyond.operating_mode = static_cast<OperatingMode>(
+        static_cast<std::uint8_t>(OperatingMode::compass) + 1);
     assert(!valid_settings(beyond));
 }
 
@@ -411,6 +433,7 @@ int main()
     test_gps_only_operating_mode_round_trips();
     test_clock_operating_mode_round_trips();
     test_speed_only_operating_mode_round_trips();
+    test_compass_operating_mode_round_trips();
     test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();
     test_migration_corruption_and_storage_errors();

@@ -25,6 +25,7 @@
 #include "track_timer/gnss/pipeline.hpp"
 #include "track_timer/ui/clock_screen.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
+#include "track_timer/ui/compass_screen.hpp"
 #include "track_timer/ui/speed_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
 #include "track_timer/ui/imu_meter.hpp"
@@ -412,6 +413,9 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     // Before the diagnostic, because it is a driving display rather than something
     // reached when a thing has gone wrong.
     {LV_SYMBOL_RIGHT, "SPEED", kGreen, "MPH from GNSS"},
+    // Beside Speed, because it is the same kind of readout from the same fix - and like
+    // it, a driving display rather than something reached when a thing has gone wrong.
+    {LV_SYMBOL_REFRESH, "COMPASS", kAzure, "course over ground"},
     {LV_SYMBOL_GPS, "GPS ONLY", kAzure},
     // Last, after the diagnostic. It is the mode least likely to be wanted on a track day,
     // and the caption says where the time comes from - a clock that is an hour off BST for
@@ -448,6 +452,7 @@ static_assert(mode_entry_is(ui::DeviceMode::track_day, "TRACK DAY"));
 static_assert(mode_entry_is(ui::DeviceMode::race, "RACE"));
 static_assert(mode_entry_is(ui::DeviceMode::g_only, "G-ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::speed_only, "SPEED"));
+static_assert(mode_entry_is(ui::DeviceMode::compass, "COMPASS"));
 static_assert(mode_entry_is(ui::DeviceMode::gps_only, "GPS ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::clock, "CLOCK"));
 
@@ -903,6 +908,11 @@ class ScreenRouter {
             lv_screen_active() == speed_only_root_) {
             speed_only_->update(ui::speed_only_view(gps_only_snapshot_));
         }
+        // Third reading of the same snapshot, so "no fix" still has one definition.
+        if (compass_ != nullptr && compass_root_ != nullptr &&
+            lv_screen_active() == compass_root_) {
+            compass_->update(ui::compass_view(gps_only_snapshot_));
+        }
         // Same gate again, with one difference: the clock's snapshot has to be rebuilt
         // here rather than reused from service_gnss, because what it shows depends on how
         // long ago the reading arrived and that changes between polls. A clock refreshed
@@ -978,6 +988,14 @@ class ScreenRouter {
         }
         speed_only_ = new (speed_only_storage_) ui::SpeedOnlyScreen(speed_only_root_);
         ui::attach_gesture_input(speed_only_root_, on_input, this);
+
+        // Compass owns the whole panel as well, with nothing on it to press.
+        compass_root_ = lv_obj_create(nullptr);
+        if (compass_root_ == nullptr) {
+            return false;
+        }
+        compass_ = new (compass_storage_) ui::CompassScreen(compass_root_);
+        ui::attach_gesture_input(compass_root_, on_input, this);
 
         // Clock owns the whole panel as well, and for the same reason: there is nothing on
         // it to press, so the hold gesture still reaches the shell.
@@ -1329,6 +1347,9 @@ class ScreenRouter {
         case ui::DeviceMode::speed_only:
             trackday_->set_mode_note("SPEED  -  road speed in mph");
             break;
+        case ui::DeviceMode::compass:
+            trackday_->set_mode_note("COMPASS  -  course over ground, needs movement");
+            break;
         case ui::DeviceMode::gps_only:
             trackday_->set_mode_note("GPS ONLY  -  receiver diagnosis, not timing");
             break;
@@ -1352,6 +1373,8 @@ class ScreenRouter {
             return radar_root_;
         case ui::DeviceMode::speed_only:
             return speed_only_root_;
+        case ui::DeviceMode::compass:
+            return compass_root_;
         case ui::DeviceMode::gps_only:
             return gps_only_root_;
         case ui::DeviceMode::clock:
@@ -2151,6 +2174,8 @@ class ScreenRouter {
     ui::GpsOnlySnapshot gps_only_snapshot_{};
     ui::SpeedOnlyScreen* speed_only_{nullptr};
     lv_obj_t* speed_only_root_{nullptr};
+    ui::CompassScreen* compass_{nullptr};
+    lv_obj_t* compass_root_{nullptr};
     ui::ClockScreen* clock_{nullptr};
     lv_obj_t* clock_root_{nullptr};
     // The last wall clock the receiver vouched for, and when it arrived.
@@ -2234,6 +2259,7 @@ class ScreenRouter {
     alignas(ui::ClockScreen) std::byte clock_storage_[sizeof(ui::ClockScreen)]{};
     alignas(ui::SpeedOnlyScreen) std::byte
         speed_only_storage_[sizeof(ui::SpeedOnlyScreen)]{};
+    alignas(ui::CompassScreen) std::byte compass_storage_[sizeof(ui::CompassScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
     alignas(ui::TimeRollerScreen) std::byte
         roller_storage_[sizeof(ui::TimeRollerScreen)]{};

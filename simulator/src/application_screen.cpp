@@ -36,6 +36,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       g_meter_root_(make_screen_root(root)),
       gps_only_root_(make_screen_root(root)),
       speed_only_root_(make_screen_root(root)),
+      compass_root_(make_screen_root(root)),
       clock_root_(make_screen_root(root)),
       rest_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this),
@@ -49,6 +50,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       g_meter_screen_(g_meter_root_, g_meter_action, this),
       gps_only_screen_(gps_only_root_),
       speed_only_screen_(speed_only_root_),
+      compass_screen_(compass_root_),
       clock_screen_(clock_root_),
       rest_screen_(rest_root_, rest_action, this)
 {
@@ -225,6 +227,10 @@ void ApplicationScreen::update_gnss_readout(const domain::GnssFix& fix,
     if (navigation_.destination() == ui::Destination::setup &&
         setup_page_ == SetupPage::speed_only) {
         speed_only_screen_.update(ui::speed_only_view(gps_only_snapshot_));
+    }
+    if (navigation_.destination() == ui::Destination::setup &&
+        setup_page_ == SetupPage::compass) {
+        compass_screen_.update(ui::compass_view(gps_only_snapshot_));
     }
     if (navigation_.destination() == ui::Destination::setup &&
         setup_page_ == SetupPage::clock) {
@@ -784,6 +790,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(g_meter_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(gps_only_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(speed_only_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(compass_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(clock_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(rest_root_, LV_OBJ_FLAG_HIDDEN);
 
@@ -814,6 +821,10 @@ void ApplicationScreen::show_destination() noexcept
         else if (setup_page_ == SetupPage::speed_only) {
             lv_obj_remove_flag(speed_only_root_, LV_OBJ_FLAG_HIDDEN);
             speed_only_screen_.update(ui::speed_only_view(gps_only_snapshot_));
+        }
+        else if (setup_page_ == SetupPage::compass) {
+            lv_obj_remove_flag(compass_root_, LV_OBJ_FLAG_HIDDEN);
+            compass_screen_.update(ui::compass_view(gps_only_snapshot_));
         }
         else if (setup_page_ == SetupPage::clock) {
             lv_obj_remove_flag(clock_root_, LV_OBJ_FLAG_HIDDEN);
@@ -868,8 +879,8 @@ void ApplicationScreen::apply_display_policy(const board::DisplayCommand& comman
     const auto scale = portrait ? 192 : 256;
     for (auto* root : {ready_root_, active_root_, setup_menu_root_, settings_root_,
                        track_selection_root_, gate_capture_root_, session_review_root_, diagnostics_root_,
-                       g_meter_root_, gps_only_root_, speed_only_root_, clock_root_,
-                       rest_root_}) {
+                       g_meter_root_, gps_only_root_, speed_only_root_, compass_root_,
+                       clock_root_, rest_root_}) {
         lv_obj_set_pos(root, command.layout_shift_x, command.layout_shift_y);
         lv_obj_set_style_transform_pivot_x(root, 300, 0);
         lv_obj_set_style_transform_pivot_y(root, 225, 0);
@@ -906,6 +917,8 @@ const char* setup_page_name(const SetupPage page) noexcept
         return "gps-only";
     case SetupPage::speed_only:
         return "speed-only";
+    case SetupPage::compass:
+        return "compass";
     case SetupPage::clock:
         return "clock";
     }
