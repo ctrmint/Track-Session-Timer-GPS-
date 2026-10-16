@@ -582,6 +582,10 @@ class ScreenRouter {
         last_display_service_us_ = now_us;
         service_imu();
         service_roller();
+        if (capturing_) {
+            // Drawn at the display's cadence; the controller above is fed every tick.
+            refresh_gate_capture();
+        }
     }
 
     // Polled from the LVGL service tick for now, which is deliberately the arrangement
@@ -617,9 +621,12 @@ class ScreenRouter {
         // Only while the capture screen is up. The controller judges accuracy, fix age and
         // whether the car is moving from this, so it has to see the same fixes the rest of
         // the device does - but feeding it when nothing is capturing is work for nobody.
+        //
+        // Fed here and drawn in service(), because this runs every tick and the drawing
+        // does not need to: the judgement wants every fix, the screen wants the display's
+        // cadence like every other screen.
         if (capturing_) {
             gate_capture_.update_fix(gnss_pipeline_.last_accepted(), now_us);
-            refresh_gate_capture();
         }
 
         const auto health = gnss_pipeline_.health(now_us);
