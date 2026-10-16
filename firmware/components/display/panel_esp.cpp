@@ -6,7 +6,6 @@
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_sh8601.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -125,64 +124,6 @@ void round_invalidated_area(lv_event_t* event) noexcept
 
 void tick(void*) noexcept { lv_tick_inc(kLvglTickPeriodMs); }
 
-// Windowed by time rather than by call count. The handler is called at the minimum delay
-// whether or not there is anything to draw, so a count-based window reports every few
-// tens of milliseconds and buries the log, while saying nothing about how often a real
-// redraw happens.
-constexpr std::int64_t kDrawCostReportPeriodUs = 10'000'000;
-// Above this, a handler call did real drawing rather than finding nothing dirty. The
-// separation is stark in practice - no-op calls are single-digit microseconds and a
-// redraw is thousands - so the exact threshold does not matter much.
-constexpr std::int64_t kDrawCostRedrawThresholdUs = 5'000;
-std::uint32_t draw_cost_count = 0;
-std::uint32_t draw_cost_redraws = 0;
-std::int64_t draw_cost_total_us = 0;
-std::int64_t draw_cost_worst_us = 0;
-std::int64_t draw_cost_window_started_us = 0;
-
-void record_draw_cost(const std::int64_t elapsed_us) noexcept
-{
-    draw_cost_count += 1;
-    draw_cost_total_us += elapsed_us;
-    if (elapsed_us > draw_cost_worst_us) {
-        draw_cost_worst_us = elapsed_us;
-    }
-    if (elapsed_us >= kDrawCostRedrawThresholdUs) {
-        draw_cost_redraws += 1;
-    }
-    const auto now_us = esp_timer_get_time();
-    if (draw_cost_window_started_us == 0) {
-        draw_cost_window_started_us = now_us;
-        return;
-    }
-    const auto window_us = now_us - draw_cost_window_started_us;
-    if (window_us < kDrawCostReportPeriodUs) {
-        return;
-    }
-    // The worst call is measured against the service period rather than reported alone,
-    // because this task also dispatches the UI service: drawing that overruns the period
-    // delays everything else on this task, and starving it is the failure #133 and #141
-    // were.
-    ESP_LOGI("track_timer",
-             "draw: %u calls in %lld ms, %u redraws (%lld per 10 s), mean %lld us, "
-             "worst %lld us (%lld us service period, worst %u%%)",
-             static_cast<unsigned>(draw_cost_count),
-             static_cast<long long>(window_us / 1000),
-             static_cast<unsigned>(draw_cost_redraws),
-             static_cast<long long>(static_cast<std::int64_t>(draw_cost_redraws) *
-                                    kDrawCostReportPeriodUs / window_us),
-             static_cast<long long>(draw_cost_total_us /
-                                    static_cast<std::int64_t>(draw_cost_count)),
-             static_cast<long long>(draw_cost_worst_us),
-             static_cast<long long>(kServicePeriodUs),
-             static_cast<unsigned>(draw_cost_worst_us * 100 / kServicePeriodUs));
-    draw_cost_count = 0;
-    draw_cost_redraws = 0;
-    draw_cost_total_us = 0;
-    draw_cost_worst_us = 0;
-    draw_cost_window_started_us = now_us;
-}
-
 void lvgl_task(void*) noexcept
 {
     auto delay_ms = kLvglMinDelayMs;
@@ -198,14 +139,7 @@ void lvgl_task(void*) noexcept
                     service_callback();
                 }
             }
-            // What #136 asked for a measurement of. lv_timer_handler is where the
-            // drawing actually happens - repositioning an object only marks an area
-            // dirty - so the cost of a trace redrawn through a 96,000-byte stripe buffer
-            // shows up here and nowhere else. Reported as a periodic summary, so whatever
-            // screen the device is sitting on is the screen being measured.
-            const auto draw_started_us = esp_timer_get_time();
             delay_ms = lv_timer_handler();
-            record_draw_cost(esp_timer_get_time() - draw_started_us);
             unlock();
         }
         if (delay_ms > kLvglMaxDelayMs) {
