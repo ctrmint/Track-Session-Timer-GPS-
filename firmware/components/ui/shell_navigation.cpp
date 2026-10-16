@@ -121,7 +121,13 @@ void ShellNavigation::enter(ShellResult& result) noexcept
             result.outcome = ShellOutcome::entered;
             return;
         }
-        // Track selection and the G-meter are not routed yet.
+        if (state_.section_index == static_cast<std::size_t>(SetupItem::gate_capture)) {
+            // The capture screen takes over from here and drives itself, so the shell
+            // reports the choice and stops rather than descending a level.
+            result.outcome = ShellOutcome::gate_capture_selected;
+            return;
+        }
+        // The G-meter and display entries are drawn but not routed yet.
         result.outcome = ShellOutcome::ignored;
         return;
     case ShellLevel::field:
@@ -299,6 +305,8 @@ const char* shell_outcome_name(const ShellOutcome outcome) noexcept
         return "track-selected";
     case ShellOutcome::value_selected:
         return "value-selected";
+    case ShellOutcome::gate_capture_selected:
+        return "gate-capture-selected";
     case ShellOutcome::trigger_selected:
         return "trigger-selected";
     }
@@ -329,10 +337,8 @@ const char* setup_item_name(const SetupItem item) noexcept
     switch (item) {
     case SetupItem::device_settings:
         return "device-settings";
-    case SetupItem::track_selection:
-        return "track-selection";
-    case SetupItem::g_meter:
-        return "g-meter";
+    case SetupItem::gate_capture:
+        return "gate-capture";
     }
     return "unknown";
 }
