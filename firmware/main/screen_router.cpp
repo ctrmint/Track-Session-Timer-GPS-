@@ -997,6 +997,17 @@ class ScreenRouter {
         }
         ui::attach_gesture_input(carousel_root_, on_input, this);
 
+        // Every screen has now asked for input. A refusal here is not a degradation: the
+        // screen draws, swipes through its chevrons and ignores every tap for the life of
+        // the device, which is how the carousel became unselectable when Speed Only took
+        // the binding table to nine.
+        if (const auto refused = ui::gesture_counters().refused_bindings; refused > 0) {
+            ESP_LOGE("track_timer",
+                     "input: %u screen(s) got no gesture binding - they will ignore every "
+                     "touch. Raise kMaximumBindings.",
+                     static_cast<unsigned>(refused));
+        }
+
         // Restore the track that was selected before the last reboot.
         restore_selected_track();
         refresh_ready();
@@ -1820,6 +1831,15 @@ class ScreenRouter {
         }
 
         const auto result = shell_.dispatch(action);
+        // The shell is otherwise silent, which is why a gesture that goes nowhere is
+        // invisible from the log: every outcome below either redraws something or does
+        // nothing, and both look identical from outside. One line per dispatch says which
+        // gesture arrived, what the shell made of it, and where it ended up.
+        ESP_LOGI("track_timer", "shell: %s -> %s (level %s, menu %u, section %u)",
+                 ui::input_action_name(action), ui::shell_outcome_name(result.outcome),
+                 ui::shell_level_name(result.state.level),
+                 static_cast<unsigned>(result.state.menu_index),
+                 static_cast<unsigned>(result.state.section_index));
         switch (result.outcome) {
         case ui::ShellOutcome::menu_opened:
             show_menu(result.state);

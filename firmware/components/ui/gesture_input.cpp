@@ -18,7 +18,14 @@ struct Binding {
 };
 
 // One binding per attached screen. Fixed storage keeps the no-dynamic-allocation rule.
-constexpr std::size_t kMaximumBindings = 8;
+//
+// Sized with real headroom, and that is not tidiness. This table was exactly full at 8
+// when Speed Only added a ninth screen, and the ninth was the carousel - so every menu,
+// every mode, every track and every setting became unselectable at once, while still
+// drawing perfectly and still swiping, because the carousel's chevrons are buttons of
+// their own. Nothing failed, nothing logged, and the device simply stopped accepting a
+// tap. A binding is about twenty bytes; the margin costs nothing worth having.
+constexpr std::size_t kMaximumBindings = 16;
 Binding bindings[kMaximumBindings]{};
 std::size_t binding_count = 0;
 GestureCounters counters{};
@@ -182,7 +189,14 @@ void attach_drag_input(lv_obj_t* const target, const DragCallback callback,
 void attach_gesture_input(lv_obj_t* const target, const InputCallback callback,
                           void* const context) noexcept
 {
-    if (target == nullptr || callback == nullptr || binding_count >= kMaximumBindings) {
+    if (target == nullptr || callback == nullptr) {
+        return;
+    }
+    if (binding_count >= kMaximumBindings) {
+        // The screen is about to be built, drawn and shown, and it will ignore every
+        // touch for the life of the device. Counted so a caller can say so out loud,
+        // because this is not a degradation anybody would notice from the outside.
+        ++counters.refused_bindings;
         return;
     }
     auto& binding = bindings[binding_count++];
