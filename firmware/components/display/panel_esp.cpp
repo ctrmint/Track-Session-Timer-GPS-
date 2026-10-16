@@ -38,7 +38,15 @@ constexpr UBaseType_t kLvglTaskPriority = 2;
 constexpr std::uint32_t kLvglMaxDelayMs = 500;
 constexpr std::uint32_t kLvglMinDelayMs = 1;
 // 20 Hz: smooth for a countdown and a G meter, and far below the LVGL loop rate.
-constexpr std::int64_t kServicePeriodUs = 50'000;
+// How often the service callback runs. This is the GNSS poll's cadence, and it has to
+// outpace the receiver: at 25 Hz a fix lands every 40 ms, and a poll any slower than that
+// leaves fixes queueing in the receiver permanently. 25 ms polls at 1.6x the fix rate,
+// which is margin rather than a tie.
+//
+// It is not the rate the screens redraw at. The router splits the two, because the
+// receiver's deadline is not the display's and refreshing live views faster costs the one
+// task that has starved twice (#133, #141).
+constexpr std::int64_t kServicePeriodUs = 25'000;
 
 // RM690B0 power-on sequence, transcribed from the Waveshare 09_LVGL_Test demo.
 // 0x2A/0x2B describe the native 450 x 600 window; the panel's active area starts at

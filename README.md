@@ -17,8 +17,8 @@ overrun and rest - records its duration and peak G on every axis, writes that to
 and survives a power cycle.
 
 **GNSS works.** The receiver is connected over I2C, configured by the firmware at boot and
-**delivering accepted fixes on hardware**: 20 Hz as configured, every frame passing the
-quality gate, on 15 satellites. The chain is an I2C transport, a UBX parser, a fix-quality
+**delivering accepted fixes on hardware**: 25 Hz as configured, every frame passing the
+quality gate, on 16 satellites. The chain is an I2C transport, a UBX parser, a fix-quality
 gate and a pipeline that counts every way a fix can go missing, and all of it is now
 exercised by a real receiver rather than only by host tests.
 

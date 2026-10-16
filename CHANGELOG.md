@@ -6,6 +6,24 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ## Unreleased
 
+### Changed
+
+- the receiver now runs at **25 Hz**. Measured on hardware: 24.9 Hz observed, 57 frames,
+  57 accepted, nothing rejected, no checksum errors, and 40 ms read back from the
+  receiver's flash layer. The part was never in doubt - it was separately measured at
+  25.3 frames/s - and 20 Hz was proven first, which is what #16 and ADR-005 asked for
+- the GNSS poll runs at 25 ms rather than 50. It was rate-limited to exactly 20 Hz, so at
+  a 40 ms fix rate it would have been **slower than the receiver it reads** and fixes would
+  have queued in the receiver's buffer permanently. Raising the receiver's rate without
+  this would have made things worse, not better
+- the service tick now drives two cadences instead of one. The GNSS poll runs every tick;
+  the IMU, the session lifecycle and the screens keep their 50 ms period, because the
+  receiver's deadline is not the display's and redrawing live views at 40 Hz costs the task
+  that has starved twice
+- this also restores the gap detector's intended margin. The pipeline has always expected
+  25 Hz, so while the receiver ran at 20 its 50 ms intervals sat 10 ms under a 60 ms gap
+  threshold rather than the 20 ms the 1.5x multiple was chosen to give. All three now agree
+
 ### Added
 
 - a **Compass** mode: a fixed card with north up, a marker travelling its rim, and the
