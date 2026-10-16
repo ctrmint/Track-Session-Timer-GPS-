@@ -15,7 +15,17 @@ namespace track_timer::ui {
 inline constexpr std::uint32_t kImuMeterSchemaVersion = 2;
 inline constexpr std::size_t kImuTrailCapacity = 24;
 inline constexpr float kStandardGravityMps2 = 9.80665F;
+// What the radar can draw. A dot has to stay on the display, so the drawn value is held
+// inside this - but a recorded peak is a different quantity with a different purpose, and
+// must not inherit a limit that exists for the dial.
 inline constexpr float kImuDisplayLimitG = 2.0F;
+
+// What a recorded peak is allowed to be. Deliberately the same figure as the summary
+// validator's kMaximumCrediblePeakG - beyond it is a sensor fault rather than a heroic
+// lap, and a peak past what the validator accepts would discard the entire session
+// record. The two are declared in different components, so screen_router static_asserts
+// the agreement where they meet rather than leaving it to coincidence.
+inline constexpr float kImuRecordedLimitG = 10.0F;
 inline constexpr std::uint64_t kImuRecoveredNoticeMs = 1'500;
 
 enum class ImuMeterState : std::uint8_t {
@@ -56,6 +66,13 @@ struct ImuPeakSummary {
     // up and a compression loads it down, and they are different events to a driver.
     float up_g{0.0F};
     float down_g{0.0F};
+    // True when a reading was past kImuRecordedLimitG and the peak above is therefore the
+    // bound rather than the measurement.
+    //
+    // There is still a bound, so there is still a number that could be a clamp presented
+    // as a measurement - which is the whole defect. Saying so is what makes the remaining
+    // limit honest instead of simply moving the lie further out.
+    bool truncated{false};
 };
 
 struct ImuMeterSnapshot {
@@ -86,7 +103,7 @@ class ImuMeterController {
   private:
     void clear_measurements() noexcept;
     void append(PlanarAcceleration point) noexcept;
-    void update_peaks(const PlanarAcceleration& point) noexcept;
+    void update_peaks(const PlanarAcceleration& point, float vertical_g) noexcept;
 
     ImuMeterSnapshot snapshot_{};
     bool loss_seen_{false};

@@ -166,7 +166,70 @@ int main()
     assert(near(scoped.snapshot().peaks.up_g, 0.5F));
     assert(scoped.snapshot().reset_allowed);
 
-    std::cout << "Bounded G-meter peaks, orientation, reset guard, IMU states, and "
+    // #162. The radar clamps to 2 g so a dot stays on the dial, and that clamp used to be
+    // applied before the peaks were taken - so a session's recorded peak was bounded by
+    // what the display could draw rather than by what the car did. A hand-shaken session
+    // recorded 2577 milli-g, which is both horizontal axes pinned at the limit rather than
+    // a measurement.
+    {
+        ui::ImuMeterController recorder{};
+        auto hard = sample(2.6F, 1.4F, 10);
+        auto recorded = recorder.update(hard, false);
+
+        // Measured, not bounded by the dial.
+        assert(near(recorded.peaks.right_g, 2.6F));
+        assert(near(recorded.peaks.acceleration_g, 1.4F));
+        assert(!recorded.peaks.truncated);
+
+        // The drawn value still is bounded, because the dot has to stay on the display.
+        assert(near(recorded.current.lateral_g, ui::kImuDisplayLimitG));
+        assert(near(recorded.current.longitudinal_g, 1.4F));
+
+        // And the total comes from the measurement rather than from two clamped axes.
+        assert(near(recorded.peaks.total_g, std::sqrt(2.6F * 2.6F + 1.4F * 1.4F)));
+        assert(recorded.peaks.total_g > std::sqrt(2.0F * 2.0F + 1.4F * 1.4F));
+    }
+
+    // Vertical is the axis where this actually bites. A car on road tyres never reaches
+    // 2 g sideways, but a kerb strike passes it easily - and used to be filed as exactly
+    // 2.00 with nothing to say it had been truncated.
+    {
+        ui::ImuMeterController recorder{};
+        auto kerb = vertical_sample(3.4F, 10);
+        auto recorded = recorder.update(kerb, false);
+        assert(near(recorded.peaks.up_g, 3.4F));
+        assert(!recorded.peaks.truncated);
+        // The dial still shows what it can draw.
+        assert(near(recorded.vertical_g, ui::kImuDisplayLimitG));
+
+        auto compression = vertical_sample(-2.9F, 20);
+        recorded = recorder.update(compression, false);
+        assert(near(recorded.peaks.down_g, 2.9F));
+    }
+
+    // A bound remains, so there is still a number that could be a clamp wearing a
+    // measurement's clothes. Past 10 g is a sensor fault rather than a lap - the summary
+    // validator refuses the record beyond it - so it is bounded and says it was.
+    {
+        ui::ImuMeterController recorder{};
+        auto fault = sample(14.0F, 0.2F, 10);
+        auto recorded = recorder.update(fault, false);
+        assert(near(recorded.peaks.right_g, ui::kImuRecordedLimitG));
+        // The flag is the difference between a bound and a lie.
+        assert(recorded.peaks.truncated);
+    }
+
+    // An ordinary session never touches either bound and is never marked.
+    {
+        ui::ImuMeterController recorder{};
+        auto ordinary = sample(1.1F, 0.9F, 10);
+        const auto recorded = recorder.update(ordinary, false);
+        assert(near(recorded.peaks.right_g, 1.1F));
+        assert(!recorded.peaks.truncated);
+    }
+
+    std::cout << "G-meter peaks recorded as measured rather than bounded by the dial, "
+                 "orientation, reset guard, IMU states, and "
                  "session-scoped vertical peaks passed\n";
     return 0;
 }
