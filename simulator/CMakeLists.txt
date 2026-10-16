@@ -59,6 +59,7 @@ add_library(
     ../firmware/components/ui/clock.cpp
     ../firmware/components/ui/gps_only.cpp
     ../firmware/components/ui/speed_only.cpp
+    ../firmware/components/ui/compass.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/imu_meter.cpp
@@ -124,6 +125,7 @@ add_library(
     ../firmware/components/ui/clock_screen.cpp
     ../firmware/components/ui/gps_only_screen.cpp
     ../firmware/components/ui/speed_only_screen.cpp
+    ../firmware/components/ui/compass_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     src/host_timer_font.cpp
     ../firmware/components/ui/ready_screen.cpp
@@ -1330,6 +1332,43 @@ if(BUILD_TESTING)
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
             PASS_REGULAR_EXPRESSION "gps-state=fixed.*speed-only=[0-9]+"
+            TIMEOUT 20
+    )
+
+    add_test(
+        NAME simulator-compass-screen
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen compass
+            --frames 20
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/compass.ppm"
+    )
+    set_tests_properties(
+        simulator-compass-screen
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "screen=setup.*setup-page=compass.*compass-deg=---"
+            TIMEOUT 20
+    )
+
+    # The live case cannot be rendered, for the same reason as the GPS Only and Speed Only
+    # pairs above: every scenario that replays fixes also runs a session, which hides the
+    # page. This asserts the view model against the real replayed stream - a moving car
+    # does have a heading, and it has to be three digits - and takes no snapshot.
+    add_test(
+        NAME simulator-compass-live-view
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --screen compass
+            --frames 30
+    )
+    set_tests_properties(
+        simulator-compass-live-view
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION "compass-state=live.*compass-deg=[0-9][0-9][0-9]"
             TIMEOUT 20
     )
 

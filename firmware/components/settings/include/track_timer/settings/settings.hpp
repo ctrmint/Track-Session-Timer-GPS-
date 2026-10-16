@@ -25,6 +25,9 @@ enum class OperatingMode : std::uint8_t {
     // of this enum is the stored format, so a new mode goes on the end whatever order it
     // is offered to the driver in.
     speed_only,
+    // A compass card from the receiver's course over ground. Appended again: the order of
+    // this enum is the stored format, whatever order the modes are offered in.
+    compass,
 };
 
 enum class OrientationMode : std::uint8_t {

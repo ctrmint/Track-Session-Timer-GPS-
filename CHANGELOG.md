@@ -8,6 +8,21 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- a **Compass** mode: a fixed card with north up, a marker travelling its rim, and the
+  bearing in degrees at the centre. The heading was already decoded - `headMot` and
+  `headAcc` have been reaching `GnssFix` every epoch - so this needed no parser work at all
+- Compass refuses to point anywhere when it cannot know. What the receiver reports is
+  course over ground, and the board's QMI8658 is six-axis with no magnetometer, so **a
+  parked car has no heading at all**: not a stale one, not north, none. The marker is
+  hidden and the degrees read `---` whenever `headAcc` is too wide or the car is below
+  walking pace, under its own "NO HEADING" state - which is not "NO FIX", because the fix
+  is usually perfect and sending somebody to the wrong problem is worse than saying nothing
+- the compass card is fixed and only the marker moves. This device draws graphics from
+  positioned styled objects rather than canvas paths, so a rotating card would mean
+  repositioning every tick on every update - at 20 Hz, the per-frame work that has starved
+  the UI task twice. The marker is also only moved when the bearing changes by a whole
+  degree, which is not smoothing: the value shown is still exactly what the receiver said
+
 - a **Speed Only** mode: road speed in mph at 248 px, which is the arithmetic ceiling for
   three digits across this panel and two thirds of its height. Reaching it meant centring
   the block on the digits actually shown rather than right-aligning into three fixed cells

@@ -34,7 +34,10 @@ device loads them and runs timer-only. #184's test loop is the route to a first 
 With nothing attached GPS Only reports "NO RECEIVER", which is the truth rather than a
 fault.
 
-Two modes are built on those fixes. **Speed Only** shows road speed in mph at 248 px -
+Three modes are built on those fixes. **Compass** shows course over ground on a fixed card,
+and hides its marker entirely when the car is too slow for the receiver to know which way it
+is going - a parked vehicle has no heading, and the board has no magnetometer to supply one.
+**Speed Only** shows road speed in mph at 248 px -
 two thirds of the panel's height - with a stationary car reading `0` and an absent or
 unfixed receiver reading `---` rather than a believable zero. **Clock** mode: a 24-hour GMT clock taken from the
 receiver's own UTC time, fixed to GMT for now and labelled so, since for half the year that

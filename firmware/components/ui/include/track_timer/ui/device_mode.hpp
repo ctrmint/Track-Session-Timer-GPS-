@@ -14,6 +14,7 @@ namespace track_timer::ui {
 //   Race       operating_mode = timer,    trackday_mode_enabled = false
 //   G-Only     operating_mode = g_meter
 //   Speed Only operating_mode = speed_only
+//   Compass    operating_mode = compass
 //   GPS Only   operating_mode = gps_only
 //   Clock      operating_mode = clock
 //
@@ -33,10 +34,11 @@ enum class DeviceMode : std::uint8_t {
     race,
     g_only,
     speed_only,
+    compass,
     gps_only,
     clock,
 };
-inline constexpr std::size_t kDeviceModeCount = 6;
+inline constexpr std::size_t kDeviceModeCount = 7;
 
 // What each mode is permitted to show while a session is running.
 struct ModeVisibility {
