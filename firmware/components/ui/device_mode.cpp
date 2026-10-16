@@ -22,6 +22,9 @@ ModeVisibility visibility_for(const DeviceMode mode) noexcept
         // A compass card and nothing else. gnss_data again marks where the number comes
         // from rather than what is drawn, and again this is not a session view.
         return {false, false, false, false, true};
+    case DeviceMode::acceleration:
+        // A measurement, and nothing that could be mistaken for timing a session.
+        return {false, false, false, false, true};
     case DeviceMode::gps_only:
         // A diagnostic view of the receiver alone. Showing a session timer here would
         // invite using it to time something, which is the one thing this mode is not for.
@@ -47,6 +50,9 @@ DeviceMode mode_from_settings(const settings::DeviceSettings& settings) noexcept
     }
     if (settings.operating_mode == settings::OperatingMode::compass) {
         return DeviceMode::compass;
+    }
+    if (settings.operating_mode == settings::OperatingMode::acceleration) {
+        return DeviceMode::acceleration;
     }
     if (settings.operating_mode == settings::OperatingMode::gps_only) {
         return DeviceMode::gps_only;
@@ -80,6 +86,10 @@ void apply_mode(const DeviceMode mode, settings::DeviceSettings& settings) noexc
         settings.operating_mode = settings::OperatingMode::compass;
         settings.trackday_mode_enabled = false;
         break;
+    case DeviceMode::acceleration:
+        settings.operating_mode = settings::OperatingMode::acceleration;
+        settings.trackday_mode_enabled = false;
+        break;
     case DeviceMode::gps_only:
         settings.operating_mode = settings::OperatingMode::gps_only;
         settings.trackday_mode_enabled = false;
@@ -104,6 +114,8 @@ const char* device_mode_name(const DeviceMode mode) noexcept
         return "speed-only";
     case DeviceMode::compass:
         return "compass";
+    case DeviceMode::acceleration:
+        return "acceleration";
     case DeviceMode::gps_only:
         return "gps-only";
     case DeviceMode::clock:
@@ -125,6 +137,8 @@ const char* device_mode_label(const DeviceMode mode) noexcept
         return "SPEED";
     case DeviceMode::compass:
         return "COMPASS";
+    case DeviceMode::acceleration:
+        return "0-X";
     case DeviceMode::gps_only:
         return "GPS ONLY";
     case DeviceMode::clock:
@@ -146,6 +160,8 @@ const char* device_mode_summary(const DeviceMode mode) noexcept
         return "Road speed in mph, as large as the panel allows.";
     case DeviceMode::compass:
         return "Course over ground. Needs movement: a parked car has no heading.";
+    case DeviceMode::acceleration:
+        return "Standing start to a target speed, set in Setup.";
     case DeviceMode::gps_only:
         return "Road speed, position and receiver data. Diagnosis, not timing.";
     case DeviceMode::clock:

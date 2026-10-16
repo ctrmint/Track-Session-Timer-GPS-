@@ -54,6 +54,10 @@ inline constexpr std::size_t kSectionItemCount = 3;
 enum class SetupItem : std::uint8_t {
     device_settings,
     gate_capture,
+    // The 0-X target. It is one value rather than a list of fields, so entering it skips
+    // the field level and opens that field's choices directly - Setup should not make
+    // somebody walk a list of twelve settings to reach the one the entry is named after.
+    acceleration_target,
 };
 
 enum class ShellOutcome : std::uint8_t {

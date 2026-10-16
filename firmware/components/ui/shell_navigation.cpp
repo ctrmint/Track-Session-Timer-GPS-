@@ -1,5 +1,7 @@
 #include "track_timer/ui/shell_navigation.hpp"
 
+#include "track_timer/ui/value_picker.hpp"
+
 namespace track_timer::ui {
 namespace {
 
@@ -125,6 +127,13 @@ void ShellNavigation::enter(ShellResult& result) noexcept
             // The capture screen takes over from here and drives itself, so the shell
             // reports the choice and stops rather than descending a level.
             result.outcome = ShellOutcome::gate_capture_selected;
+            return;
+        }
+        if (state_.section_index == static_cast<std::size_t>(SetupItem::acceleration_target)) {
+            state_.level = ShellLevel::value;
+            state_.field_index = kAccelerationTargetFieldIndex;
+            state_.value_index = 0;
+            result.outcome = ShellOutcome::entered;
             return;
         }
         // The G-meter and display entries are drawn but not routed yet.
@@ -339,6 +348,8 @@ const char* setup_item_name(const SetupItem item) noexcept
         return "device-settings";
     case SetupItem::gate_capture:
         return "gate-capture";
+    case SetupItem::acceleration_target:
+        return "acceleration-target";
     }
     return "unknown";
 }

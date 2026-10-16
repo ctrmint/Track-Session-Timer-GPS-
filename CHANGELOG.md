@@ -8,6 +8,23 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- a **0-X** mode: the time from a standing start to a target speed, counting up from
+  `0.00`, stopping the instant the target is reached and turning green. Coming back to rest
+  re-arms it; a tap resets it sooner. The target is chosen in `SETUP` -> `0-X TARGET`
+- both ends of a 0-X run are **interpolated rather than quantised**. A stationary receiver
+  reports a few centimetres per second of noise, not zero, so the start is estimated by
+  extrapolating back along the acceleration between the first two moving fixes to where
+  speed would have been zero; the finish is interpolated between the fixes straddling the
+  target. At 25 Hz a fix lands every 40 ms, so without both the second decimal would be
+  decoration. A 0-60 at 4 m/s2 measures 6.71 s against a true 6.7056
+- a 0-X run whose fixes dry up is **abandoned, not finished**. The number stops climbing
+  either way, which is the whole problem: a stalled run looks exactly like an arrival, so
+  it says `LOST FIX` and is never green
+- the settings record is at **version 8**, carrying the 0-X target. Unlike appending a
+  mode, a new field changes a fixed-width record's length, so this needed a migration
+  rather than only a wider validation bound. A v7 device keeps every setting it had and
+  takes the default target, because it never had an opinion about one
+
 - a **Compass** mode: a fixed card with north up, a marker travelling its rim, and the
   bearing in degrees at the centre. The heading was already decoded - `headMot` and
   `headAcc` have been reaching `GnssFix` every epoch - so this needed no parser work at all

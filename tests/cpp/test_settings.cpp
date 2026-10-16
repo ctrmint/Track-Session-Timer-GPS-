@@ -179,7 +179,56 @@ void test_compass_operating_mode_round_trips()
     auto beyond = settings;
     beyond.operating_mode = static_cast<OperatingMode>(
         static_cast<std::uint8_t>(OperatingMode::compass) + 1);
+    // Valid now: acceleration follows it. The bound moves with the enum every time.
+    assert(valid_settings(beyond));
+}
+
+// Acceleration is the first mode whose own setting changed the record's shape, so this
+// covers the format bump as well as the mode.
+void test_acceleration_mode_and_target_round_trip()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::acceleration;
+    settings.acceleration_target_mph = 100;
+    assert(valid_settings(settings));
+
+    const auto blob = encode_settings(settings);
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+    assert(decoded.operating_mode == OperatingMode::acceleration);
+    assert(decoded.acceleration_target_mph == 100);
+    assert(settings_equal(settings, decoded));
+
+    auto beyond = settings;
+    beyond.operating_mode = static_cast<OperatingMode>(
+        static_cast<std::uint8_t>(OperatingMode::acceleration) + 1);
     assert(!valid_settings(beyond));
+
+    // A target the picker cannot reach is a record this firmware did not write, whatever
+    // else in it looks reasonable.
+    auto odd = settings;
+    odd.acceleration_target_mph = 55;
+    assert(!valid_settings(odd));
+    odd.acceleration_target_mph = 0;
+    assert(!valid_settings(odd));
+}
+
+// A device upgrading from v7 has never had an opinion about the target, so it gets the
+// default rather than a zero - and everything else it did choose has to survive intact.
+void test_v7_records_migrate_and_keep_their_settings()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::compass;
+    const auto blob = encode_legacy_settings_v7(settings);
+    assert(blob.size > 0);
+
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::migrated_v7);
+    assert(decoded.acceleration_target_mph == kDefaultAccelerationTargetMph);
+    assert(decoded.operating_mode == OperatingMode::compass);
+    assert(decoded.session_duration_seconds == settings.session_duration_seconds);
+    assert(decoded.selected_track_id == settings.selected_track_id);
+    assert(decoded.session_trigger == settings.session_trigger);
 }
 
 void test_launch_sensitivity_snapping()
@@ -434,6 +483,8 @@ int main()
     test_clock_operating_mode_round_trips();
     test_speed_only_operating_mode_round_trips();
     test_compass_operating_mode_round_trips();
+    test_acceleration_mode_and_target_round_trip();
+    test_v7_records_migrate_and_keep_their_settings();
     test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();
     test_migration_corruption_and_storage_errors();

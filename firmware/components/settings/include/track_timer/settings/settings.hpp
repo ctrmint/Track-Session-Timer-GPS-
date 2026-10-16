@@ -7,7 +7,7 @@
 
 namespace track_timer::settings {
 
-inline constexpr std::uint16_t kCurrentSettingsVersion = 7;
+inline constexpr std::uint16_t kCurrentSettingsVersion = 8;
 inline constexpr std::size_t kSettingsBlobCapacity = 128;
 inline constexpr std::size_t kTrackIdentifierCapacity = 48;
 
@@ -28,6 +28,8 @@ enum class OperatingMode : std::uint8_t {
     // A compass card from the receiver's course over ground. Appended again: the order of
     // this enum is the stored format, whatever order the modes are offered in.
     compass,
+    // Standing-start acceleration timing, to a target speed chosen in Setup.
+    acceleration,
 };
 
 enum class OrientationMode : std::uint8_t {
@@ -67,6 +69,11 @@ inline constexpr std::array<std::uint16_t, 10> kLaunchSensitivityMilliG{
 // A deliberate pit exit, without tripping on a bump.
 inline constexpr std::uint16_t kDefaultLaunchSensitivityMilliG = 300;
 
+// The speeds a 0-X run can be timed to. Sixty is the one everybody means, which is why it
+// is the default; thirty is reachable in a car park and a hundred is a straight.
+inline constexpr std::array<std::uint8_t, 6> kAccelerationTargetsMph{30, 40, 50, 60, 70, 100};
+inline constexpr std::uint8_t kDefaultAccelerationTargetMph = 60;
+
 // Snaps any stored value onto the ladder. Settings written before v7 hold values that are
 // no longer offered, and rejecting them would fail the whole blob and take every unrelated
 // setting back to defaults with it.
@@ -95,6 +102,11 @@ struct DeviceSettings {
     // sites. Owns pit_exit_auto_start_enabled, which is derived from it rather than
     // edited separately, so the two cannot disagree.
     SessionTrigger session_trigger{SessionTrigger::manual};
+    // The speed a 0-X run is timed to, in mph. Appended, like every field before it - but
+    // unlike appending a mode this is a new byte in a fixed-width record, so it is what
+    // took the format to version 8 and needed a migration path rather than only a wider
+    // validation bound.
+    std::uint8_t acceleration_target_mph{kDefaultAccelerationTargetMph};
 };
 
 struct LegacySettingsV1 {
@@ -131,6 +143,7 @@ enum class DecodeResult : std::uint8_t {
     migrated_v4,
     migrated_v5,
     migrated_v6,
+    migrated_v7,
     corrupt,
     unsupported_version,
 };
@@ -143,6 +156,7 @@ enum class SettingsSource : std::uint8_t {
     migrated_v4,
     migrated_v5,
     migrated_v6,
+    migrated_v7,
     defaults_missing,
     defaults_corrupt,
     defaults_unsupported,
@@ -192,6 +206,8 @@ struct FeatureAvailability {
 [[nodiscard]] SettingsBlob encode_legacy_settings_v1(
     const LegacySettingsV1& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v2(
+    const DeviceSettings& settings) noexcept;
+[[nodiscard]] SettingsBlob encode_legacy_settings_v7(
     const DeviceSettings& settings) noexcept;
 [[nodiscard]] SettingsBlob encode_legacy_settings_v6(
     const DeviceSettings& settings) noexcept;

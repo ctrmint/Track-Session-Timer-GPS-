@@ -6,13 +6,14 @@ file or NVS operations.
 
 ## Current schema
 
-Version 4 stores:
+Version 8 stores:
 
 - session and rest durations
 - launch sensitivity
 - average lap time and lower-display choice
 - day and night brightness presets
-- operating mode (timer, G-meter, GPS Only, Clock, Speed Only or Compass)
+- operating mode (timer, G-meter, GPS Only, Clock, Speed Only, Compass or 0-X)
+- the 0-X target speed
 - Trackday Mode enable/disable state
 - repeating lap boundary (`START LINE` or `FINISH LINE`)
 - independent Pit Exit Auto-Start and Pit Entry Auto-Stop enable/disable states
