@@ -8,6 +8,23 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- **Race mode has its own running-session screen**: the lap in progress in `mm:ss.sss`,
+  the fastest lap of the session, and the time left in it. Race previously borrowed Track
+  Day's countdown, which - as that screen's own header says - has nowhere to put a lap
+  time, so a road test produced a session that started correctly on pit exit, timed laps,
+  and showed none of them. The times were being computed every tick and formatted by
+  `ui::present`, and then nothing drew them
+- the Race screen is **separate from Track Day's rather than lap fields added to it**.
+  Track Day withholding live lap times is a compliance rule, not a display preference, and
+  a screen that has no lap labels at all cannot leak one through a mode check that is
+  wrong. It consumes the `DeviceViewModel` the presenter already produces, so the
+  formatting - including `--:--.---` for a lap nothing has measured yet - is the one the
+  host tests cover rather than a fourth copy of it
+- nine fixed cells for the lap in progress, so a lap past ten minutes still reads rather
+  than losing its leading digit, and each cell is rewritten only when its character
+  changes: the current lap advances on every fix and the other two almost never, while a
+  repaint is the most expensive thing the device does (#213)
+
 - a **0-X** mode: the time from a standing start to a target speed, counting up from
   `0.00`, stopping the instant the target is reached and turning green. Coming back to rest
   re-arms it; a tap resets it sooner. The target is chosen in `SETUP` -> `0-X TARGET`

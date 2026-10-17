@@ -23,7 +23,7 @@ struct Entry {
 // than the count. Running out does not fail loudly: countdown_font returns nullptr, the
 // caller's label keeps the 14 px default, and a screen that should carry a 170 px numeral
 // renders a tiny one with nothing in the log to say why.
-constexpr std::size_t kMaximumSizes = 6;
+constexpr std::size_t kMaximumSizes = 8;
 std::array<Entry, kMaximumSizes> cache{};
 std::size_t cached = 0;
 
