@@ -125,6 +125,58 @@ int main()
         assert(std::strlen(session::gate_automation_result_name(result)) > 0);
     }
 
+    // A pit exit starts the session through the controller directly, so it runs for
+    // whatever configuration the controller already holds - not for whatever the driver
+    // set. A controller nobody has configured starts a session at SessionConfiguration's
+    // own default, which is a plausible twenty minutes and therefore the kind of wrong
+    // that does not look wrong. The configuration has to be written from the settings
+    // before a crossing can arrive, which is why it is no longer done only inside the
+    // manual start path.
+    settings.pit_exit_auto_start_enabled = true;
+    session::SessionController unconfigured{};
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::pit_exit), 0, settings, unconfigured);
+    assert(decision.result == session::GateAutomationResult::started);
+    assert(unconfigured.snapshot().session_remaining_ms ==
+           session::SessionConfiguration{}.session_duration_ms);
+
+    // Configured to something other than the default, so a session that honoured the
+    // default rather than the setting is distinguishable from one that honoured neither.
+    session::SessionController configured{};
+    session::SessionConfiguration configuration{};
+    configuration.session_duration_ms = 35 * 60 * 1'000;
+    configuration.rest_duration_ms = 15 * 60 * 1'000;
+    assert(configuration.session_duration_ms !=
+           session::SessionConfiguration{}.session_duration_ms);
+    // save_configuration is only accepted from the configuring state, which is why
+    // configure_session in the router falls back to entering it first.
+    assert(configured.enter_configuration(0) == session::TransitionResult::accepted);
+    assert(configured.save_configuration(configuration, 0) ==
+           session::TransitionResult::accepted);
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::pit_exit), 10, settings, configured);
+    assert(decision.result == session::GateAutomationResult::started);
+    assert(configured.snapshot().session_remaining_ms == configuration.session_duration_ms);
+    assert(configured.snapshot().state == session::SessionState::running);
+
+    // A second crossing while that session runs must not restart it, however many times
+    // the car passes the pit exit.
+    const auto started_remaining = configured.snapshot().session_remaining_ms;
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::pit_exit), 20, settings, configured);
+    assert(decision.result == session::GateAutomationResult::ignored_state);
+    assert(!decision.transitioned);
+    assert(configured.snapshot().session_remaining_ms == started_remaining);
+
+    // And a pit entry ends it with its own reason rather than looking like a driver stop,
+    // which is what the summary records.
+    settings.pit_entry_auto_stop_enabled = true;
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::pit_entry), 5'000, settings, configured);
+    assert(decision.result == session::GateAutomationResult::stopped);
+    assert(configured.snapshot().state == session::SessionState::review);
+    assert(configured.snapshot().completion_reason == session::CompletionReason::pit_entry);
+
     std::cout << "Lap-gate settings and independent pit session automation passed\n";
     return 0;
 }

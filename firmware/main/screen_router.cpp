@@ -12,6 +12,7 @@
 #include "track_timer/diagnostics/snapshot.hpp"
 #include "track_timer/storage/sd_card.hpp"
 #include "track_timer/storage/sd_track_store.hpp"
+#include "track_timer/session/gate_automation.hpp"
 #include "track_timer/timing/embedded_runtime.hpp"
 #include "track_timer/timing/engine.hpp"
 #include "track_timer/timing/settings_adapter.hpp"
@@ -513,6 +514,14 @@ class ScreenRouter {
         // Unconditional: if the save failed, settings_ still holds what the device will
         // use for the next session, and that is what the driver should be shown.
         refresh_ready();
+        // The same reasoning as refresh_ready, for the controller rather than the screen:
+        // a duration edited in the menu has to be the one a pit-exit crossing starts a
+        // session with. Only while nothing is running, because save_configuration is a
+        // transition the controller refuses mid-session anyway and the running session
+        // keeps the duration it began with.
+        if (!session_was_active_) {
+            configure_session(static_cast<std::int64_t>(esp_timer_get_time() / 1000));
+        }
     }
 
     // Advances the session clock and refreshes whichever running-session screen is up.
@@ -1130,6 +1139,10 @@ class ScreenRouter {
 
         // Restore the track that was selected before the last reboot.
         restore_selected_track();
+        // Configured at boot, not only when a session is started by hand. A pit-exit
+        // crossing starts the session through the controller directly, and the controller
+        // takes the duration from whatever configuration it already holds.
+        configure_session(static_cast<std::int64_t>(esp_timer_get_time() / 1000));
         refresh_ready();
         // Whatever is already on the card, so Review opens on the last session driven
         // rather than on nothing after a power cycle.
@@ -1281,20 +1294,33 @@ class ScreenRouter {
         refresh_pending();
     }
 
-    void begin_session() noexcept
+    // Puts the current durations into the controller and leaves it ready to start.
+    //
+    // Split out of begin_session because a gate crossing can now start a session without
+    // going through it: SessionController::start takes its duration from the configuration
+    // already saved, so a controller that has never been configured starts a session of
+    // zero length and lands straight in overtime. Configuration therefore follows the
+    // settings, not the act of starting.
+    void configure_session(const std::int64_t now_ms) noexcept
     {
-        armed_ = false;
-        const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
         session::SessionConfiguration configuration{};
         configuration.session_duration_ms =
             static_cast<std::int64_t>(settings_.session_duration_seconds) * 1'000;
         configuration.rest_duration_ms =
             static_cast<std::int64_t>(settings_.rest_duration_seconds) * 1'000;
-        if (session_.save_configuration(configuration, now_ms) !=
+        if (session_.save_configuration(configuration, now_ms) ==
             session::TransitionResult::accepted) {
-            (void)session_.enter_configuration(now_ms);
-            (void)session_.save_configuration(configuration, now_ms);
+            return;
         }
+        (void)session_.enter_configuration(now_ms);
+        (void)session_.save_configuration(configuration, now_ms);
+    }
+
+    void begin_session() noexcept
+    {
+        armed_ = false;
+        const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
+        configure_session(now_ms);
         const auto started = session_.start(now_ms);
         ESP_LOGI("track_timer", "session start: %d over %u s", static_cast<int>(started),
                  static_cast<unsigned>(settings_.session_duration_seconds));
@@ -1435,6 +1461,45 @@ class ScreenRouter {
     // queue that fills and then reports drops, and a drop there would be this code's
     // fault rather than the engine's or the receiver's - which is exactly the distinction
     // the loss counters exist to preserve.
+    // Hands one gate crossing to the session automation and makes the rest of the shell
+    // agree with whatever it decided.
+    //
+    // Every outcome is logged, including the refusals. A pit exit that did not start a
+    // session looks exactly like no pit exit at all from outside, and the reasons are
+    // different enough to matter: the setting is off, the session was already running, or
+    // the controller refused the transition.
+    void apply_gate_automation(const timing::GateCrossingDecision& decision) noexcept
+    {
+        const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
+        const auto outcome =
+            session::apply_gate_session_automation(decision, now_ms, settings_, session_);
+        if (outcome.result == session::GateAutomationResult::ignored_non_event ||
+            outcome.result == session::GateAutomationResult::ignored_gate) {
+            // Start and finish crossings come through this queue too, several per lap.
+            // Logging them would bury the two that mean something.
+            return;
+        }
+        ESP_LOGI("track_timer", "gate automation: %s -> %s",
+                 timing::timing_gate_name(decision.gate),
+                 session::gate_automation_result_name(outcome.result));
+        if (!outcome.transitioned) {
+            return;
+        }
+        // The session was started or stopped from underneath the shell, so the two things
+        // begin_session and advance_session_phase would have done have to happen here.
+        // service_session picks up the state change itself and loads the right screen.
+        armed_ = false;
+        if (outcome.result == session::GateAutomationResult::stopped) {
+            // stop_from_pit_entry goes straight to review, having already refreshed the
+            // session times, so the summary is captured after it rather than before as
+            // the driver-stop path does - and confirm_stop is not part of this route.
+            capture_summary();
+            (void)session_.complete_review(now_ms);
+        }
+        describe_mode();
+        refresh_pending();
+    }
+
     void drain_timing_output() noexcept
     {
         if (!timing_started_) {
@@ -1449,12 +1514,22 @@ class ScreenRouter {
                      static_cast<unsigned long long>(duration_ms / 1'000 % 60),
                      static_cast<unsigned long long>(duration_ms % 1'000));
         }
-        // Drained and discarded for now. The records are the raw material for the offline
-        // replay in #43 and belong in the log rather than on the screen, but the queue has
-        // to be emptied either way: one left to fill would report drops that mean only
-        // that nobody was reading it. The runtime counts what passes through.
+        // Each crossing is offered to the session automation, which starts on pit exit
+        // and stops on pit entry when the settings ask for it. This is what the GPS
+        // trigger has always meant and never did: the automation and the queue both
+        // existed, and the records were read off the queue and thrown away.
+        //
+        // Offered unconditionally rather than only while armed on GPS, because the two
+        // settings the automation consults are the authority on whether it should act -
+        // pit_exit_auto_start_enabled is derived from the trigger, and pit-entry
+        // auto-stop is its own setting that a driver can want with any trigger. Gating
+        // here as well would mean two places deciding the same thing.
+        //
+        // The records are also the raw material for the offline replay in #43, which is
+        // why they keep being drained to the floor afterwards rather than consumed.
         timing::GateCrossingDecision decision{};
         while (timing::try_receive_gate_crossing_record(decision)) {
+            apply_gate_automation(decision);
         }
         log_timing_progress();
     }
@@ -2056,6 +2131,20 @@ class ScreenRouter {
     // What the car actually did, taken at the moment the session ends and before anything
     // resets. Peaks come from the meter, which has been scoped to the session since it
     // started, so they describe this session rather than everything since boot.
+    [[nodiscard]] static logger::SessionCompletionReason summary_completion_reason(
+        const session::CompletionReason reason) noexcept
+    {
+        switch (reason) {
+        case session::CompletionReason::none:
+            return logger::SessionCompletionReason::none;
+        case session::CompletionReason::driver_stop:
+            return logger::SessionCompletionReason::driver_stop;
+        case session::CompletionReason::pit_entry:
+            return logger::SessionCompletionReason::pit_entry;
+        }
+        return logger::SessionCompletionReason::none;
+    }
+
     void capture_summary() noexcept
     {
         const auto snapshot = session_.snapshot();
@@ -2069,7 +2158,11 @@ class ScreenRouter {
         // end, which is why one is never greater than the other.
         summary.session_duration_ms = std::max<std::int64_t>(0, snapshot.session_elapsed_ms);
         summary.session_overrun_ms = std::max<std::int64_t>(0, snapshot.session_overrun_ms);
-        summary.completion_reason = logger::SessionCompletionReason::driver_stop;
+        // Taken from the controller rather than assumed. Hardcoding driver_stop was
+        // harmless while a driver stop was the only way a session could end; a pit entry
+        // can now end one, and a record that says the driver stopped when they did not is
+        // worse than no record of how it ended.
+        summary.completion_reason = summary_completion_reason(snapshot.completion_reason);
         summary.integrity = logger::SummaryIntegrity::complete;
         // Honest rather than flattering: there is no receiver, so every session so far is
         // recorded without the lap data a driver would expect.
