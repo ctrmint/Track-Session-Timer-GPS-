@@ -34,8 +34,8 @@ int main()
     settings.lap_boundary = settings::LapBoundaryMode::start;
     timing_config = timing::make_timing_engine_config(tracks.definitions[0], settings);
     assert(timing_config.lap_boundary == timing::LapBoundary::start);
-    assert(timing_config.gates.pit_entry.left.latitude_deg ==
-           tracks.definitions[0].gates.pit_entry.left.latitude_deg);
+    assert(timing_config.gates.start.left.latitude_deg ==
+           tracks.definitions[0].gates.start.left.latitude_deg);
     auto provisional_track = tracks.definitions[0];
     provisional_track.provenance.geometry_status =
         track::TrackGeometryStatus::provisional;
@@ -43,99 +43,70 @@ int main()
         timing::make_timing_engine_config(provisional_track, settings);
     assert(blocked_config.minimum_lap_time_s == 0.0);
 
+    // The automation starts a session on the start line. Four things have to be true at
+    // once, and each refusal is reported distinctly because each has a different remedy.
     session::SessionController controller{};
-    auto rejected = event(timing::TimingGate::pit_exit);
+
+    // Not an event at all - an evaluated crossing that did not fire.
+    auto rejected = event(timing::TimingGate::start);
     rejected.has_event = false;
-    rejected.result = timing::GateCrossingResult::crossing_rejected;
-    auto decision = session::apply_gate_session_automation(rejected, 0, settings,
+    rejected.result = timing::GateCrossingResult::not_evaluated;
+    auto decision = session::apply_gate_session_automation(rejected, 0, settings, true,
                                                            controller);
     assert(decision.result == session::GateAutomationResult::ignored_non_event);
+    assert(!decision.transitioned);
+
+    // A gate the automation has no interest in.
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::finish), 0, settings, true, controller);
+    assert(decision.result == session::GateAutomationResult::ignored_gate);
+
+    // The right gate, but the driver did not choose the GPS trigger.
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::start), 0, settings, true, controller);
+    assert(decision.result == session::GateAutomationResult::ignored_disabled);
+
+    // Chosen, but not armed. This is the case the pit-exit gate never had to worry about:
+    // the start line is crossed on the way to anywhere, so an unarmed crossing must not
+    // begin a session.
+    settings.gps_start_line_enabled = true;
+    decision = session::apply_gate_session_automation(
+        event(timing::TimingGate::start), 500, settings, false, controller);
+    assert(decision.result == session::GateAutomationResult::ignored_unarmed);
+    assert(!decision.transitioned);
     assert(controller.snapshot().state == session::SessionState::ready);
 
+    // Armed, chosen, ready: it starts.
     decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::start), 0, settings, controller);
-    assert(decision.result == session::GateAutomationResult::ignored_gate);
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 0, settings, controller);
-    assert(decision.result == session::GateAutomationResult::ignored_disabled);
-
-    settings.pit_exit_auto_start_enabled = true;
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 1'000, settings, controller);
+        event(timing::TimingGate::start), 1'000, settings, true, controller);
     assert(decision.result == session::GateAutomationResult::started);
     assert(decision.transitioned);
-    assert(decision.segment_sequence_0 == 41 && decision.segment_sequence_1 == 42);
+    assert(decision.event_time_ms == 1'000);
+    assert(decision.gate == timing::TimingGate::start);
     assert(controller.snapshot().state == session::SessionState::running);
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 1'001, settings, controller);
-    assert(decision.result == session::GateAutomationResult::ignored_state);
 
+    // And every lap after it crosses the same line, which must not restart the clock.
     decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_entry), 2'000, settings, controller);
-    assert(decision.result == session::GateAutomationResult::ignored_disabled);
+        event(timing::TimingGate::start), 61'000, settings, true, controller);
+    assert(decision.result == session::GateAutomationResult::ignored_state);
+    assert(!decision.transitioned);
     assert(controller.snapshot().state == session::SessionState::running);
-    settings.pit_entry_auto_stop_enabled = true;
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_entry), 2'500, settings, controller);
-    assert(decision.result == session::GateAutomationResult::stopped);
-    assert(controller.snapshot().state == session::SessionState::review);
-    assert(controller.snapshot().completion_reason == session::CompletionReason::pit_entry);
-    assert(!controller.snapshot().stop_confirmation_pending);
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_entry), 2'501, settings, controller);
-    assert(decision.result == session::GateAutomationResult::ignored_state);
 
-    settings.pit_exit_auto_start_enabled = false;
-    session::SessionController independently_stopped{};
-    assert(independently_stopped.start(10) == session::TransitionResult::accepted);
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_entry), 20, settings, independently_stopped);
-    assert(decision.result == session::GateAutomationResult::stopped);
-
-    session::SessionController overtime{{60'000, 0}};
-    assert(overtime.start(0) == session::TransitionResult::accepted);
-    assert(overtime.advance(60'000) == session::TransitionResult::accepted);
-    assert(overtime.snapshot().state == session::SessionState::overtime);
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_entry), 60'001, settings, overtime);
-    assert(decision.result == session::GateAutomationResult::stopped);
-
+    // Time that cannot have happened is refused rather than absorbed.
     session::SessionController non_monotonic{};
     assert(non_monotonic.advance(100) == session::TransitionResult::accepted);
-    settings.pit_exit_auto_start_enabled = true;
     decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 99, settings, non_monotonic);
+        event(timing::TimingGate::start), 99, settings, true, non_monotonic);
     assert(decision.result == session::GateAutomationResult::transition_rejected);
     assert(!decision.transitioned);
 
-    session::SessionController manual{};
-    assert(manual.start(0) == session::TransitionResult::accepted);
-    assert(manual.request_stop(1'000) == session::TransitionResult::accepted);
-    assert(manual.snapshot().stop_confirmation_pending);
-    assert(manual.confirm_stop(1'001) == session::TransitionResult::accepted);
-    assert(manual.snapshot().completion_reason == session::CompletionReason::driver_stop);
-
-    for (const auto result : {session::GateAutomationResult::ignored_non_event,
-                              session::GateAutomationResult::ignored_gate,
-                              session::GateAutomationResult::ignored_disabled,
-                              session::GateAutomationResult::ignored_state,
-                              session::GateAutomationResult::started,
-                              session::GateAutomationResult::stopped,
-                              session::GateAutomationResult::transition_rejected}) {
-        assert(std::strlen(session::gate_automation_result_name(result)) > 0);
-    }
-
-    // A pit exit starts the session through the controller directly, so it runs for
-    // whatever configuration the controller already holds - not for whatever the driver
-    // set. A controller nobody has configured starts a session at SessionConfiguration's
-    // own default, which is a plausible twenty minutes and therefore the kind of wrong
-    // that does not look wrong. The configuration has to be written from the settings
-    // before a crossing can arrive, which is why it is no longer done only inside the
-    // manual start path.
-    settings.pit_exit_auto_start_enabled = true;
+    // A crossing-started session runs for whatever configuration the controller holds -
+    // not for whatever the driver set. A controller nobody has configured starts at
+    // SessionConfiguration's own default, which is a plausible twenty minutes and
+    // therefore the kind of wrong that does not look wrong.
     session::SessionController unconfigured{};
     decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 0, settings, unconfigured);
+        event(timing::TimingGate::start), 0, settings, true, unconfigured);
     assert(decision.result == session::GateAutomationResult::started);
     assert(unconfigured.snapshot().session_remaining_ms ==
            session::SessionConfiguration{}.session_duration_ms);
@@ -148,35 +119,31 @@ int main()
     configuration.rest_duration_ms = 15 * 60 * 1'000;
     assert(configuration.session_duration_ms !=
            session::SessionConfiguration{}.session_duration_ms);
-    // save_configuration is only accepted from the configuring state, which is why
-    // configure_session in the router falls back to entering it first.
     assert(configured.enter_configuration(0) == session::TransitionResult::accepted);
     assert(configured.save_configuration(configuration, 0) ==
            session::TransitionResult::accepted);
     decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 10, settings, configured);
+        event(timing::TimingGate::start), 10, settings, true, configured);
     assert(decision.result == session::GateAutomationResult::started);
     assert(configured.snapshot().session_remaining_ms == configuration.session_duration_ms);
     assert(configured.snapshot().state == session::SessionState::running);
 
-    // A second crossing while that session runs must not restart it, however many times
-    // the car passes the pit exit.
-    const auto started_remaining = configured.snapshot().session_remaining_ms;
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_exit), 20, settings, configured);
-    assert(decision.result == session::GateAutomationResult::ignored_state);
-    assert(!decision.transitioned);
-    assert(configured.snapshot().session_remaining_ms == started_remaining);
+    // Stopping is the driver's, and stays so: there is no start-line equivalent, because
+    // stopping on the start line would end the session after one lap.
+    assert(configured.request_stop(5'000) == session::TransitionResult::accepted);
+    assert(configured.confirm_stop(5'001) == session::TransitionResult::accepted);
+    assert(configured.snapshot().completion_reason == session::CompletionReason::driver_stop);
 
-    // And a pit entry ends it with its own reason rather than looking like a driver stop,
-    // which is what the summary records.
-    settings.pit_entry_auto_stop_enabled = true;
-    decision = session::apply_gate_session_automation(
-        event(timing::TimingGate::pit_entry), 5'000, settings, configured);
-    assert(decision.result == session::GateAutomationResult::stopped);
-    assert(configured.snapshot().state == session::SessionState::review);
-    assert(configured.snapshot().completion_reason == session::CompletionReason::pit_entry);
+    for (const auto result : {session::GateAutomationResult::ignored_non_event,
+                              session::GateAutomationResult::ignored_gate,
+                              session::GateAutomationResult::ignored_disabled,
+                              session::GateAutomationResult::ignored_state,
+                              session::GateAutomationResult::ignored_unarmed,
+                              session::GateAutomationResult::started,
+                              session::GateAutomationResult::transition_rejected}) {
+        assert(std::strlen(session::gate_automation_result_name(result)) > 0);
+    }
 
-    std::cout << "Lap-gate settings and independent pit session automation passed\n";
+    std::cout << "Lap-gate settings and start-line session automation passed\n";
     return 0;
 }

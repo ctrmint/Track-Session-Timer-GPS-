@@ -32,7 +32,8 @@ const char* completion_text(const logger::SessionCompletionReason reason) noexce
     switch (reason) {
     case logger::SessionCompletionReason::driver_stop:
         return "DRIVER";
-    case logger::SessionCompletionReason::pit_entry:
+    case logger::SessionCompletionReason::reserved_pit_entry:
+        // Only reachable from a session recorded before pit entry was removed.
         return "PIT ENTRY";
     case logger::SessionCompletionReason::reset_recovery:
         return "RECOVERED";

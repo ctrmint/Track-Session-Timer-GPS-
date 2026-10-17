@@ -54,7 +54,8 @@ const char* completion_name(const logger::SessionCompletionReason reason) noexce
         return "DRIVER STOP";
     case logger::SessionCompletionReason::reset_recovery:
         return "RESET RECOVERY";
-    case logger::SessionCompletionReason::pit_entry:
+    case logger::SessionCompletionReason::reserved_pit_entry:
+        // Only reachable from a session recorded before pit entry was removed.
         return "PIT ENTRY";
     case logger::SessionCompletionReason::none:
         return "INCOMPLETE";

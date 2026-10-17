@@ -9,12 +9,12 @@ namespace track_timer::ui {
 
 inline constexpr std::size_t kSessionTriggerCount = 3;
 
-// Why a trigger owns pit-exit auto-start rather than sitting beside it:
+// Why a trigger owns start-line auto-start rather than sitting beside it:
 //
-// `pit_exit_auto_start_enabled` already meant "start the session when the car leaves the
-// pits", with tested automation behind it. GPS is the same intent, so the trigger writes
-// that setting and it leaves the device settings list. Offering one behaviour in two
-// places invites the two disagreeing, which is the rule Mode established.
+// `gps_start_line_enabled` means "start the session when the car crosses the start line",
+// with tested automation behind it. GPS is the same intent, so the trigger writes that
+// setting and it leaves the device settings list. Offering one behaviour in two places
+// invites the two disagreeing, which is the rule Mode established.
 void apply_trigger(settings::SessionTrigger trigger,
                    settings::DeviceSettings& settings) noexcept;
 [[nodiscard]] settings::SessionTrigger trigger_from_settings(

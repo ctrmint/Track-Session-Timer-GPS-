@@ -208,7 +208,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-gate-session-automation
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Lap-gate settings and independent pit session automation passed"
+            PASS_REGULAR_EXPRESSION "Lap-gate settings and start-line session automation passed"
             TIMEOUT 20
     )
 
@@ -233,7 +233,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-gate-capture
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Four-gate capture, safety rejection, atomic persistence, and recovery passed"
+            PASS_REGULAR_EXPRESSION "Two-gate capture, safety rejection, atomic persistence, and recovery passed"
             TIMEOUT 20
     )
 
@@ -633,7 +633,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-four-gate-event-engine
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Typed four-gate events, independent rearm, interpolation, and rejection replay passed"
+            PASS_REGULAR_EXPRESSION "Typed gate events, independent rearm, interpolation, and rejection replay passed"
             TIMEOUT 20
     )
 

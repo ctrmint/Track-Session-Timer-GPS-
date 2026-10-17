@@ -20,8 +20,6 @@ class TrackWorkbenchTests(unittest.TestCase):
         return {
             "start": (52.0, -1.0, 90.0, 20.0),
             "finish": (52.0, -1.0, 90.0, 20.0),
-            "pit_entry": (52.0002, -1.0, 90.0, 15.0),
-            "pit_exit": (51.9998, -1.0, 90.0, 15.0),
         }
 
     def definition(self):
@@ -105,12 +103,12 @@ class TrackWorkbenchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             candidate = self.definition()
-            candidate["gates"]["pit_entry"]["right"] = candidate["gates"]["pit_entry"][
+            candidate["gates"]["finish"]["right"] = candidate["gates"]["finish"][
                 "left"
             ]
             source = root / "invalid.json"
             source.write_text(json.dumps(candidate), encoding="utf-8")
-            with self.assertRaisesRegex(TrackWorkbenchError, "gates.pit_entry"):
+            with self.assertRaisesRegex(TrackWorkbenchError, "gates.finish"):
                 import_definition(source, root / "database")
             self.assertFalse((root / "database" / "workbench_test.json").exists())
 

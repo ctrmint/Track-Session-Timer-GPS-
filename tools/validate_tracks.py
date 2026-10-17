@@ -11,7 +11,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 
 EARTH_RADIUS_M = 6_371_000.0
-REQUIRED_GATES = ("start", "finish", "pit_entry", "pit_exit")
+REQUIRED_GATES = ("start", "finish")
 MINIMUM_GATE_LENGTH_M = 1.0
 MAXIMUM_GATE_LENGTH_M = 1_000.0
 MINIMUM_CROSSING_ANGLE_DEG = 10.0

@@ -32,15 +32,15 @@ struct ValueChoiceList {
 // field's values rather than walking the driver through the whole list to reach it, and a
 // hand-written index that stopped matching the array is exactly the mistake that made
 // DIAGNOSTICS unreachable in #158 - so it is asserted below rather than trusted.
-inline constexpr std::size_t kAccelerationTargetFieldIndex = 11;
+inline constexpr std::size_t kAccelerationTargetFieldIndex = 10;
 
-inline constexpr std::array<SettingsField, 12> kPickerFields{
+inline constexpr std::array<SettingsField, 11> kPickerFields{
     SettingsField::session_duration,   SettingsField::rest_duration,
     SettingsField::average_lap,        SettingsField::lower_display,
-    SettingsField::lap_boundary,       SettingsField::pit_entry_auto_stop,
-    SettingsField::launch_sensitivity, SettingsField::day_brightness,
-    SettingsField::night_brightness,   SettingsField::auto_dim,
-    SettingsField::orientation,       SettingsField::acceleration_target,
+    SettingsField::lap_boundary,       SettingsField::launch_sensitivity,
+    SettingsField::day_brightness,     SettingsField::night_brightness,
+    SettingsField::auto_dim,           SettingsField::orientation,
+    SettingsField::acceleration_target,
 };
 
 static_assert(kPickerFields[kAccelerationTargetFieldIndex] ==

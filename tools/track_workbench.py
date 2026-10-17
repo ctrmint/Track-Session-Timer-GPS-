@@ -21,7 +21,7 @@ except ModuleNotFoundError:  # Direct `python tools/track_workbench.py` executio
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA_PATH = REPO_ROOT / "data" / "tracks" / "schema.json"
-GATE_NAMES = ("start", "finish", "pit_entry", "pit_exit")
+GATE_NAMES = ("start", "finish")
 GEOMETRY_STATUSES = (
     "provisional",
     "device_captured",
@@ -191,17 +191,16 @@ def create_definition(
     gates = {}
     for gate_name in GATE_NAMES:
         latitude, longitude, heading, width = gate_specs[gate_name]
-        is_pit_gate = gate_name in ("pit_entry", "pit_exit")
         gates[gate_name] = derive_gate(
             latitude,
             longitude,
             heading,
             width,
-            minimum_crossing_speed_mps=1.0 if is_pit_gate else 2.0,
-            rearm_corridor_m=10.0 if is_pit_gate else 15.0,
+            minimum_crossing_speed_mps=2.0,
+            rearm_corridor_m=15.0,
         )
     instance = {
-        "schema_version": 3,
+        "schema_version": 4,
         "revision": 1,
         "track_id": track_id,
         "name": name,

@@ -263,6 +263,21 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Changed
 
+- the **GPS session trigger starts on the start line** rather than the pit exit, which is
+  what keeps it when the pit gates go. The start line is crossed every lap, where pit exit
+  on a road loop was a line somebody picked; and on a circuit whose start and finish are
+  one line, the session and lap 1 begin on the same crossing. `pit_exit_auto_start_enabled`
+  is renamed `gps_start_line_enabled` - the stored byte and its meaning are unchanged, so
+  the settings record needs **no version bump and no migration**. The byte that held
+  pit-entry auto-stop is kept as reserved and written as zero, because reclaiming it would
+  change a fixed-width record's length for a setting nothing uses
+- a start-line crossing starts a session **only while armed**. Without that, driving out of
+  the paddock would begin one: the pit-exit gate was obscure enough that a crossing implied
+  intent, and the start line is not. `GateAutomationResult::ignored_unarmed` reports it,
+  because the remedy differs from every other refusal
+- `SETUP` names the rest period **`REST`**, not `PIT REST`: it is time between sessions,
+  spent wherever the driver likes
+
 - the G radar's trace is back to **1.2 seconds**, reverting an increase to three that was
   merged on a bad measurement and then measured properly. Both figures below are with the
   device untouched, which is when the meter reaches `ready` and the trace is actually
@@ -303,7 +318,30 @@ The project follows Semantic Versioning once the first firmware release is tagge
   25 Hz, so while the receiver ran at 20 its 50 ms intervals sat 10 ms under a 60 ms gap
   threshold rather than the 20 ms the 1.5x multiple was chosen to give. All three now agree
 
+### Removed
+
+- **pit lane entry and exit, entirely**: the two timing gates, the settings behind them,
+  the session automation's stop path, the capture steps, the gate fields in a track
+  definition, and their documentation. Too much complexity for what they earned
+- `TimingGate` is `start` and `finish`, and `kTimingGateCount` is 2. A track definition's
+  `CircuitGateDefinitions` loses both pit gates, which takes the **track schema to
+  version 4**. A schema-3 file still loads - its pit gates are parsed and discarded -
+  because the 26 circuits already written to cards are otherwise correct and rejecting
+  them would cost a device its whole track list for gates nothing reads
+- gate capture walks **two gates rather than four**
+- `SessionController::stop_from_pit_entry` and `CompletionReason::pit_entry`. The log
+  format's `SessionCompletionReason::pit_entry` becomes `reserved_pit_entry`: it is kept,
+  not produced, so sessions already recorded on cards still decode to a reason the reader
+  knows
+- `pit_entry_auto_stop_enabled`. Stopping has no start-line equivalent and gains none -
+  stopping on the start line would end a session after one lap - so stopping stays the
+  driver's
+
 ### Fixed
+
+- `SettingsField` gained `acceleration_target` without `kSettingsFieldCount` or the name
+  array following it, so naming that field read past the end of the array. Found while
+  removing the two pit entries from the same list
 
 - the ready dashboard **reports the receiver as it is now, not as it was at boot**.
   `ready_snapshot` read the health live and correctly, but `refresh_ready` was only

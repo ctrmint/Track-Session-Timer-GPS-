@@ -31,7 +31,7 @@ class TrackSchemaTests(unittest.TestCase):
         self.assertTrue(errors)
 
     def test_all_four_gates_are_required(self):
-        for gate_name in ("start", "finish", "pit_entry", "pit_exit"):
+        for gate_name in ("start", "finish"):
             with self.subTest(gate=gate_name):
                 invalid = deepcopy(self.example)
                 del invalid["gates"][gate_name]
@@ -92,7 +92,7 @@ class TrackSchemaTests(unittest.TestCase):
 
     def test_invalid_gate_limits_are_rejected(self):
         invalid = deepcopy(self.example)
-        invalid["gates"]["pit_exit"]["minimum_crossing_speed_mps"] = 0
+        invalid["gates"]["finish"]["minimum_crossing_speed_mps"] = 0
         errors = list(Draft202012Validator(self.schema).iter_errors(invalid))
         self.assertTrue(errors)
 
@@ -104,12 +104,12 @@ class TrackSchemaTests(unittest.TestCase):
 
     def test_degenerate_gate_is_rejected_semantically(self):
         invalid = deepcopy(self.example)
-        invalid["gates"]["pit_entry"]["right"] = deepcopy(
-            invalid["gates"]["pit_entry"]["left"]
+        invalid["gates"]["finish"]["right"] = deepcopy(
+            invalid["gates"]["finish"]["left"]
         )
         self.assertEqual(
             validate_track_geometry(invalid),
-            ["gates.pit_entry: directed gate is shorter than 1 metre"],
+            ["gates.finish: directed gate is shorter than 1 metre"],
         )
 
     def test_duplicate_sector_identifier_names_exact_field(self):

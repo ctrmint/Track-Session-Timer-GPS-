@@ -16,7 +16,6 @@ Version 8 stores:
 - the 0-X target speed
 - Trackday Mode enable/disable state
 - repeating lap boundary (`START LINE` or `FINISH LINE`)
-- independent Pit Exit Auto-Start and Pit Entry Auto-Stop enable/disable states
 - fixed or automatic orientation
 - stationary auto-dim preference
 - selected local track identifier
@@ -29,7 +28,7 @@ persisted.
 
 - A valid version 4 record loads directly.
 - Versions 1, 2, and 3 are migrated explicitly, with new fields receiving documented safe
-  defaults, then rewritten atomically. Trackday Mode and both pit automations default to
+  defaults, then rewritten atomically. Trackday Mode defaults to
   disabled during migration; the lap boundary defaults to Finish.
 - Missing, corrupt, invalid, or unsupported records are never reinterpreted. Safe
   defaults are used and a current record is written when storage permits.
@@ -57,12 +56,13 @@ The effective value is frozen when a session starts. When enabled, active presen
 is limited to session countdown and estimated laps remaining; lap detection and logging
 continue, with lap results available through Review only after the session stops.
 
-Lap Line explicitly selects Start or Finish as the repeating lap boundary. Pit Exit
-Start and Pit Entry Stop are independent and default to disabled. When enabled, only an
-accepted, directed, debounced typed gate event can act: pit exit starts from Ready, and
-pit entry stops from Running or Overtime with `PIT ENTRY` recorded as the completion
-reason. Rejected, duplicate, disabled, and wrong-state events are no-ops. Manual Start
-and the guarded manual Stop flow remain available regardless of these settings.
+Lap Line explicitly selects Start or Finish as the repeating lap boundary. Starting a
+session on the start line is not a setting of its own: it is what the GPS session
+trigger means, so the trigger owns it and offering the same behaviour twice cannot make
+the two disagree. Only an accepted, directed, debounced typed gate event can act, and
+only while the session is armed - the start line is crossed on the way to anywhere, so
+an unarmed crossing must not begin a session. Stopping stays the driver's: there is no
+start-line equivalent, because stopping there would end the session after one lap.
 
 Edits remain a draft until Save. Cancel discards the complete draft, and Restore
 Defaults requires a separate confirmation before staging defaults for Save. Restoring

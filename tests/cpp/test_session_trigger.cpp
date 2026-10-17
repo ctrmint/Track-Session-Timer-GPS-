@@ -11,38 +11,34 @@ namespace {
 
 using namespace track_timer;
 
-// The trigger owns pit-exit auto-start rather than sitting beside it. Offering one
+// The trigger owns start-line auto-start rather than sitting beside it. Offering one
 // behaviour in two places invites the two disagreeing, which is the rule Mode set.
-void the_trigger_owns_pit_exit_auto_start()
+void the_trigger_owns_start_line_auto_start()
 {
     settings::DeviceSettings settings{};
     assert(settings.session_trigger == settings::SessionTrigger::manual);
-    assert(!settings.pit_exit_auto_start_enabled);
+    assert(!settings.gps_start_line_enabled);
 
     ui::apply_trigger(settings::SessionTrigger::gps, settings);
     assert(ui::trigger_from_settings(settings) == settings::SessionTrigger::gps);
-    assert(settings.pit_exit_auto_start_enabled);
+    assert(settings.gps_start_line_enabled);
 
     ui::apply_trigger(settings::SessionTrigger::imu, settings);
-    assert(!settings.pit_exit_auto_start_enabled);
+    assert(!settings.gps_start_line_enabled);
     ui::apply_trigger(settings::SessionTrigger::manual, settings);
-    assert(!settings.pit_exit_auto_start_enabled);
-
-    // Ending a session on pit entry is a different question from starting one, so it
-    // stays where it was.
-    settings.pit_entry_auto_stop_enabled = true;
-    ui::apply_trigger(settings::SessionTrigger::gps, settings);
-    assert(settings.pit_entry_auto_stop_enabled);
+    assert(!settings.gps_start_line_enabled);
 }
 
 void the_owned_setting_is_no_longer_offered_as_a_field()
 {
+    // The setting the trigger owns has no enumerator of its own any more, so there is
+    // nothing to look for in the picker. What is still worth asserting is that every
+    // field the picker does offer can be named and edited - a field in this list with no
+    // case behind it is how a setting comes to be shown and be inert.
     const auto& fields = ui::kPickerFields;
-    assert(std::find(fields.begin(), fields.end(),
-                     ui::SettingsField::pit_exit_auto_start) == fields.end());
-    // Its counterpart is untouched.
-    assert(std::find(fields.begin(), fields.end(),
-                     ui::SettingsField::pit_entry_auto_stop) != fields.end());
+    for (const auto field : fields) {
+        assert(static_cast<std::size_t>(field) < ui::kSettingsFieldCount);
+    }
     // And the threshold the IMU trigger reads is still reachable.
     assert(std::find(fields.begin(), fields.end(),
                      ui::SettingsField::launch_sensitivity) != fields.end());
@@ -125,14 +121,14 @@ void the_menu_order_matches_the_enum()
 
 int main()
 {
-    the_trigger_owns_pit_exit_auto_start();
+    the_trigger_owns_start_line_auto_start();
     the_owned_setting_is_no_longer_offered_as_a_field();
     a_trigger_that_cannot_fire_says_so();
     a_launch_is_forward_acceleration();
     every_trigger_is_named_and_labelled();
     the_menu_order_matches_the_enum();
 
-    std::cout << "Session trigger: ownership of pit-exit auto-start, refusal to arm when "
+    std::cout << "Session trigger: ownership of start-line auto-start, refusal to arm when "
                  "it cannot fire, and forward-only launch detection passed\n";
     return 0;
 }

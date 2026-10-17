@@ -88,8 +88,6 @@ TimingEngineConfig configuration(CircuitProjection& projection)
     config.gates.finish.minimum_crossing_speed_mps = 1.0;
     config.gates.finish.rearm_corridor_m = 2.0;
     config.gates.start = config.gates.finish;
-    config.gates.pit_entry = config.gates.finish;
-    config.gates.pit_exit = config.gates.finish;
     config.minimum_lap_time_s = 8.0;
     return config;
 }
@@ -171,7 +169,7 @@ int main()
     assert(unconfigured.configure(invalid_reference) ==
            TimingEngineConfigureResult::invalid_reference);
     auto invalid_gate = config;
-    invalid_gate.gates.pit_exit.right = invalid_gate.gates.pit_exit.left;
+    invalid_gate.gates.finish.right = invalid_gate.gates.finish.left;
     assert(unconfigured.configure(invalid_gate) ==
            TimingEngineConfigureResult::invalid_gate);
     auto invalid_policy = config;
@@ -194,7 +192,8 @@ int main()
     const auto target_replay = replay(target_model, fixes, true);
     assert(host_replay.event_count == 3);
     assert(target_replay.event_count == host_replay.event_count);
-    assert(host_replay.gate_record_count == 16);
+    // Two gates now rather than four, so each fix produces half the records it did.
+    assert(host_replay.gate_record_count == 8);
     assert(target_replay.gate_record_count == host_replay.gate_record_count);
     for (std::size_t index = 0; index < host_replay.event_count; ++index) {
         const auto& expected = host_replay.events[index];

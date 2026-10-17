@@ -4,7 +4,7 @@
 
 Firmware accepts schema version 3 definitions up to 16384 bytes. Track identifiers must
 fit the persisted 47-character identifier field and use letters, digits, `.`, `_`, or
-`-`. Every layout must provide directed `start`, `finish`, `pit_entry`, and `pit_exit`
+`-`. Every layout must provide directed `start` and `finish`
 gates plus revision and provenance metadata. Sector records use the same directed-gate
 structure. Each endpoint pair must form a sensible line inside the track geofence after
 local projection; start and finish may intentionally contain identical geometry. Run

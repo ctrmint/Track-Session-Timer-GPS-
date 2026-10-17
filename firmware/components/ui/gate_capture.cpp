@@ -11,8 +11,7 @@
 namespace track_timer::ui {
 namespace {
 
-constexpr std::array<const char*, 4> kGateNames{
-    "START", "FINISH", "PIT ENTRY", "PIT EXIT"};
+constexpr std::array<const char*, 2> kGateNames{"START", "FINISH"};
 
 const char* status_text(const GateCaptureStatus status) noexcept
 {
@@ -107,7 +106,7 @@ void GateCaptureController::previous_gate() noexcept
     if (status_ == GateCaptureStatus::closed) {
         return;
     }
-    gate_index_ = gate_index_ == 0 ? 3 : gate_index_ - 1;
+    gate_index_ = gate_index_ == 0 ? 1 : gate_index_ - 1;
     status_ = GateCaptureStatus::editing;
 }
 
@@ -116,7 +115,7 @@ void GateCaptureController::next_gate() noexcept
     if (status_ == GateCaptureStatus::closed) {
         return;
     }
-    gate_index_ = (gate_index_ + 1) % 4;
+    gate_index_ = (gate_index_ + 1) % 2;
     status_ = GateCaptureStatus::editing;
 }
 
@@ -293,10 +292,6 @@ track::DirectedGateDefinition* GateCaptureController::selected_gate() noexcept
         return &draft_.gates.start;
     case 1:
         return &draft_.gates.finish;
-    case 2:
-        return &draft_.gates.pit_entry;
-    case 3:
-        return &draft_.gates.pit_exit;
     }
     return nullptr;
 }

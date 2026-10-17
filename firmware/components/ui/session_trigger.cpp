@@ -6,9 +6,9 @@ void apply_trigger(const settings::SessionTrigger trigger,
                    settings::DeviceSettings& settings) noexcept
 {
     settings.session_trigger = trigger;
-    // The trigger is the only thing that writes this now, so the tested gate automation
-    // keeps reading the boolean it always has without knowing a trigger exists.
-    settings.pit_exit_auto_start_enabled = trigger == settings::SessionTrigger::gps;
+    // The trigger is the only thing that writes this, so the tested gate automation
+    // keeps reading a boolean without knowing a trigger exists.
+    settings.gps_start_line_enabled = trigger == settings::SessionTrigger::gps;
 }
 
 settings::SessionTrigger trigger_from_settings(
@@ -78,7 +78,7 @@ TriggerReadiness trigger_readiness(const settings::SessionTrigger trigger,
         if (!gnss_available) {
             return {false, "GPS UNAVAILABLE"};
         }
-        return {true, "WAITING FOR THE LINE"};
+        return {true, "WAITING FOR THE START LINE"};
     }
     return {true, ""};
 }

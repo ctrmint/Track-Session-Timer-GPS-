@@ -57,8 +57,7 @@ DeviceSettings customized_settings()
     settings.lower_display = LowerDisplayMode::laps_remaining;
     settings.trackday_mode_enabled = true;
     settings.lap_boundary = LapBoundaryMode::start;
-    settings.pit_exit_auto_start_enabled = true;
-    settings.pit_entry_auto_stop_enabled = true;
+    settings.gps_start_line_enabled = true;
     settings.session_trigger = SessionTrigger::imu;
     std::strcpy(settings.selected_track_id.data(), "synthetic-test-loop");
     return settings;
@@ -314,8 +313,7 @@ void test_migration_corruption_and_storage_errors()
     assert(migrated.current().orientation == OrientationMode::fixed_90);
     assert(!migrated.current().trackday_mode_enabled);
     assert(migrated.current().lap_boundary == LapBoundaryMode::finish);
-    assert(!migrated.current().pit_exit_auto_start_enabled);
-    assert(!migrated.current().pit_entry_auto_stop_enabled);
+    assert(!migrated.current().gps_start_line_enabled);
 
     MemorySettingsStore version_two_store;
     version_two_store.found = true;
@@ -340,8 +338,7 @@ void test_migration_corruption_and_storage_errors()
     assert(version_three_migration.current_format_persisted);
     assert(version_three.current().trackday_mode_enabled);
     assert(version_three.current().lap_boundary == LapBoundaryMode::finish);
-    assert(!version_three.current().pit_exit_auto_start_enabled);
-    assert(!version_three.current().pit_entry_auto_stop_enabled);
+    assert(!version_three.current().gps_start_line_enabled);
 
     MemorySettingsStore version_four_store;
     version_four_store.found = true;
@@ -355,7 +352,9 @@ void test_migration_corruption_and_storage_errors()
     assert(version_four.current().session_duration_seconds == 30 * 60);
     assert(version_four.current().rest_duration_seconds == 10 * 60);
     assert(version_four.current().trackday_mode_enabled);
-    assert(version_four.current().pit_exit_auto_start_enabled);
+    // Byte 64 keeps its position and its meaning across the rename, so a v4 blob that
+    // recorded pit-exit auto-start comes back as the start-line trigger it now means.
+    assert(version_four.current().gps_start_line_enabled);
     assert(version_four.current().average_lap_seconds == 103);
 
     MemorySettingsStore version_five_store;

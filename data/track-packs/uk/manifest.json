@@ -53,19 +53,19 @@
           "track_id": "gb_anglesey_international_gp",
           "name": "Anglesey International GP",
           "minimum_lap_time_s": 35,
-          "blocker": "No redistributable public four-gate geometry with an identifiable pit lane was found; physical capture is required."
+          "blocker": "No redistributable public start/finish geometry with an identifiable pit lane to locate it was found; physical capture is required."
         },
         {
           "track_id": "gb_anglesey_coastal",
           "name": "Anglesey Coastal",
           "minimum_lap_time_s": 25,
-          "blocker": "No redistributable public four-gate geometry with an identifiable pit lane was found; physical capture is required."
+          "blocker": "No redistributable public start/finish geometry with an identifiable pit lane to locate it was found; physical capture is required."
         },
         {
           "track_id": "gb_anglesey_national",
           "name": "Anglesey National",
           "minimum_lap_time_s": 20,
-          "blocker": "No redistributable public four-gate geometry with an identifiable pit lane was found; physical capture is required."
+          "blocker": "No redistributable public start/finish geometry with an identifiable pit lane to locate it was found; physical capture is required."
         }
       ]
     },
@@ -138,18 +138,6 @@
             0.2585922,
             61.346,
             20
-          ],
-          "pit_entry": [
-            51.3580132,
-            0.2563892,
-            20.779,
-            12
-          ],
-          "pit_exit": [
-            51.3608626,
-            0.2625725,
-            69.517,
-            12
           ]
         }
       },
@@ -225,18 +213,6 @@
             -0.0590716,
             206.012,
             20
-          ],
-          "pit_entry": [
-            53.3115369,
-            -0.0583758,
-            223.313,
-            12
-          ],
-          "pit_exit": [
-            53.3093935,
-            -0.0600911,
-            191.183,
-            12
           ]
         }
       },
@@ -300,18 +276,6 @@
             -1.5557027,
             15.0,
             20
-          ],
-          "pit_entry": [
-            54.4537362,
-            -1.5563133,
-            359.691,
-            12
-          ],
-          "pit_exit": [
-            54.4569957,
-            -1.5548089,
-            17.677,
-            12
           ]
         }
       },
@@ -353,18 +317,6 @@
             -1.3795452,
             280.5,
             20
-          ],
-          "pit_entry": [
-            52.8295427,
-            -1.3769056,
-            275.267,
-            12
-          ],
-          "pit_exit": [
-            52.8303222,
-            -1.383843,
-            287.314,
-            12
           ],
           "validation": {
             "geometry_status": "independently_validated",
@@ -433,18 +385,6 @@
             -0.7528623,
             174.634,
             20
-          ],
-          "pit_entry": [
-            50.8597195,
-            -0.752909,
-            189.253,
-            12
-          ],
-          "pit_exit": [
-            50.8578512,
-            -0.7526299,
-            168.863,
-            12
           ]
         }
       },
@@ -508,18 +448,6 @@
             -3.506877,
             95.28,
             20
-          ],
-          "pit_entry": [
-            56.1310537,
-            -3.5095813,
-            85.85,
-            12
-          ],
-          "pit_exit": [
-            56.130658,
-            -3.50333,
-            102.862,
-            12
           ]
         },
         "anti_clockwise": {
@@ -538,18 +466,6 @@
             -3.506877,
             275.28,
             20
-          ],
-          "pit_entry": [
-            56.130658,
-            -3.50333,
-            282.862,
-            12
-          ],
-          "pit_exit": [
-            56.1310537,
-            -3.5095813,
-            265.85,
-            12
           ]
         }
       },
@@ -603,18 +519,6 @@
             -3.4964344,
             89.5,
             20
-          ],
-          "pit_entry": [
-            51.4324616,
-            -3.4977578,
-            36.977,
-            12
-          ],
-          "pit_exit": [
-            51.4327333,
-            -3.4950303,
-            95.934,
-            12
           ]
         }
       },
@@ -656,18 +560,6 @@
             -1.3369314,
             178.476,
             20
-          ],
-          "pit_entry": [
-            52.5984766,
-            -1.3369659,
-            189.05,
-            12
-          ],
-          "pit_exit": [
-            52.5963928,
-            -1.3368746,
-            173.576,
-            12
           ]
         }
       },
@@ -709,18 +601,6 @@
             -2.6124325,
             165.415,
             20
-          ],
-          "pit_entry": [
-            53.1813678,
-            -2.6130318,
-            192.458,
-            12
-          ],
-          "pit_exit": [
-            53.1769784,
-            -2.6134167,
-            223.746,
-            12
           ]
         }
       },
@@ -774,18 +654,6 @@
             -4.3238773,
             29.8,
             20
-          ],
-          "pit_entry": [
-            51.7030618,
-            -4.3231733,
-            318.475,
-            12
-          ],
-          "pit_exit": [
-            51.7070317,
-            -4.3228469,
-            10.29,
-            12
           ]
         }
       },
@@ -833,18 +701,6 @@
             -1.0219595,
             37.3,
             20
-          ],
-          "pit_entry": [
-            52.0648411,
-            -1.0196927,
-            329.277,
-            12
-          ],
-          "pit_exit": [
-            52.0714672,
-            -1.0157059,
-            45.231,
-            12
           ]
         },
         "national_pits": {
@@ -863,18 +719,6 @@
             -1.0152726,
             84.9,
             20
-          ],
-          "pit_entry": [
-            52.0786532,
-            -1.0178209,
-            84.499,
-            12
-          ],
-          "pit_exit": [
-            52.0789308,
-            -1.0127209,
-            85.028,
-            12
           ]
         }
       },
@@ -928,18 +772,6 @@
             0.9473904,
             265.045,
             20
-          ],
-          "pit_entry": [
-            52.4638053,
-            0.9497182,
-            263.823,
-            12
-          ],
-          "pit_exit": [
-            52.4631623,
-            0.9400147,
-            262.945,
-            12
           ]
         }
       },
@@ -993,18 +825,6 @@
             -1.6094029,
             343.482,
             20
-          ],
-          "pit_entry": [
-            51.2064456,
-            -1.6075329,
-            327.493,
-            12
-          ],
-          "pit_exit": [
-            51.2100543,
-            -1.6084646,
-            32.583,
-            12
           ]
         }
       },

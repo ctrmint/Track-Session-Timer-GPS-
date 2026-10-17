@@ -27,11 +27,9 @@ enum class LapBoundary : std::uint8_t {
 enum class TimingGate : std::uint8_t {
     start,
     finish,
-    pit_entry,
-    pit_exit,
 };
 
-inline constexpr std::size_t kTimingGateCount = 4;
+inline constexpr std::size_t kTimingGateCount = 2;
 
 struct TimingEngineConfig {
     track::GeographicPoint reference{};
@@ -108,7 +106,7 @@ private:
     TimingEngineConfig config_{};
     track::CircuitProjection projection_{};
     std::array<track::DirectedGateDefinition, kTimingGateCount> gates_{};
-    std::array<bool, kTimingGateCount> gate_armed_{{true, true, true, true}};
+    std::array<bool, kTimingGateCount> gate_armed_{{true, true}};
     LapStateMachine lap_state_machine_{{1, 1.0}};
     domain::GnssFix previous_fix_{};
     track::LocalPoint previous_position_{};

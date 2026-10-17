@@ -171,20 +171,6 @@ class TestTrackPackTests(unittest.TestCase):
         on_return = min(_distance_to_segment(local, loop[i], loop[i + 1]) for i in range(11, 13))
         self.assertLess(on_return, 5.0)
 
-    def test_the_pit_exit_faces_the_way_the_car_leaves_the_pit_lane(self):
-        """Both pit gates are on Harbour Road, so pit_exit is passed twice per stop.
-
-        Once north-bound on the way in, once south-bound on the way out. Only the heading
-        separates them, so a reversed heading would register every exit on the way in and
-        miss it on the way out.
-        """
-        _, definition = self._build()
-        heading = definition["gates"]["pit_exit"]["direction_heading_deg"]
-        self.assertAlmostEqual(heading, 147.3, places=1)
-        tolerance = definition["gates"]["pit_exit"]["heading_tolerance_deg"]
-        # The two passes are 180 degrees apart, so the tolerance must not span both.
-        self.assertLess(tolerance, 90.0)
-
     def test_the_pack_cannot_quietly_become_a_uk_circuit_pack(self):
         """The UK pack's rules are its own claims, and this pack must not inherit them.
 
