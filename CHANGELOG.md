@@ -288,6 +288,23 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the **GPS session trigger now starts a session**. Choosing it armed the device and showed
+  `WAITING FOR THE LINE`, and nothing could ever start the session: only a manual START and
+  IMU launch detection reached `begin_session`. The mechanism existed - `gate_automation`
+  starts on pit exit and stops on pit entry, host-tested, with `session_trigger.cpp` already
+  setting `pit_exit_auto_start_enabled` from the trigger - and the crossings were already
+  being read off the timing queue and discarded in an empty loop. The two halves had never
+  been introduced
+- a session started by a gate crossing now runs for **the configured duration**.
+  `SessionController::start` takes its duration from the configuration already saved, and
+  that was only ever written inside the manual start path, so a crossing-started session
+  would have used `SessionConfiguration`'s own twenty-minute default - plausible, and wrong
+  for anyone who set something else. The configuration now follows the settings: written at
+  boot and whenever a duration is edited
+- a session ended by a pit entry is **recorded as a pit entry**. The summary's completion
+  reason was hardcoded to `driver_stop`, which was harmless while a driver stop was the only
+  way a session could end
+
 - recorded G peaks were bounded by what the radar can draw rather than by what the car did.
   The display clamps a reading to 2 g so the dot stays on the dial, and that clamp was
   applied before the peaks were taken - so a session summary recorded the limit as though
