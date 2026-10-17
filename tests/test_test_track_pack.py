@@ -5,7 +5,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from tools.build_track_pack import TrackPackError, build_pack, validate_manifest
+from tools.build_track_pack import (
+    MAXIMUM_SOURCE_DISAGREEMENT_M,
+    TrackPackError,
+    build_pack,
+    validate_manifest,
+)
 from tools.track_workbench import validate_definition
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -87,18 +92,48 @@ class TestTrackPackTests(unittest.TestCase):
         self.assertEqual(definition["country"], "IM")
         self.assertEqual(definition["provenance"]["license"], "ODbL-1.0")
 
-    def test_the_fixture_cannot_arm_timing_until_it_is_captured(self):
-        """A road loop has no route to independently_validated, so it must not claim one.
+    def test_the_fixture_arms_only_on_the_strength_of_its_validation_record(self):
+        """The fixture is timing-ready, and the record is the only reason it is.
 
-        There is no pit lane to identify a start/finish straight from and no second
-        independent source for a line somebody chose on a road, so the only honest
-        promotion is a device capture. Until then this must stay timer-only, or the
-        provenance gate #139 built has been holed to accommodate a test fixture.
+        This replaces an assertion that the loop must stay provisional on the grounds that
+        a road has no second independent source. It does: OpenStreetMap supplies the vector
+        geometry and aerial imagery is a separate origin, and a visual check that each line
+        spans the carriageway is exactly what the 12 m gate width depends on. Device
+        capture is still the stronger promotion, because it measures the lines with the
+        receiver that will later time them.
+
+        What must not be lost is the gate #139 built. Promotion has to come from a
+        validation record that the builder has checked - two distinct origins agreeing
+        within MAXIMUM_SOURCE_DISAGREEMENT_M - and never from editing a status by hand.
+        So the record is asserted present, and removing it is asserted to put the
+        definition straight back to timer-only.
         """
         result, definition = self._build()
-        self.assertEqual(result["timing_ready_count"], 0)
-        self.assertEqual(definition["provenance"]["geometry_status"], "provisional")
-        self.assertNotIn("validation", self.profile)
+        self.assertEqual(result["timing_ready_count"], 1)
+        self.assertEqual(
+            definition["provenance"]["geometry_status"], "independently_validated"
+        )
+
+        validation = self.profile["validation"]
+        self.assertGreaterEqual(len({source["origin"] for source in validation["sources"]}), 2)
+        self.assertLessEqual(validation["agreement_m"], MAXIMUM_SOURCE_DISAGREEMENT_M)
+        self.assertIn("2 origins", definition["provenance"]["source"])
+
+        # Without the record the same geometry is provisional again, so the status is
+        # earned by the evidence rather than carried by the file.
+        unvalidated = deepcopy(self.manifest)
+        del unvalidated["venues"][0]["gate_profiles"]["default"]["validation"]
+        with tempfile.TemporaryDirectory() as temporary:
+            manifest_path = Path(temporary) / "manifest.json"
+            manifest_path.write_text(json.dumps(unvalidated), encoding="utf-8")
+            bare_result = build_pack(manifest_path, Path(temporary) / "out")
+            bare = json.loads(
+                (Path(temporary) / "out" / "definitions" / "im_test_circuit.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        self.assertEqual(bare_result["timing_ready_count"], 0)
+        self.assertEqual(bare["provenance"]["geometry_status"], "provisional")
 
     def test_every_gate_spans_the_road_with_margin_but_not_the_other_carriageway(self):
         """12 m is the whole of the width decision, and both bounds matter.
