@@ -5,7 +5,7 @@
   "researched_utc": "2026-10-11T00:00:00Z",
   "attribution": "Road geometry derived from OpenStreetMap contributors; loop defined for functional testing, not for competition.",
   "data_license": "ODbL-1.0",
-  "policy": "This pack holds functional test fixtures, not competition venues. Every definition is provisional and timer-only until its gate profile carries a validation record. A road loop has no pit lane to identify its start/finish straight and no second independent source for a line somebody chose, so independently_validated is not reachable here: promotion must come from device capture. See docs/TRACK_DATABASE.md.",
+  "policy": "This pack holds functional test fixtures, not competition venues. A definition is provisional and timer-only until its gate profile carries a validation record. A road loop has no pit lane to identify its start/finish straight, so its gate lines are chosen rather than inherent, and physically_validated is not reachable without driving it. independently_validated is: aerial imagery is a separate origin from OpenStreetMap's vector data, and a visual check that each line spans the carriageway is what the 12 m gate width actually depends on. Device capture remains the stronger promotion because it measures the lines with the receiver that will time them. See docs/TRACK_DATABASE.md.",
   "scope_exclusions": [
     {
       "venue": "Public roads generally",
@@ -154,7 +154,24 @@
             147.3,
             12
           ],
-          "derivation": "Start and finish sit 30 m back along King Edward Road from the Sea Cliff Road junction, measured along the OSM centreline, because the two legs meet at the junction itself and a gate there would span both. At 30 m back the outbound leg is 26.3 m away, leaving 16.5 m between the gate end and its carriageway. Gates are 12 m: 7.62 m of road plus 2.19 m beyond each edge for lateral fix error. pit_exit faces 147.3 deg south-east-bound so the north-bound pass into the pit lane does not register."
+          "derivation": "Start and finish sit 30 m back along King Edward Road from the Sea Cliff Road junction, measured along the OSM centreline, because the two legs meet at the junction itself and a gate there would span both. At 30 m back the outbound leg is 26.3 m away, leaving 16.5 m between the gate end and its carriageway. Gates are 12 m: 7.62 m of road plus 2.19 m beyond each edge for lateral fix error. pit_exit faces 147.3 deg south-east-bound so the north-bound pass into the pit lane does not register.",
+          "validation": {
+            "geometry_status": "independently_validated",
+            "verified_utc": "2026-10-17T00:00:00Z",
+            "agreement_m": 5.0,
+            "sources": [
+              {
+                "name": "OpenStreetMap ways 262071530/262071527",
+                "url": "https://www.openstreetmap.org/way/262071530",
+                "origin": "openstreetmap"
+              },
+              {
+                "name": "Google Maps satellite imagery, visual check of each gate line against the carriageway",
+                "url": "https://www.google.com/maps/@54.169459,-4.447053,18z/data=!3m1!1e3",
+                "origin": "google-maps-imagery"
+              }
+            ]
+          }
         }
       },
       "layouts": [
