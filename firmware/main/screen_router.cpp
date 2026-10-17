@@ -596,6 +596,7 @@ class ScreenRouter {
         }
         last_display_service_us_ = now_us;
         service_imu();
+        service_ready_dashboard();
         service_roller();
         if (capturing_) {
             // Drawn at the display's cadence; the controller above is fed every tick.
@@ -1589,9 +1590,22 @@ class ScreenRouter {
             trackday_->set_mode_note("TRACK DAY  -  lap times available in Review");
             break;
         case ui::DeviceMode::race:
-            // Race wants lap times and a delta alongside the countdown. Neither exists
-            // without GNSS, so it borrows the countdown and says so.
-            trackday_->set_mode_note("RACE  -  lap times pending GNSS");
+            // Race wants lap times and a delta alongside the countdown, and both need a
+            // circuit armed and a receiver producing fixes. This used to be the fixed
+            // string "lap times pending GNSS", which was honest while nothing consumed
+            // fixes and became the most alarming thing the screen could say once laps
+            // worked. Each of the three states gets its own words, so a driver can tell
+            // which of them they are in.
+            if (!track_armed_) {
+                trackday_->set_mode_note("RACE  -  no circuit armed for lap times");
+            }
+            else if (gnss_pipeline_.health(esp_timer_get_time()) !=
+                     domain::GnssHealth::good) {
+                trackday_->set_mode_note("RACE  -  waiting for a fix");
+            }
+            else {
+                trackday_->set_mode_note("RACE  -  lap times live");
+            }
             break;
         case ui::DeviceMode::g_only:
             trackday_->set_mode_note("G-ONLY  -  session timer");
@@ -1700,8 +1714,10 @@ class ScreenRouter {
         snapshot.storage = storage::mounted() ? ui::Readiness::ready
                                               : ui::Readiness::unavailable;
         snapshot.imu = imu::running() ? ui::Readiness::ready : ui::Readiness::unavailable;
-        snapshot.logging_available = false;
-        snapshot.session_active = false;
+        // Both were hardcoded. Logging is available once there is somewhere to write, and
+        // whether a session is running is something the router already tracks.
+        snapshot.logging_available = storage::mounted();
+        snapshot.session_active = session_was_active_;
 
         if (track_armed_) {
             std::strncpy(snapshot.selected_track.data(), active_track_.name.data(),
@@ -1723,6 +1739,53 @@ class ScreenRouter {
             snapshot.track_state = ui::ReadyTrackState::none;
         }
         return snapshot;
+    }
+
+    // Everything on the dashboard that changes without anybody touching the device.
+    // Compared rather than redrawn: a repaint costs about 40 ms against a 25 ms service
+    // period (#213), so repainting a dashboard that has not changed would spend the
+    // device's most expensive operation on producing an identical screen.
+    struct ReadyFingerprint {
+        domain::GnssHealth gnss_health{domain::GnssHealth::unavailable};
+        ui::Readiness storage{ui::Readiness::unavailable};
+        ui::Readiness imu{ui::Readiness::unavailable};
+        ui::ReadyTrackState track_state{ui::ReadyTrackState::none};
+        bool logging_available{false};
+        bool session_active{false};
+
+        [[nodiscard]] bool operator==(const ReadyFingerprint& other) const noexcept
+        {
+            return gnss_health == other.gnss_health && storage == other.storage &&
+                   imu == other.imu && track_state == other.track_state &&
+                   logging_available == other.logging_available &&
+                   session_active == other.session_active;
+        }
+    };
+
+    [[nodiscard]] ReadyFingerprint ready_fingerprint() const noexcept
+    {
+        const auto snapshot = ready_snapshot();
+        return {snapshot.gnss_health, snapshot.storage,           snapshot.imu,
+                snapshot.track_state, snapshot.logging_available, snapshot.session_active};
+    }
+
+    // The receiver acquires its first fix after the boot sequence has already drawn the
+    // dashboard, so without this the screen reports a receiver that was not yet working
+    // and never corrects itself. refresh_ready is otherwise only reached from boot, a
+    // settings save and a track change - none of which a driver waiting for a fix does.
+    void service_ready_dashboard() noexcept
+    {
+        if (ready_ == nullptr || lv_screen_active() != screen_for(ui::Destination::ready)) {
+            return;
+        }
+        const auto fingerprint = ready_fingerprint();
+        if (fingerprint == drawn_ready_fingerprint_) {
+            return;
+        }
+        drawn_ready_fingerprint_ = fingerprint;
+        refresh_ready();
+        // The Race note is derived from the same state, so it goes stale the same way.
+        describe_mode();
     }
 
     void refresh_ready() noexcept
@@ -2512,6 +2575,10 @@ class ScreenRouter {
     // Everything that is not the GNSS poll runs at this period rather than the tick's.
     static constexpr std::int64_t kDisplayServicePeriodUs = 50'000;
     std::int64_t last_display_service_us_{0};
+    // Deliberately default-constructed rather than seeded from the first reading, so the
+    // first service tick after boot always draws once and corrects whatever the boot
+    // sequence put on screen before the receiver had a fix.
+    ReadyFingerprint drawn_ready_fingerprint_{};
     gnss::GnssTransport* gnss_transport_{nullptr};
     gnss::GnssPipeline gnss_pipeline_{};
     gnss::GnssConfigurationReport gnss_configuration_{};

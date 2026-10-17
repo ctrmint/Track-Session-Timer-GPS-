@@ -288,6 +288,21 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the ready dashboard **reports the receiver as it is now, not as it was at boot**.
+  `ready_snapshot` read the health live and correctly, but `refresh_ready` was only
+  reached from boot, a settings save and a track change, and the receiver acquires its
+  first fix after the boot sequence has already drawn the screen. With 16 satellites and a
+  24.9 Hz fix stream the dashboard still showed what was true at 2.8 seconds. It now
+  refreshes from the display cadence, gated on the dashboard being the active screen and
+  on a fingerprint of the drawn state having changed - an idle dashboard costs a struct
+  comparison, because a repaint costs about 40 ms against a 25 ms service period (#213)
+- Race mode no longer claims **`lap times pending GNSS`** whatever the receiver is doing.
+  Honest while nothing consumed fixes; since the timing runtime was wired it was both
+  wrong and the most alarming thing the screen could say while everything worked. The note
+  now distinguishes no circuit armed, waiting for a fix, and lap times live
+- `logging_available` and `session_active` on the dashboard are read rather than
+  hardcoded to `false`
+
 - the **GPS session trigger now starts a session**. Choosing it armed the device and showed
   `WAITING FOR THE LINE`, and nothing could ever start the session: only a manual START and
   IMU launch detection reached `begin_session`. The mechanism existed - `gate_automation`
