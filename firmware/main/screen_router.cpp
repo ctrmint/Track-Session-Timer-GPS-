@@ -21,6 +21,7 @@
 #include "track_timer/ui/carousel_screen.hpp"
 #include "track_timer/ui/diagnostics_screen.hpp"
 #include "track_timer/ui/g_radar_screen.hpp"
+#include "track_timer/ui/race_screen.hpp"
 #include "track_timer/gnss/configure.hpp"
 #include "track_timer/gnss/i2c_transport.hpp"
 #include "track_timer/gnss/pipeline.hpp"
@@ -541,7 +542,7 @@ class ScreenRouter {
         shell_.synchronize_session(active);
         if (active != session_was_active_) {
             session_was_active_ = active;
-            lv_screen_load(active ? trackday_root_ : home_screen());
+            lv_screen_load(active ? running_screen() : home_screen());
         }
         if (!active) {
             // Armed but not started: the screen stays, and the detail is re-evaluated
@@ -575,6 +576,17 @@ class ScreenRouter {
 
         active_session_.update(ui_snapshot, static_cast<std::uint64_t>(now_ms), display);
         trackday_->update(active_session_.view_model().trackday);
+
+        // Race draws its own screen from the same snapshot, through the presenter that
+        // already formats these three figures - including "--:--.---" for a lap nothing
+        // has measured yet. Only when it is the visible screen: the figures are cheap to
+        // compute and the repaint is not (#213).
+        if (race_ != nullptr && race_root_ != nullptr &&
+            lv_screen_active() == race_root_) {
+            race_->update(ui::present(ui_snapshot));
+            race_->set_track_name(active_track_.name[0] != '\0' ? active_track_.name.data()
+                                                                 : "TIMER ONLY");
+        }
     }
 
     // Two cadences out of one tick, because the receiver's deadline is not the display's.
@@ -1070,6 +1082,16 @@ class ScreenRouter {
         acceleration_ = new (acceleration_storage_)
             ui::AccelerationScreen(acceleration_root_);
         ui::attach_gesture_input(acceleration_root_, on_input, this);
+
+        // Race's running screen. Its own rather than TrackdayScreen's, because Track Day
+        // must not show live lap times (#132) and a screen with no lap labels cannot leak
+        // one through a mode check that is wrong.
+        race_root_ = lv_obj_create(nullptr);
+        if (race_root_ == nullptr) {
+            return false;
+        }
+        race_ = new (race_storage_) ui::RaceScreen(race_root_);
+        ui::attach_gesture_input(race_root_, on_input, this);
 
         // Gate capture drives itself from its own buttons rather than from the carousel
         // gestures, so this root deliberately gets no gesture binding: a swipe here must
@@ -1631,6 +1653,17 @@ class ScreenRouter {
     static void on_input(const ui::InputAction action, void* context) noexcept
     {
         static_cast<ScreenRouter*>(context)->handle_input(action);
+    }
+
+    // Which screen a running session goes to. Race has its own, because it shows lap
+    // times and Track Day must not; every other mode keeps the countdown.
+    [[nodiscard]] lv_obj_t* running_screen() noexcept
+    {
+        if (ui::mode_from_settings(settings_) == ui::DeviceMode::race &&
+            race_root_ != nullptr) {
+            return race_root_;
+        }
+        return trackday_root_;
     }
 
     // Two modes own the whole panel and are their own home: G-Only the radar, GPS Only
@@ -2588,6 +2621,8 @@ class ScreenRouter {
     std::uint16_t logged_rate_hz_{0};
     std::int64_t logged_gnss_us_{0};
     ui::TrackdayScreen* trackday_{nullptr};
+    ui::RaceScreen* race_{nullptr};
+    lv_obj_t* race_root_{nullptr};
     lv_obj_t* trackday_root_{nullptr};
     ui::TimeRollerScreen* roller_{nullptr};
     ui::SettingsField roller_field_{ui::SettingsField::average_lap};
@@ -2653,6 +2688,7 @@ class ScreenRouter {
     alignas(ui::GateCaptureScreen) std::byte
         gate_capture_storage_[sizeof(ui::GateCaptureScreen)]{};
     alignas(ui::TrackdayScreen) std::byte trackday_storage_[sizeof(ui::TrackdayScreen)]{};
+    alignas(ui::RaceScreen) std::byte race_storage_[sizeof(ui::RaceScreen)]{};
     alignas(ui::TimeRollerScreen) std::byte
         roller_storage_[sizeof(ui::TimeRollerScreen)]{};
 };
