@@ -96,8 +96,16 @@ struct DeviceSettings {
     std::array<char, kTrackIdentifierCapacity> selected_track_id{};
     bool trackday_mode_enabled{false};
     LapBoundaryMode lap_boundary{LapBoundaryMode::finish};
-    bool pit_exit_auto_start_enabled{false};
-    bool pit_entry_auto_stop_enabled{false};
+    // Starting a session on crossing the start line, which is what the GPS trigger
+    // means. Derived from session_trigger rather than edited separately, so the two
+    // cannot disagree.
+    //
+    // Was pit_exit_auto_start_enabled, and acted on the pit-exit gate. The pit gates are
+    // gone; the start line is a gate the car crosses every lap rather than an arbitrary
+    // line chosen on a road loop, and on a circuit whose start and finish are one line it
+    // begins the session and lap 1 on the same crossing. The stored byte and its meaning
+    // are unchanged, so this is a rename rather than a format change.
+    bool gps_start_line_enabled{false};
     // Appended, like every field before it: this struct is aggregate-initialised at call
     // sites. Owns pit_exit_auto_start_enabled, which is derived from it rather than
     // edited separately, so the two cannot disagree.

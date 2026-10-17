@@ -41,8 +41,6 @@ track::TrackDefinition make_definition(const char* id, const char* name,
     definition.geofence = {{latitude, longitude}, radius_m};
     definition.gates.start = make_gate(latitude, longitude, 0.00005);
     definition.gates.finish = definition.gates.start;
-    definition.gates.pit_entry = make_gate(latitude + 0.0002, longitude, 0.00005);
-    definition.gates.pit_exit = make_gate(latitude - 0.0002, longitude, 0.00005);
     definition.minimum_lap_time_s = 20.0;
     definition.definition_hash = hash;
     return definition;

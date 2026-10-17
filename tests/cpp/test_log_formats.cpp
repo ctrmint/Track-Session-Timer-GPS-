@@ -27,8 +27,7 @@ int main()
     settings.rest_duration_seconds = 10 * 60;
     settings.trackday_mode_enabled = true;
     settings.lap_boundary = settings::LapBoundaryMode::start;
-    settings.pit_exit_auto_start_enabled = true;
-    settings.pit_entry_auto_stop_enabled = true;
+    settings.gps_start_line_enabled = true;
     copy_text(settings.selected_track_id, "synthetic_test_loop");
 
     logger::SessionMetaV1 meta{};
@@ -48,8 +47,7 @@ int main()
     assert(logger::valid_meta(meta));
     assert(meta.settings.trackday_mode_enabled);
     assert(meta.settings.lap_boundary == settings::LapBoundaryMode::start);
-    assert(meta.settings.pit_exit_auto_start_enabled);
-    assert(meta.settings.pit_entry_auto_stop_enabled);
+    assert(meta.settings.gps_start_line_enabled);
 
     auto invalid_meta = meta;
     // Relative to the current version, so bumping the format does not turn this sentinel
@@ -128,7 +126,9 @@ int main()
     summary.source_rejected_fix_count = 1;
     summary.source_event_record_count = 4;
     assert(logger::valid_summary(summary));
-    summary.completion_reason = logger::SessionCompletionReason::pit_entry;
+    // Still accepted, because sessions recorded before pit-entry auto-stop was removed
+    // carry it and have to stay reviewable. Nothing produces it now.
+    summary.completion_reason = logger::SessionCompletionReason::reserved_pit_entry;
     assert(logger::valid_summary(summary));
 
     auto incomplete_summary = summary;

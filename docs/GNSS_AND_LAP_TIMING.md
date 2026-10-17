@@ -97,7 +97,9 @@ target timing task remains part of embedded parity issue #25.
 
 ## 5. Circuit gate definitions
 
-A track file stores four directed gates (`start`, `finish`, `pit_entry`, and `pit_exit`).
+A track file stores two directed gates (`start` and `finish`). It carried `pit_entry` and
+`pit_exit` until the pit lane was removed; a schema-3 file still loads, with those two
+parsed and discarded.
 Each gate stores:
 
 - left endpoint
@@ -178,7 +180,7 @@ The production validator:
 Heading interpolation and comparison use the shortest circular difference, so
 `359` degrees to `1` degree is a two-degree change rather than 358 degrees.
 
-Direction is essential for circuits where pit lanes, access roads or nearby loops pass close to the line.
+Direction is essential for circuits where access roads or nearby loops pass close to the line.
 
 ## 9. Hysteresis and duplicate suppression
 
@@ -243,14 +245,14 @@ dead-reckoning and time-only fixes are never silently treated as position fixes.
 
 Each geometric candidate produces one stable named validation result and records
 the gate type, two source sequence numbers, intersection fraction, interpolated
-receiver time, and rejection stage. Start, finish, pit entry, and pit exit use the
-same validation and interpolation path with independent corridor rearm. Selecting
+receiver time, and rejection stage. Start and finish use the same validation and
+interpolation path with independent corridor rearm. Selecting
 start or finish changes only which typed event feeds the repeating lap state machine.
 The persisted Lap Line setting is converted into `TimingEngineConfig` when the selected
-track is loaded. Independently enabled pit automation consumes only accepted typed
-events outside the timing task: pit exit may start a Ready session, while pit entry may
-stop a Running or Overtime session. Wrong-state, disabled, rejected, and duplicate
-records never transition the session, and manual controls remain separate.
+track is loaded. The session automation consumes only accepted typed events outside the
+timing task: a start-line crossing may start a Ready session when the GPS trigger is
+selected and the session is armed. Wrong-state, disabled, unarmed, rejected and duplicate
+records never transition the session, and stopping remains the driver's.
 Together with the raw GNSS rows, applied quality thresholds, and fingerprinted track
 definition, the bounded records make every acceptance or rejection reproducible
 during offline replay.
@@ -276,7 +278,7 @@ patterns. Both paths must emit exactly three laps and identical typed gate recor
 with receiver-time timestamps, while every measured host processing call remains
 below the next-fix deadline. Separate 20/25 Hz integration vectors cover finite-line
 endpoints, on-line ownership, parallel and reverse travel, jitter/rearm, large steps,
-slow pit movement, stale timing, and poor fixes. Physical outdoor and
+slow movement, stale timing, and poor fixes. Physical outdoor and
 controlled-crossing validation is tracked separately in GitHub issue #53 for when
 hardware is available.
 

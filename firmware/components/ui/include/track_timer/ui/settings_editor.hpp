@@ -17,8 +17,6 @@ enum class SettingsField : std::uint8_t {
     operating_mode,
     trackday_mode,
     lap_boundary,
-    pit_exit_auto_start,
-    pit_entry_auto_stop,
     orientation,
     auto_dim,
     average_lap,
@@ -26,7 +24,7 @@ enum class SettingsField : std::uint8_t {
     acceleration_target,
 };
 
-inline constexpr std::size_t kSettingsFieldCount = 14;
+inline constexpr std::size_t kSettingsFieldCount = 13;
 
 enum class SettingsEditorStatus : std::uint8_t {
     closed,

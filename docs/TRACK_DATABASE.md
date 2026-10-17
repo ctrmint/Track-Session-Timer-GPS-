@@ -15,7 +15,7 @@ Schema version 3 fields:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "revision": 1,
   "track_id": "example_circuit",
   "name": "Example Circuit",
@@ -51,22 +51,6 @@ Schema version 3 fields:
       "heading_tolerance_deg": 60.0,
       "minimum_crossing_speed_mps": 2.0,
       "rearm_corridor_m": 15.0
-    },
-    "pit_entry": {
-      "left": {"lat_deg": 52.000110, "lon_deg": -1.000020},
-      "right": {"lat_deg": 52.000090, "lon_deg": -0.999980},
-      "direction_heading_deg": 90.0,
-      "heading_tolerance_deg": 60.0,
-      "minimum_crossing_speed_mps": 1.0,
-      "rearm_corridor_m": 10.0
-    },
-    "pit_exit": {
-      "left": {"lat_deg": 51.999910, "lon_deg": -1.000020},
-      "right": {"lat_deg": 51.999890, "lon_deg": -0.999980},
-      "direction_heading_deg": 90.0,
-      "heading_tolerance_deg": 60.0,
-      "minimum_crossing_speed_mps": 1.0,
-      "rearm_corridor_m": 10.0
     }
   },
   "timing": {
@@ -172,7 +156,7 @@ showed that a wrong name means a wrong gate. The reliable signal is the pit lane
    on average. The pit straight is the way the pit lane runs beside for most of its
    length, at a consistent short distance.
 3. Take the direction of travel from the straight's own geometry, and resolve its sign
-   against the recorded pit entry and exit headings.
+   against the direction the pit lane runs.
 
 Donington allowed a shortcut - the pit lane shared *both* endpoints with the Wheatcroft
 Straight - but that only works where the straight is mapped as a single way. Where a
@@ -197,9 +181,10 @@ lane runs beside, which is robust rather than surveyed.
 What is *not* benign is a gate at the junction where the preceding corner meets the
 straight, where heading changes fastest and the direction check is least reliable. Two
 gates in this pack sat exactly there, because their coordinates had been copied from the
-pit entry. `tools/build_track_pack.py` now refuses a start gate within
-`MINIMUM_START_PIT_SEPARATION_M` of a pit gate: a real start line and a pit gate can be
-close, but they are never the same point.
+pit entry gate. That check - a minimum separation between a start gate and a pit gate -
+went out with the pit gates themselves, so the derivation's own placement rule is what
+now prevents it: the midpoint of the stretch the pit lane runs beside, not either end of
+it.
 
 ## 3. Track matching
 
@@ -422,7 +407,10 @@ silently truncated.
 
 ## 7. Loading, projection, and versioning
 
-Every track file includes `schema_version`; the current loader accepts exactly version 3.
+Every track file includes `schema_version`; the current loader accepts version 4, and
+version 3 alongside it. A 3 differs only by carrying `pit_entry` and `pit_exit` gates,
+which the parser consumes and discards, so the circuits already written to cards keep
+loading rather than a device losing its whole track list.
 Unsupported versions, malformed JSON, missing fields, out-of-range geometry, capacity
 overflow, unknown members, duplicate sector identifiers, gates outside the geofence,
 and implausible gate length/direction are rejected. Reports include a stable field path,

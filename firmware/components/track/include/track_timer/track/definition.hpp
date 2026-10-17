@@ -8,7 +8,14 @@
 
 namespace track_timer::track {
 
-inline constexpr std::uint16_t kCurrentTrackSchemaVersion = 3;
+// 4: the pit entry and exit gates are gone. A schema-3 definition still loads - its pit
+// gates are parsed and discarded - because the circuits already on cards are otherwise
+// correct and rejecting them would cost a device its whole track list for a gate nothing
+// reads any more.
+inline constexpr std::uint16_t kCurrentTrackSchemaVersion = 4;
+// Still loadable, and still able to arm timing: a 3 differs from a 4 only by carrying pit
+// gates, which are parsed and discarded.
+inline constexpr std::uint16_t kSupportedLegacyTrackSchemaVersion = 3;
 inline constexpr std::size_t kMaximumTrackFileBytes = 16'384;
 inline constexpr std::size_t kTrackIdCapacity = 48;
 inline constexpr std::size_t kTrackNameCapacity = 64;
@@ -49,8 +56,6 @@ struct DirectedGateDefinition {
 struct CircuitGateDefinitions {
     DirectedGateDefinition start{};
     DirectedGateDefinition finish{};
-    DirectedGateDefinition pit_entry{};
-    DirectedGateDefinition pit_exit{};
 };
 
 struct SectorDefinition {
@@ -111,8 +116,6 @@ enum class TrackLoadResult : std::uint8_t {
     capacity_exceeded,
     degenerate_start_gate,
     degenerate_finish_gate,
-    degenerate_pit_entry_gate,
-    degenerate_pit_exit_gate,
     degenerate_sector_gate,
     duplicate_sector_id,
     geometry_outside_geofence,
@@ -131,8 +134,6 @@ enum class TrackDefinitionField : std::uint8_t {
     geofence,
     gates_start,
     gates_finish,
-    gates_pit_entry,
-    gates_pit_exit,
     timing,
     sectors,
 };

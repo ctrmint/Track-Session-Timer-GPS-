@@ -469,8 +469,6 @@ bool parse_gates(JsonReader& reader, CircuitGateDefinitions& gates) noexcept
     }
     bool start = false;
     bool finish = false;
-    bool pit_entry = false;
-    bool pit_exit = false;
     while (reader.peek() != '}') {
         std::array<char, 40> key{};
         if (reader.string(key) == StringResult::invalid || !reader.consume(':')) {
@@ -488,15 +486,14 @@ bool parse_gates(JsonReader& reader, CircuitGateDefinitions& gates) noexcept
                 return false;
             }
         }
-        else if (std::strcmp(key.data(), "pit_entry") == 0) {
-            pit_entry = parse_gate(reader, gates.pit_entry);
-            if (!pit_entry) {
-                return false;
-            }
-        }
-        else if (std::strcmp(key.data(), "pit_exit") == 0) {
-            pit_exit = parse_gate(reader, gates.pit_exit);
-            if (!pit_exit) {
+        // Parsed and discarded. Pit entry and exit are gone, and a schema-3 definition
+        // still carries them - including the 26 circuits already on cards. Rejecting the
+        // key would make every one of those files unloadable for a gate nothing reads,
+        // so they are consumed to keep the reader in step and then dropped.
+        else if (std::strcmp(key.data(), "pit_entry") == 0 ||
+                 std::strcmp(key.data(), "pit_exit") == 0) {
+            DirectedGateDefinition discarded{};
+            if (!parse_gate(reader, discarded)) {
                 return false;
             }
         }
@@ -510,7 +507,7 @@ bool parse_gates(JsonReader& reader, CircuitGateDefinitions& gates) noexcept
             return false;
         }
     }
-    return reader.consume('}') && start && finish && pit_entry && pit_exit;
+    return reader.consume('}') && start && finish;
 }
 
 bool parse_timing(JsonReader& reader, double& minimum_lap_time_s) noexcept
@@ -949,8 +946,12 @@ TrackLoadReport load_track_definition(const std::string_view json,
         return report(TrackLoadResult::capacity_exceeded, reader,
                       parsed.error_field);
     }
+    // Schema 3 is accepted alongthe current one. It differs only by carrying pit gates,
+    // which the parser discards, so a card written before they were removed keeps working
+    // rather than losing its whole track list.
     if (parsed.schema &&
-        parsed.definition.schema_version != kCurrentTrackSchemaVersion) {
+        parsed.definition.schema_version != kCurrentTrackSchemaVersion &&
+        parsed.definition.schema_version != kSupportedLegacyTrackSchemaVersion) {
         return report(TrackLoadResult::unsupported_version, reader,
                       TrackDefinitionField::schema_version);
     }
@@ -962,11 +963,9 @@ TrackLoadReport load_track_definition(const std::string_view json,
     }
 
     auto& definition = parsed.definition;
-    const std::array<DirectedGateDefinition*, 4> gates{
+    const std::array<DirectedGateDefinition*, 2> gates{
         &definition.gates.start,
         &definition.gates.finish,
-        &definition.gates.pit_entry,
-        &definition.gates.pit_exit,
     };
     if (!valid_identifier(definition.track_id)) {
         return report(TrackLoadResult::invalid_value, reader,
@@ -1029,17 +1028,13 @@ TrackLoadReport load_track_definition(const std::string_view json,
                       TrackDefinitionField::geofence);
     }
 
-    constexpr std::array<TrackLoadResult, 4> degenerate_results{
+    constexpr std::array<TrackLoadResult, 2> degenerate_results{
         TrackLoadResult::degenerate_start_gate,
         TrackLoadResult::degenerate_finish_gate,
-        TrackLoadResult::degenerate_pit_entry_gate,
-        TrackLoadResult::degenerate_pit_exit_gate,
     };
-    constexpr std::array<TrackDefinitionField, 4> gate_fields{
+    constexpr std::array<TrackDefinitionField, 2> gate_fields{
         TrackDefinitionField::gates_start,
         TrackDefinitionField::gates_finish,
-        TrackDefinitionField::gates_pit_entry,
-        TrackDefinitionField::gates_pit_exit,
     };
     for (std::size_t index = 0; index < gates.size(); ++index) {
         auto& gate = *gates[index];
@@ -1295,9 +1290,6 @@ TrackSerializeResult serialize_track_definition(
                             definition.geofence.radius_m) &&
               write_gate(writer, definition.gates.start) &&
               writer.text(",\"finish\":") && write_gate(writer, definition.gates.finish) &&
-              writer.text(",\"pit_entry\":") &&
-              write_gate(writer, definition.gates.pit_entry) &&
-              writer.text(",\"pit_exit\":") && write_gate(writer, definition.gates.pit_exit) &&
               writer.format("},\"timing\":{\"minimum_lap_time_s\":%.15g},\"sectors\":[",
                             definition.minimum_lap_time_s);
     for (std::size_t index = 0; ok && index < definition.sector_count; ++index) {
@@ -1341,7 +1333,8 @@ void format_definition_hash(const std::uint64_t hash,
 
 bool track_timing_ready(const TrackDefinition& definition) noexcept
 {
-    if (definition.schema_version != kCurrentTrackSchemaVersion) {
+    if (definition.schema_version != kCurrentTrackSchemaVersion &&
+        definition.schema_version != kSupportedLegacyTrackSchemaVersion) {
         return false;
     }
     switch (definition.provenance.geometry_status) {
@@ -1393,10 +1386,6 @@ const char* track_load_result_name(const TrackLoadResult result) noexcept
         return "degenerate-start-gate";
     case TrackLoadResult::degenerate_finish_gate:
         return "degenerate-finish-gate";
-    case TrackLoadResult::degenerate_pit_entry_gate:
-        return "degenerate-pit-entry-gate";
-    case TrackLoadResult::degenerate_pit_exit_gate:
-        return "degenerate-pit-exit-gate";
     case TrackLoadResult::degenerate_sector_gate:
         return "degenerate-sector-gate";
     case TrackLoadResult::duplicate_sector_id:
@@ -1434,10 +1423,6 @@ const char* track_definition_field_name(const TrackDefinitionField field) noexce
         return "gates.start";
     case TrackDefinitionField::gates_finish:
         return "gates.finish";
-    case TrackDefinitionField::gates_pit_entry:
-        return "gates.pit_entry";
-    case TrackDefinitionField::gates_pit_exit:
-        return "gates.pit_exit";
     case TrackDefinitionField::timing:
         return "timing";
     case TrackDefinitionField::sectors:

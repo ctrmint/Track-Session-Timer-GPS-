@@ -97,14 +97,6 @@ int main(const int argc, char** argv)
            definition.gates.finish.left.latitude_deg);
     assert(definition.gates.start.right.longitude_deg ==
            definition.gates.finish.right.longitude_deg);
-    assert(std::hypot(definition.gates.pit_entry.local_right.east_m -
-                          definition.gates.pit_entry.local_left.east_m,
-                      definition.gates.pit_entry.local_right.north_m -
-                          definition.gates.pit_entry.local_left.north_m) > 10.0);
-    assert(std::hypot(definition.gates.pit_exit.local_right.east_m -
-                          definition.gates.pit_exit.local_left.east_m,
-                      definition.gates.pit_exit.local_right.north_m -
-                          definition.gates.pit_exit.local_left.north_m) > 10.0);
     assert(definition.minimum_lap_time_s == 20.0);
     assert(definition.definition_hash == hash_track_definition(valid_json));
     std::array<char, 17> hash_text{};
@@ -123,7 +115,30 @@ int main(const int argc, char** argv)
     assert_failure_preserves_active(std::string(kMaximumTrackFileBytes + 1, ' '),
                                     TrackLoadResult::file_too_large);
     assert_failure_preserves_active("{", TrackLoadResult::invalid_json);
-    assert_failure_preserves_active(replace_once(valid_json, "\"schema_version\": 3",
+    // A schema-3 document still loads. It differs only by carrying pit gates, which the
+    // parser consumes and discards, and the circuits already written to cards are
+    // schema 3: rejecting them would cost a device its whole track list for gates nothing
+    // reads any more.
+    {
+        const auto legacy = replace_once(
+            replace_once(valid_json, "\"schema_version\": 4", "\"schema_version\": 3"),
+            "\"finish\": {",
+            "\"pit_entry\": {\n        \"left\": {\"lat_deg\": 52.0004, \"lon_deg\": -1.0004},\n"
+            "        \"right\": {\"lat_deg\": 52.0005, \"lon_deg\": -1.0005},\n"
+            "        \"direction_heading_deg\": 90.0,\n"
+            "        \"heading_tolerance_deg\": 60.0,\n"
+            "        \"minimum_crossing_speed_mps\": 2.0,\n"
+            "        \"rearm_corridor_m\": 15.0\n      },\n      \"finish\": {");
+        TrackDefinition legacy_definition{};
+        assert(load_track_definition(legacy, legacy_definition).result ==
+               TrackLoadResult::loaded);
+        assert(legacy_definition.schema_version == 3);
+        assert(track_timing_ready(legacy_definition) ||
+               legacy_definition.provenance.geometry_status ==
+                   TrackGeometryStatus::provisional);
+    }
+
+    assert_failure_preserves_active(replace_once(valid_json, "\"schema_version\": 4",
                                                  "\"schema_version\": 1"),
                                     TrackLoadResult::unsupported_version);
     assert_failure_preserves_active(
@@ -154,18 +169,6 @@ int main(const int argc, char** argv)
                            "\"lat_deg\": 52.00005,\n        \"lon_deg\": -1.00002"),
         TrackLoadResult::degenerate_finish_gate, TrackDefinitionField::gates_finish);
     assert_failure_preserves_active(
-        replace_once_after(valid_json, "\"pit_entry\"",
-                           "\"lat_deg\": 52.00005,\n        \"lon_deg\": -1.0",
-                           "\"lat_deg\": 52.00015,\n        \"lon_deg\": -1.00004"),
-        TrackLoadResult::degenerate_pit_entry_gate,
-        TrackDefinitionField::gates_pit_entry);
-    assert_failure_preserves_active(
-        replace_once_after(valid_json, "\"pit_exit\"",
-                           "\"lat_deg\": 51.99985,\n        \"lon_deg\": -0.99996",
-                           "\"lat_deg\": 51.99995,\n        \"lon_deg\": -1.0"),
-        TrackLoadResult::degenerate_pit_exit_gate,
-        TrackDefinitionField::gates_pit_exit);
-    assert_failure_preserves_active(
         replace_once(valid_json, "\"minimum_crossing_speed_mps\": 2.0",
                      "\"minimum_crossing_speed_mps\": 0.0"),
         TrackLoadResult::invalid_value);
@@ -176,9 +179,6 @@ int main(const int argc, char** argv)
     assert_failure_preserves_active(
         replace_once_after(valid_json, "\"start\"", "\"left\": {",
                            "\"left\": {\"unknown_geometry\": 1,"),
-        TrackLoadResult::invalid_json);
-    assert_failure_preserves_active(
-        replace_once(valid_json, "\"pit_exit\": {", "\"pit_entry\": {"),
         TrackLoadResult::invalid_json);
 
     const std::string with_unknown = replace_once(
@@ -248,8 +248,6 @@ int main(const int argc, char** argv)
                               TrackLoadResult::capacity_exceeded,
                               TrackLoadResult::degenerate_start_gate,
                               TrackLoadResult::degenerate_finish_gate,
-                              TrackLoadResult::degenerate_pit_entry_gate,
-                              TrackLoadResult::degenerate_pit_exit_gate,
                               TrackLoadResult::degenerate_sector_gate,
                               TrackLoadResult::duplicate_sector_id,
                               TrackLoadResult::geometry_outside_geofence}) {
@@ -266,8 +264,6 @@ int main(const int argc, char** argv)
                              TrackDefinitionField::geofence,
                              TrackDefinitionField::gates_start,
                              TrackDefinitionField::gates_finish,
-                             TrackDefinitionField::gates_pit_entry,
-                             TrackDefinitionField::gates_pit_exit,
                              TrackDefinitionField::timing,
                              TrackDefinitionField::sectors}) {
         assert(track_definition_field_name(field)[0] != '\0');

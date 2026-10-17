@@ -89,20 +89,12 @@ def derive(snapshot: dict, pit_way_id: int) -> dict:
     main_geometry = main_way["geometry"]
     main_heading = tangent_heading(main_geometry, main_index)
     start_finish = gate_candidate(main_geometry[main_index], main_heading, 20.0)
-    pit_entry_heading = bearing_deg(
-        pit_geometry[0], pit_geometry[min(2, len(pit_geometry) - 1)]
-    )
-    pit_exit_heading = bearing_deg(
-        pit_geometry[max(0, len(pit_geometry) - 3)], pit_geometry[-1]
-    )
     return {
         "geometry_status": "provisional",
         "source_way_ids": {"main": main_way_id, "pit": pit_way_id},
         "gates": {
             "start": start_finish,
             "finish": start_finish,
-            "pit_entry": gate_candidate(pit_geometry[0], pit_entry_heading, 12.0),
-            "pit_exit": gate_candidate(pit_geometry[-1], pit_exit_heading, 12.0),
         },
     }
 

@@ -58,8 +58,6 @@ TimingEngineConfig configuration(CircuitProjection& projection,
            track_timer::track::ProjectionResult::projected);
     config.gates.start = gate(projection, 0.0);
     config.gates.finish = gate(projection, 20.0);
-    config.gates.pit_exit = gate(projection, 40.0, 0.5);
-    config.gates.pit_entry = gate(projection, 60.0, 0.5);
     config.lap_boundary = boundary;
     config.minimum_lap_time_s = 1.0;
     return config;
@@ -229,13 +227,18 @@ int main()
     assert(!decision_for(parallel_move, TimingGate::start).has_event);
 
     // Slow pit-lane movement is accepted by its own threshold.
-    TimingEngine slow_pit{};
-    assert(slow_pit.configure(finish_config) == TimingEngineConfigureResult::configured);
-    prime(slow_pit, fix(projection, {35.0, 0.0}, 0, 40'000'000, 1.5F));
-    const auto pit_crossing = slow_pit.process_fix(
-        fix(projection, {45.0, 0.0}, 1, 40'000'000, 1.5F),
+    // A crossing slower than the gate's minimum speed. The pit gates carried the low
+    // threshold before; the finish line carries it here, because what is being tested is
+    // that the threshold is honoured rather than which gate holds it.
+    auto slow_config = finish_config;
+    slow_config.gates.finish.minimum_crossing_speed_mps = 0.5;
+    TimingEngine slow_engine{};
+    assert(slow_engine.configure(slow_config) == TimingEngineConfigureResult::configured);
+    prime(slow_engine, fix(projection, {15.0, 0.0}, 0, 40'000'000, 1.5F));
+    const auto slow_crossing = slow_engine.process_fix(
+        fix(projection, {25.0, 0.0}, 1, 40'000'000, 1.5F),
         kBaseTimeNs / 1'000 + 50'000);
-    assert(decision_for(pit_crossing, TimingGate::pit_exit).has_event);
+    assert(decision_for(slow_crossing, TimingGate::finish).has_event);
 
     // Reverse, poor-quality, stale, and non-monotonic pairs remain replayable rejects.
     TimingEngine reverse_engine{};
@@ -278,8 +281,7 @@ int main()
     assert(decision_for(bad_sequence, TimingGate::start).time_result ==
            CrossingTimeResult::non_monotonic_sequence);
 
-    for (const auto gate_type : {TimingGate::start, TimingGate::finish,
-                                 TimingGate::pit_entry, TimingGate::pit_exit}) {
+    for (const auto gate_type : {TimingGate::start, TimingGate::finish}) {
         assert(std::strlen(timing_gate_name(gate_type)) > 0);
     }
     for (const auto result : {GateCrossingResult::not_evaluated,
@@ -291,5 +293,5 @@ int main()
         assert(std::strlen(gate_crossing_result_name(result)) > 0);
     }
 
-    std::cout << "Typed four-gate events, independent rearm, interpolation, and rejection replay passed\n";
+    std::cout << "Typed gate events, independent rearm, interpolation, and rejection replay passed\n";
 }
