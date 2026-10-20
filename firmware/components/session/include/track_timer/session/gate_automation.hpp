@@ -14,8 +14,11 @@ enum class GateAutomationResult : std::uint8_t {
     ignored_gate,
     ignored_disabled,
     ignored_state,
+    // The crossing was the right gate and the setting was on, but the driver had not
+    // armed the session. Distinct from ignored_state because the remedy is different:
+    // press start, rather than wait for the session to end.
+    ignored_unarmed,
     started,
-    stopped,
     transition_rejected,
 };
 
@@ -31,7 +34,7 @@ struct GateAutomationDecision {
 
 [[nodiscard]] GateAutomationDecision apply_gate_session_automation(
     const timing::GateCrossingDecision& event, std::int64_t now_ms,
-    const settings::DeviceSettings& settings,
+    const settings::DeviceSettings& settings, bool armed,
     SessionController& controller) noexcept;
 
 [[nodiscard]] const char* gate_automation_result_name(

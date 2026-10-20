@@ -68,7 +68,8 @@ class GateCaptureController {
     track::TrackDefinitionStore* store_{nullptr};
     domain::GnssFix latest_fix_{};
     std::int64_t evaluation_monotonic_us_{domain::kUnavailableTime};
-    std::array<bool, 8> captured_{};
+    // Two endpoints for each of the two gates that remain.
+    std::array<bool, 4> captured_{};
     std::size_t gate_index_{0};
     bool right_endpoint_{false};
     GateCaptureStatus status_{GateCaptureStatus::closed};

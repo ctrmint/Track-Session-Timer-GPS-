@@ -11,15 +11,12 @@ constexpr double kNanosecondsPerSecond = 1'000'000'000.0;
 constexpr std::array<TimingGate, kTimingGateCount> kGateTypes{
     TimingGate::start,
     TimingGate::finish,
-    TimingGate::pit_entry,
-    TimingGate::pit_exit,
 };
 
 std::array<const track::DirectedGateDefinition*, kTimingGateCount> config_gates(
     const TimingEngineConfig& config) noexcept
 {
-    return {&config.gates.start, &config.gates.finish, &config.gates.pit_entry,
-            &config.gates.pit_exit};
+    return {&config.gates.start, &config.gates.finish};
 }
 
 [[nodiscard]] bool valid_gate(const track::DirectedGateDefinition& gate) noexcept
@@ -228,7 +225,7 @@ void TimingEngine::reset() noexcept
     config_ = {};
     projection_ = {};
     gates_ = {};
-    gate_armed_ = {{true, true, true, true}};
+    gate_armed_ = {{true, true}};
     lap_state_machine_.reset();
     previous_fix_ = {};
     previous_position_ = {};
@@ -306,10 +303,6 @@ const char* timing_gate_name(const TimingGate gate) noexcept
         return "start";
     case TimingGate::finish:
         return "finish";
-    case TimingGate::pit_entry:
-        return "pit-entry";
-    case TimingGate::pit_exit:
-        return "pit-exit";
     }
     return "unknown";
 }

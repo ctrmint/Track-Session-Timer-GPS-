@@ -18,7 +18,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 3
+      "const": 4
     },
     "revision": {
       "type": "integer",
@@ -80,21 +80,13 @@
       "additionalProperties": false,
       "required": [
         "start",
-        "finish",
-        "pit_entry",
-        "pit_exit"
+        "finish"
       ],
       "properties": {
         "start": {
           "$ref": "#/$defs/directed_gate"
         },
         "finish": {
-          "$ref": "#/$defs/directed_gate"
-        },
-        "pit_entry": {
-          "$ref": "#/$defs/directed_gate"
-        },
-        "pit_exit": {
           "$ref": "#/$defs/directed_gate"
         }
       }

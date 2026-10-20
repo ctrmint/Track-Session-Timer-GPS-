@@ -204,8 +204,7 @@ bool settings_equal(const DeviceSettings& left, const DeviceSettings& right) noe
            left.selected_track_id == right.selected_track_id &&
            left.trackday_mode_enabled == right.trackday_mode_enabled &&
            left.lap_boundary == right.lap_boundary &&
-           left.pit_exit_auto_start_enabled == right.pit_exit_auto_start_enabled &&
-           left.pit_entry_auto_stop_enabled == right.pit_entry_auto_stop_enabled;
+           left.gps_start_line_enabled == right.gps_start_line_enabled;
 }
 
 SettingsBlob encode_legacy_settings_v2(const DeviceSettings& settings) noexcept
@@ -255,8 +254,12 @@ SettingsBlob encode_legacy_settings_v4(const DeviceSettings& settings) noexcept
     std::array<std::uint8_t, kLegacyV4PayloadSize> payload{};
     std::copy_n(legacy.bytes.data() + kHeaderSize, kLegacyV3PayloadSize, payload.data());
     payload[63] = static_cast<std::uint8_t>(settings.lap_boundary);
-    payload[64] = settings.pit_exit_auto_start_enabled ? 1U : 0U;
-    payload[65] = settings.pit_entry_auto_stop_enabled ? 1U : 0U;
+    payload[64] = settings.gps_start_line_enabled ? 1U : 0U;
+    // Byte 65 held pit_entry_auto_stop_enabled. The setting is gone and the byte stays,
+    // written as zero and never read: this is a fixed-width record, so reclaiming the byte
+    // would change its length and force a format version and a migration for a field
+    // nothing uses. Byte 64 keeps both its position and its meaning, so neither needs one.
+    payload[65] = 0U;
     return make_blob(4, payload.data(), payload.size());
 }
 
@@ -381,8 +384,7 @@ DecodeResult decode_settings(const SettingsBlob& blob, DeviceSettings& settings)
     }
     if (version >= 4) {
         candidate.lap_boundary = static_cast<LapBoundaryMode>(payload[63]);
-        candidate.pit_exit_auto_start_enabled = payload[64] != 0;
-        candidate.pit_entry_auto_stop_enabled = payload[65] != 0;
+        candidate.gps_start_line_enabled = payload[64] != 0;
     }
     if (version >= 5) {
         // The authoritative durations, which the vestigial minutes above cannot express.

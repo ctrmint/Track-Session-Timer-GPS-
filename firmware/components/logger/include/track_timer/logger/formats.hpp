@@ -68,7 +68,10 @@ enum class SessionCompletionReason : std::uint8_t {
     none,
     driver_stop,
     reset_recovery,
-    pit_entry,
+    // Retained as a reserved value, not produced. Pit-entry auto-stop is gone, and the
+    // enumerator stays so that sessions already recorded on cards still decode to a
+    // reason the reader knows rather than failing validation.
+    reserved_pit_entry,
 };
 
 enum class SummaryIntegrity : std::uint8_t {
@@ -99,8 +102,12 @@ struct SessionSettingsV1 {
     settings::LowerDisplayMode lower_display{settings::LowerDisplayMode::elapsed};
     bool trackday_mode_enabled{false};
     settings::LapBoundaryMode lap_boundary{settings::LapBoundaryMode::finish};
-    bool pit_exit_auto_start_enabled{false};
-    bool pit_entry_auto_stop_enabled{false};
+    bool gps_start_line_enabled{false};
+    // Was pit_entry_auto_stop_enabled. Retained as a reserved byte rather than removed:
+    // this record is fixed-width and written to the card, so dropping a field would
+    // change its length and take the log format with it, for a setting that no longer
+    // exists. Always written as false and never read back.
+    bool reserved_pit_entry_auto_stop{false};
     std::array<char, settings::kTrackIdentifierCapacity> selected_track_id{};
 };
 

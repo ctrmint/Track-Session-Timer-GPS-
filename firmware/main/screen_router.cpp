@@ -325,8 +325,6 @@ constexpr std::uint32_t kRuby = 0xFF8FA3;
     case ui::SettingsField::lower_display:
         return LV_SYMBOL_LIST;
     case ui::SettingsField::lap_boundary:
-    case ui::SettingsField::pit_exit_auto_start:
-    case ui::SettingsField::pit_entry_auto_stop:
         return LV_SYMBOL_GPS;
     default:
         return LV_SYMBOL_REFRESH;
@@ -1494,12 +1492,12 @@ class ScreenRouter {
     void apply_gate_automation(const timing::GateCrossingDecision& decision) noexcept
     {
         const auto now_ms = static_cast<std::int64_t>(esp_timer_get_time() / 1000);
-        const auto outcome =
-            session::apply_gate_session_automation(decision, now_ms, settings_, session_);
+        const auto outcome = session::apply_gate_session_automation(
+            decision, now_ms, settings_, armed_ && armed_ready_, session_);
         if (outcome.result == session::GateAutomationResult::ignored_non_event ||
             outcome.result == session::GateAutomationResult::ignored_gate) {
-            // Start and finish crossings come through this queue too, several per lap.
-            // Logging them would bury the two that mean something.
+            // Finish crossings come through this queue too, several per lap. Logging them
+            // would bury the one that means something.
             return;
         }
         ESP_LOGI("track_timer", "gate automation: %s -> %s",
@@ -1508,17 +1506,10 @@ class ScreenRouter {
         if (!outcome.transitioned) {
             return;
         }
-        // The session was started or stopped from underneath the shell, so the two things
-        // begin_session and advance_session_phase would have done have to happen here.
-        // service_session picks up the state change itself and loads the right screen.
+        // The session was started from underneath the shell, so what begin_session would
+        // have done has to happen here. service_session picks up the state change itself
+        // and loads the right screen.
         armed_ = false;
-        if (outcome.result == session::GateAutomationResult::stopped) {
-            // stop_from_pit_entry goes straight to review, having already refreshed the
-            // session times, so the summary is captured after it rather than before as
-            // the driver-stop path does - and confirm_stop is not part of this route.
-            capture_summary();
-            (void)session_.complete_review(now_ms);
-        }
         describe_mode();
         refresh_pending();
     }
@@ -1537,16 +1528,10 @@ class ScreenRouter {
                      static_cast<unsigned long long>(duration_ms / 1'000 % 60),
                      static_cast<unsigned long long>(duration_ms % 1'000));
         }
-        // Each crossing is offered to the session automation, which starts on pit exit
-        // and stops on pit entry when the settings ask for it. This is what the GPS
-        // trigger has always meant and never did: the automation and the queue both
-        // existed, and the records were read off the queue and thrown away.
-        //
-        // Offered unconditionally rather than only while armed on GPS, because the two
-        // settings the automation consults are the authority on whether it should act -
-        // pit_exit_auto_start_enabled is derived from the trigger, and pit-entry
-        // auto-stop is its own setting that a driver can want with any trigger. Gating
-        // here as well would mean two places deciding the same thing.
+        // Each crossing is offered to the session automation, which starts the session on
+        // the start line when the GPS trigger asks for it. This is what the GPS trigger
+        // has always meant and never did: the automation and the queue both existed, and
+        // the records were read off the queue and thrown away.
         //
         // The records are also the raw material for the offline replay in #43, which is
         // why they keep being drained to the floor afterwards rather than consumed.
@@ -2235,8 +2220,6 @@ class ScreenRouter {
             return logger::SessionCompletionReason::none;
         case session::CompletionReason::driver_stop:
             return logger::SessionCompletionReason::driver_stop;
-        case session::CompletionReason::pit_entry:
-            return logger::SessionCompletionReason::pit_entry;
         }
         return logger::SessionCompletionReason::none;
     }

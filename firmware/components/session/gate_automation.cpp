@@ -4,7 +4,7 @@ namespace track_timer::session {
 
 GateAutomationDecision apply_gate_session_automation(
     const timing::GateCrossingDecision& event, const std::int64_t now_ms,
-    const settings::DeviceSettings& settings,
+    const settings::DeviceSettings& settings, const bool armed,
     SessionController& controller) noexcept
 {
     GateAutomationDecision decision{};
@@ -17,11 +17,21 @@ GateAutomationDecision apply_gate_session_automation(
     }
 
     const auto state = controller.snapshot().state;
-    if (event.gate == timing::TimingGate::pit_exit) {
-        if (!settings.pit_exit_auto_start_enabled) {
+    if (event.gate == timing::TimingGate::start) {
+        if (!settings.gps_start_line_enabled) {
             decision.result = GateAutomationResult::ignored_disabled;
             return decision;
         }
+        // Armed means the driver asked for this. Without the check, a start-line crossing
+        // would begin a session whenever the controller happened to be ready - driving out
+        // of the paddock, or past the line on the way to anywhere. The pit-exit gate this
+        // replaced was obscure enough to make that unlikely; the start line is not.
+        if (!armed) {
+            decision.result = GateAutomationResult::ignored_unarmed;
+            return decision;
+        }
+        // Only from ready, so the first crossing starts the session and every lap after it
+        // is ignored rather than restarting the clock.
         if (state != SessionState::ready) {
             decision.result = GateAutomationResult::ignored_state;
             return decision;
@@ -29,21 +39,6 @@ GateAutomationDecision apply_gate_session_automation(
         decision.transition_result = controller.start(now_ms);
         decision.transitioned = decision.transition_result == TransitionResult::accepted;
         decision.result = decision.transitioned ? GateAutomationResult::started
-                                                : GateAutomationResult::transition_rejected;
-        return decision;
-    }
-    if (event.gate == timing::TimingGate::pit_entry) {
-        if (!settings.pit_entry_auto_stop_enabled) {
-            decision.result = GateAutomationResult::ignored_disabled;
-            return decision;
-        }
-        if (state != SessionState::running && state != SessionState::overtime) {
-            decision.result = GateAutomationResult::ignored_state;
-            return decision;
-        }
-        decision.transition_result = controller.stop_from_pit_entry(now_ms);
-        decision.transitioned = decision.transition_result == TransitionResult::accepted;
-        decision.result = decision.transitioned ? GateAutomationResult::stopped
                                                 : GateAutomationResult::transition_rejected;
         return decision;
     }
@@ -62,10 +57,10 @@ const char* gate_automation_result_name(const GateAutomationResult result) noexc
         return "ignored-disabled";
     case GateAutomationResult::ignored_state:
         return "ignored-state";
+    case GateAutomationResult::ignored_unarmed:
+        return "ignored-unarmed";
     case GateAutomationResult::started:
         return "started";
-    case GateAutomationResult::stopped:
-        return "stopped";
     case GateAutomationResult::transition_rejected:
         return "transition-rejected";
     }

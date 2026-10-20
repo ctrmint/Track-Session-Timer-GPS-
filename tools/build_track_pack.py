@@ -27,14 +27,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TRACK_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,47}$")
 PACK_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,46}$")
 COUNTRY_PATTERN = re.compile(r"^[A-Z]{2,3}$")
-GATE_NAMES = ("start", "finish", "pit_entry", "pit_exit")
+GATE_NAMES = ("start", "finish")
 
 # A start line and a pit gate can sit close together on a real circuit, but they are
 # never the same point. Identical coordinates mean the start gate was copied from the
 # pit gate instead of being derived from the start/finish straight, which is how two
 # gates in this pack came to sit on the corner before the pit straight. The threshold
-# is below GNSS noise, so it cannot reject a position that was genuinely surveyed.
-MINIMUM_START_PIT_SEPARATION_M = 5.0
 
 
 class TrackPackError(ValueError):
@@ -143,14 +141,6 @@ def validate_manifest(manifest: dict) -> None:
                     and 0 <= gate[2] < 360
                     and 1 <= gate[3] <= 1_000,
                     f"{path}.gate_profiles.{profile_name}.{gate_name} is invalid",
-                )
-            for pit_gate in ("pit_entry", "pit_exit"):
-                _require(
-                    _separation_m(profile["start"], profile[pit_gate])
-                    >= MINIMUM_START_PIT_SEPARATION_M,
-                    f"{path}.gate_profiles.{profile_name}.start is coincident with "
-                    f"{pit_gate}, so it was taken from the pit gate rather than from the "
-                    "start/finish straight",
                 )
 
         layouts = venue.get("layouts")

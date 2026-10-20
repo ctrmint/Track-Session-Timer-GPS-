@@ -70,9 +70,8 @@ track_timer::domain::GnssFix fix_at(
 void capture_all(track_timer::ui::GateCaptureController& controller,
                  const track_timer::track::TrackDefinition& source)
 {
-    const std::array<track_timer::track::DirectedGateDefinition, 4> gates{
-        source.gates.start, source.gates.finish, source.gates.pit_entry,
-        source.gates.pit_exit};
+    const std::array<track_timer::track::DirectedGateDefinition, 2> gates{
+        source.gates.start, source.gates.finish};
     std::uint32_t sequence = 10;
     for (std::size_t gate_index = 0; gate_index < gates.size(); ++gate_index) {
         auto left = fix_at(gates[gate_index].left, sequence++);
@@ -131,7 +130,7 @@ int main()
 
     controller.begin(source, &store, false);
     capture_all(controller, source);
-    assert(controller.captured_endpoint_count() == 8);
+    assert(controller.captured_endpoint_count() == 4);
     auto model = controller.view_model();
     assert(model.can_save);
     assert(std::strstr(model.preview.data(), "LINE READY") != nullptr);
@@ -223,6 +222,6 @@ int main()
         assert(std::strlen(ui::gate_capture_status_name(status)) > 0);
     }
 
-    std::cout << "Four-gate capture, safety rejection, atomic persistence, and recovery passed\n";
+    std::cout << "Two-gate capture, safety rejection, atomic persistence, and recovery passed\n";
     return 0;
 }

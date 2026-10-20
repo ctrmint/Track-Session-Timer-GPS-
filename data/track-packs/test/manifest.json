@@ -142,19 +142,7 @@
             34.0,
             12
           ],
-          "pit_entry": [
-            54.170325,
-            -4.447392,
-            149.9,
-            12
-          ],
-          "pit_exit": [
-            54.169953,
-            -4.446944,
-            147.3,
-            12
-          ],
-          "derivation": "Start and finish sit 30 m back along King Edward Road from the Sea Cliff Road junction, measured along the OSM centreline, because the two legs meet at the junction itself and a gate there would span both. At 30 m back the outbound leg is 26.3 m away, leaving 16.5 m between the gate end and its carriageway. Gates are 12 m: 7.62 m of road plus 2.19 m beyond each edge for lateral fix error. pit_exit faces 147.3 deg south-east-bound so the north-bound pass into the pit lane does not register.",
+          "derivation": "Start and finish sit 30 m back along King Edward Road from the Sea Cliff Road junction, measured along the OSM centreline, because the two legs meet at the junction itself and a gate there would span both. At 30 m back the outbound leg is 26.3 m away, leaving 16.5 m between the gate end and its carriageway. Gates are 12 m: 7.62 m of road plus 2.19 m beyond each edge for lateral fix error.3 deg south-east-bound so the north-bound pass into the pit lane does not register.",
           "validation": {
             "geometry_status": "independently_validated",
             "verified_utc": "2026-10-17T00:00:00Z",

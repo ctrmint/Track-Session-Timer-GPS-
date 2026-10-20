@@ -84,10 +84,6 @@ ValueChoiceList choices_for(const SettingsField field,
                          });
     case SettingsField::auto_dim:
         return from_labels(kOffOn, 2, current.auto_dim_enabled ? 1U : 0U);
-    case SettingsField::pit_exit_auto_start:
-        return from_labels(kOffOn, 2, current.pit_exit_auto_start_enabled ? 1U : 0U);
-    case SettingsField::pit_entry_auto_stop:
-        return from_labels(kOffOn, 2, current.pit_entry_auto_stop_enabled ? 1U : 0U);
     case SettingsField::lower_display:
         return from_labels(kLowerDisplay, 2,
                            static_cast<std::size_t>(current.lower_display));
@@ -149,18 +145,6 @@ bool apply_choice(const SettingsField field, const std::size_t index,
         }
         draft.auto_dim_enabled = index == 1;
         return true;
-    case SettingsField::pit_exit_auto_start:
-        if (index > 1) {
-            return false;
-        }
-        draft.pit_exit_auto_start_enabled = index == 1;
-        return true;
-    case SettingsField::pit_entry_auto_stop:
-        if (index > 1) {
-            return false;
-        }
-        draft.pit_entry_auto_stop_enabled = index == 1;
-        return true;
     case SettingsField::lower_display:
         if (index > 1 ||
             (index == 1 && draft.average_lap_seconds == 0)) {
@@ -206,10 +190,6 @@ const char* picker_field_label(const SettingsField field) noexcept
         return "LOWER FIELD";
     case SettingsField::lap_boundary:
         return "LAP LINE";
-    case SettingsField::pit_exit_auto_start:
-        return "PIT EXIT START";
-    case SettingsField::pit_entry_auto_stop:
-        return "PIT ENTRY STOP";
     case SettingsField::acceleration_target:
         return "0-X TARGET";
     case SettingsField::orientation:
