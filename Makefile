@@ -48,6 +48,7 @@ GPS_ONLY_TEST_BINARY := build/host/gps_only_test
 CLOCK_TEST_BINARY := build/host/clock_test
 SPEED_ONLY_TEST_BINARY := build/host/speed_only_test
 COMPASS_TEST_BINARY := build/host/compass_test
+NAVIGATION_MODE_TEST_BINARY := build/host/navigation_mode_test
 ACCELERATION_TEST_BINARY := build/host/acceleration_test
 IMU_CALIBRATION_TEST_BINARY := build/host/imu_calibration_test
 SESSION_URGENCY_TEST_BINARY := build/host/session_urgency_test
@@ -67,9 +68,9 @@ SIMULATOR_BUILD_DIR ?= build/simulator
 SIMULATOR_IMAGE ?= track-session-timer-simulator:lvgl-9.5.0
 CMAKE ?= cmake
 
-.PHONY: check venv python-env test track-validate uk-track-pack test-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test clock-test speed-only-test compass-test acceleration-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test gnss-configure-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-capture-boot firmware-device-info firmware-clean issue-preview label-preview
+.PHONY: check venv python-env test track-validate uk-track-pack test-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test clock-test speed-only-test compass-test navigation-mode-test acceleration-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test gnss-configure-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test simulator-configure simulator-build simulator-test simulator-run simulator-container-image simulator-container-test simulator-clean firmware-build firmware-container-build firmware-container-flash firmware-container-monitor firmware-container-flash-monitor firmware-container-erase firmware-capture-boot firmware-device-info firmware-clean issue-preview label-preview
 
-check: python-env test track-validate test-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test clock-test speed-only-test compass-test acceleration-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test gnss-configure-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
+check: python-env test track-validate test-track-pack track-pack-test simulator-track-catalog-test simulator-fixture-validate repo-check host-test simulator-model-test session-state-test settings-test settings-editor-test projection-test intersection-test crossing-validation-test crossing-time-test lap-state-machine-test timing-engine-test gate-event-engine-test track-definition-test track-capture-test track-matching-test track-selection-test log-format-test async-logger-test session-review-test diagnostics-test active-session-test display-policy-test imu-meter-test rest-session-test track-catalog-test shell-navigation-test device-mode-test gps-only-test clock-test speed-only-test compass-test navigation-mode-test acceleration-test imu-calibration-test session-urgency-test time-roller-test session-trigger-test summary-store-test summary-file-test review-cards-test ubx-parser-test fix-validation-test gnss-pipeline-test gnss-configure-test i2c-transport-test gate-capture-test gate-session-automation-test ui-foundation-test navigation-test
 
 venv:
 	python3 -m venv .venv
@@ -604,6 +605,17 @@ compass-test:
 		firmware/components/ui/gps_only.cpp firmware/components/ui/compass.cpp \
 		tests/cpp/test_compass.cpp -o $(COMPASS_TEST_BINARY)
 	$(COMPASS_TEST_BINARY)
+
+navigation-mode-test:
+	mkdir -p build/host
+	$(CXX) -std=c++17 -Wall -Wextra -Werror -pedantic \
+		-Ifirmware/components/domain/include \
+		-Ifirmware/components/ui/include \
+		firmware/components/ui/gps_only.cpp firmware/components/ui/speed_only.cpp \
+		firmware/components/ui/compass.cpp firmware/components/ui/clock.cpp \
+		firmware/components/ui/navigation_mode.cpp \
+		tests/cpp/test_navigation_mode.cpp -o $(NAVIGATION_MODE_TEST_BINARY)
+	$(NAVIGATION_MODE_TEST_BINARY)
 
 speed-only-test:
 	mkdir -p build/host

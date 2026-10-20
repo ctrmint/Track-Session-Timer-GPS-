@@ -201,7 +201,9 @@ void test_acceleration_mode_and_target_round_trip()
     auto beyond = settings;
     beyond.operating_mode = static_cast<OperatingMode>(
         static_cast<std::uint8_t>(OperatingMode::acceleration) + 1);
-    assert(!valid_settings(beyond));
+    // Valid now: navigation follows it. The bound moves with the enum every time, which is
+    // the point of asserting it here rather than trusting it.
+    assert(valid_settings(beyond));
 
     // A target the picker cannot reach is a record this firmware did not write, whatever
     // else in it looks reasonable.
@@ -210,6 +212,33 @@ void test_acceleration_mode_and_target_round_trip()
     assert(!valid_settings(odd));
     odd.acceleration_target_mph = 0;
     assert(!valid_settings(odd));
+}
+
+// Navigation, appended after Acceleration, and currently the last enumerator - so this is
+// the test that holds the upper bound. Adding a mode after it means moving the assertion
+// below, which is deliberate: the bound and the enum must be changed together or a stored
+// byte this firmware cannot render would decode as valid.
+void test_navigation_operating_mode_round_trips()
+{
+    auto settings = customized_settings();
+    settings.operating_mode = OperatingMode::navigation;
+    assert(valid_settings(settings));
+
+    const auto blob = encode_settings(settings);
+    DeviceSettings decoded{};
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+    assert(decoded.operating_mode == OperatingMode::navigation);
+    assert(settings_equal(settings, decoded));
+
+    // Appending the mode must not have changed the record, because the mode is one byte
+    // that already existed and nothing else moved. A format bump here would mean every
+    // device losing its settings for the sake of a new screen.
+    assert(decode_settings(blob, decoded) == DecodeResult::current);
+
+    auto beyond = settings;
+    beyond.operating_mode = static_cast<OperatingMode>(
+        static_cast<std::uint8_t>(OperatingMode::navigation) + 1);
+    assert(!valid_settings(beyond));
 }
 
 // A device upgrading from v7 has never had an opinion about the target, so it gets the
@@ -483,6 +512,7 @@ int main()
     test_speed_only_operating_mode_round_trips();
     test_compass_operating_mode_round_trips();
     test_acceleration_mode_and_target_round_trip();
+    test_navigation_operating_mode_round_trips();
     test_v7_records_migrate_and_keep_their_settings();
     test_launch_sensitivity_snapping();
     test_defaults_restart_and_deferred_apply();

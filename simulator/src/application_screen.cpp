@@ -37,6 +37,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       gps_only_root_(make_screen_root(root)),
       speed_only_root_(make_screen_root(root)),
       compass_root_(make_screen_root(root)),
+      navigation_root_(make_screen_root(root)),
       clock_root_(make_screen_root(root)),
       rest_root_(make_screen_root(root)),
       ready_screen_(ready_root_, ready_navigation, this),
@@ -51,6 +52,7 @@ ApplicationScreen::ApplicationScreen(lv_obj_t* root,
       gps_only_screen_(gps_only_root_),
       speed_only_screen_(speed_only_root_),
       compass_screen_(compass_root_),
+      navigation_screen_(navigation_root_),
       clock_screen_(clock_root_),
       rest_screen_(rest_root_, rest_action, this)
 {
@@ -104,6 +106,15 @@ void ApplicationScreen::update(const ui::ReadyViewModel& ready,
     if (navigation_.destination() == ui::Destination::setup &&
         setup_page_ == SetupPage::clock) {
         clock_screen_.update(ui::clock_view(clock_snapshot_));
+    }
+    // Here rather than with the other pages below, because Navigation reads the clock too
+    // and this is where the clock snapshot has just been rebuilt. It is deliberately not
+    // also in the per-fix path: a fix changes only the GNSS half, which the next tick
+    // redraws regardless.
+    if (navigation_.destination() == ui::Destination::setup &&
+        setup_page_ == SetupPage::navigation) {
+        navigation_screen_.update(
+            ui::navigation_view({gps_only_snapshot_, clock_snapshot_}));
     }
 
     ready_screen_.update(ready);
@@ -791,6 +802,7 @@ void ApplicationScreen::show_destination() noexcept
     lv_obj_add_flag(gps_only_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(speed_only_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(compass_root_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(navigation_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(clock_root_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(rest_root_, LV_OBJ_FLAG_HIDDEN);
 
@@ -825,6 +837,11 @@ void ApplicationScreen::show_destination() noexcept
         else if (setup_page_ == SetupPage::compass) {
             lv_obj_remove_flag(compass_root_, LV_OBJ_FLAG_HIDDEN);
             compass_screen_.update(ui::compass_view(gps_only_snapshot_));
+        }
+        else if (setup_page_ == SetupPage::navigation) {
+            lv_obj_remove_flag(navigation_root_, LV_OBJ_FLAG_HIDDEN);
+            navigation_screen_.update(
+                ui::navigation_view({gps_only_snapshot_, clock_snapshot_}));
         }
         else if (setup_page_ == SetupPage::clock) {
             lv_obj_remove_flag(clock_root_, LV_OBJ_FLAG_HIDDEN);
@@ -880,7 +897,7 @@ void ApplicationScreen::apply_display_policy(const board::DisplayCommand& comman
     for (auto* root : {ready_root_, active_root_, setup_menu_root_, settings_root_,
                        track_selection_root_, gate_capture_root_, session_review_root_, diagnostics_root_,
                        g_meter_root_, gps_only_root_, speed_only_root_, compass_root_,
-                       clock_root_, rest_root_}) {
+                       navigation_root_, clock_root_, rest_root_}) {
         lv_obj_set_pos(root, command.layout_shift_x, command.layout_shift_y);
         lv_obj_set_style_transform_pivot_x(root, 300, 0);
         lv_obj_set_style_transform_pivot_y(root, 225, 0);
@@ -919,6 +936,8 @@ const char* setup_page_name(const SetupPage page) noexcept
         return "speed-only";
     case SetupPage::compass:
         return "compass";
+    case SetupPage::navigation:
+        return "navigation";
     case SetupPage::clock:
         return "clock";
     }

@@ -25,6 +25,7 @@ void every_mode_round_trips_through_settings()
     for (const auto mode : {ui::DeviceMode::track_day, ui::DeviceMode::race,
                             ui::DeviceMode::g_only, ui::DeviceMode::gps_only,
                             ui::DeviceMode::speed_only, ui::DeviceMode::compass,
+                            ui::DeviceMode::navigation, ui::DeviceMode::acceleration,
                             ui::DeviceMode::clock}) {
         auto settings = base();
         ui::apply_mode(mode, settings);
@@ -59,6 +60,10 @@ void modes_map_onto_the_existing_settings_fields()
     assert(settings.operating_mode == settings::OperatingMode::speed_only);
     assert(!settings.trackday_mode_enabled);
 
+    ui::apply_mode(ui::DeviceMode::navigation, settings);
+    assert(settings.operating_mode == settings::OperatingMode::navigation);
+    assert(!settings.trackday_mode_enabled);
+
     ui::apply_mode(ui::DeviceMode::compass, settings);
     assert(settings.operating_mode == settings::OperatingMode::compass);
     assert(!settings.trackday_mode_enabled);
@@ -83,6 +88,9 @@ void the_operating_mode_wins_over_a_stale_trackday_flag()
 
     settings.operating_mode = settings::OperatingMode::compass;
     assert(ui::mode_from_settings(settings) == ui::DeviceMode::compass);
+
+    settings.operating_mode = settings::OperatingMode::navigation;
+    assert(ui::mode_from_settings(settings) == ui::DeviceMode::navigation);
 }
 
 // A debug view of the receiver and nothing else. A session timer here would invite using
@@ -128,6 +136,18 @@ void speed_only_shows_speed_and_nothing_else()
 void compass_shows_heading_and_nothing_else()
 {
     const auto visibility = ui::visibility_for(ui::DeviceMode::compass);
+    assert(visibility.gnss_data);
+    assert(!visibility.session_timer);
+    assert(!visibility.lap_times);
+    assert(!visibility.lap_delta);
+    assert(!visibility.g_meter);
+}
+
+// Three readouts on one screen, and still not a session view: a device showing speed, the
+// time and a heading is not a device being used to time something.
+void navigation_shows_three_readouts_and_no_timer()
+{
+    const auto visibility = ui::visibility_for(ui::DeviceMode::navigation);
     assert(visibility.gnss_data);
     assert(!visibility.session_timer);
     assert(!visibility.lap_times);
@@ -267,6 +287,7 @@ int main()
     clock_shows_the_time_and_nothing_else();
     speed_only_shows_speed_and_nothing_else();
     compass_shows_heading_and_nothing_else();
+    navigation_shows_three_readouts_and_no_timer();
     every_mode_has_a_name_a_label_and_a_summary();
     track_day_shows_the_timer_only();
     race_shows_laps_delta_and_remaining();

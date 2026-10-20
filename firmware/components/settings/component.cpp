@@ -179,7 +179,7 @@ bool valid_settings(const DeviceSettings& settings) noexcept
            settings.average_lap_seconds <= 59 * 60 + 59 &&
            valid_brightness(settings.day_brightness_percent) &&
            valid_brightness(settings.night_brightness_percent) &&
-           settings.operating_mode <= OperatingMode::acceleration &&
+           settings.operating_mode <= OperatingMode::navigation &&
            valid_acceleration_target(settings.acceleration_target_mph) &&
            settings.orientation <= OrientationMode::automatic &&
            settings.lower_display <= LowerDisplayMode::laps_remaining &&

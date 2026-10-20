@@ -60,6 +60,7 @@ add_library(
     ../firmware/components/ui/gps_only.cpp
     ../firmware/components/ui/speed_only.cpp
     ../firmware/components/ui/compass.cpp
+    ../firmware/components/ui/navigation_mode.cpp
     ../firmware/components/ui/diagnostics.cpp
     ../firmware/components/ui/display_policy.cpp
     ../firmware/components/ui/imu_meter.cpp
@@ -126,6 +127,7 @@ add_library(
     ../firmware/components/ui/gps_only_screen.cpp
     ../firmware/components/ui/speed_only_screen.cpp
     ../firmware/components/ui/compass_screen.cpp
+    ../firmware/components/ui/navigation_screen.cpp
     ../firmware/components/ui/lvgl_visual_system.cpp
     src/host_timer_font.cpp
     ../firmware/components/ui/ready_screen.cpp
@@ -1369,6 +1371,49 @@ if(BUILD_TESTING)
         PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
             PASS_REGULAR_EXPRESSION "compass-state=live.*compass-deg=[0-9][0-9][0-9]"
+            TIMEOUT 20
+    )
+
+    # The layout this mode exists for, rendered: speed low and large with the unit beside
+    # it, the clock top left, and the ring top right with no arrow in it. A parked device
+    # is the arrow's absent case, so the snapshot that proves the absence is the cheap one.
+    add_test(
+        NAME simulator-navigation-screen
+        COMMAND track_timer_simulator
+            --headless
+            --scenario ready
+            --screen navigation
+            --frames 20
+            --snapshot "${CMAKE_CURRENT_BINARY_DIR}/navigation.ppm"
+    )
+    set_tests_properties(
+        simulator-navigation-screen
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION
+                "screen=setup.*setup-page=navigation.*nav-heading=---.*nav-shared-fault=no"
+            TIMEOUT 20
+    )
+
+    # The live case cannot be rendered, for the reason the GPS Only, Speed Only and Compass
+    # pairs above give: every scenario that replays fixes also runs a session, which hides
+    # the page. This asserts the composed view model against the real replayed stream - a
+    # moving car has a speed and a three-digit heading at the same time, which is the one
+    # thing none of the three source modes can show on its own - and takes no snapshot.
+    add_test(
+        NAME simulator-navigation-live-view
+        COMMAND track_timer_simulator
+            --headless
+            --scenario active
+            --screen navigation
+            --frames 30
+    )
+    set_tests_properties(
+        simulator-navigation-live-view
+        PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            PASS_REGULAR_EXPRESSION
+                "nav-speed=[0-9]+ nav-heading=[0-9][0-9][0-9] nav-shared-fault=no"
             TIMEOUT 20
     )
 
