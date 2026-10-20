@@ -12,15 +12,17 @@ namespace track_timer::ui {
 // Navigation mode's panel: road speed low and large, the receiver's clock top left, and an
 // arrow top right pointing where the car is going, with north at twelve o'clock.
 //
-// Three departures from the screens it borrows from, each deliberate.
+// Two departures from the screens it borrows from, each deliberate.
 //
-// The unit sits *beside* the speed rather than under it, because the digit line has moved
-// to the bottom of the panel and there is nothing below it any more. Speed Only made the
-// opposite call for a good reason - "beside would mean reserving width that the
-// three-digit case needs, which is exactly the compromise that costs the face its size" -
-// and that reason still holds: this face is 208 px against Speed Only's 248. Speed Only is
-// not changed to match. It answers a different question, with the whole panel to answer it
-// in.
+// The speed is 261 px - larger than Speed Only's 248, which is the arithmetic ceiling for
+// a *centred* block with 30 px margins. The number is the only thing across the panel at
+// that height, so it takes a 16 px margin instead and three cells reach 564 px.
+//
+// The unit sits under it, as Speed Only's does and for Speed Only's reason: "beside would
+// mean reserving width that the three-digit case needs, which is exactly the compromise
+// that costs the face its size". This screen did put it beside, back when the number sat
+// on the bottom margin and there was nothing under it. Raising the number gave that space
+// back, and taking it returned 53 px of face.
 //
 // There is no title. The top left is the clock and the top right is the arrow, and a mode
 // label would have to displace one of them to say what three readouts already say.
@@ -67,14 +69,6 @@ class NavigationScreen {
     lv_obj_t* heading_status_{nullptr};
     std::array<char, kCompassStatusCapacity> heading_status_shown_{};
 
-    // Measured, not assumed. The face size is chosen against a compile-time budget for
-    // this width, but where the label actually lands is decided by what the font renders,
-    // so a metrics change moves the unit instead of overlapping the digits.
-    std::int32_t unit_width_{0};
-    // Where the digit block is centred: the middle of what is left after the unit has
-    // taken its width from the right. The unit itself never moves, which is the point -
-    // only the digits recentre as the reading crosses 9 to 10 and 99 to 100.
-    std::int32_t digits_centre_{0};
     std::size_t shown_count_{0};
     bool speed_valid_{false};
     bool time_valid_{false};

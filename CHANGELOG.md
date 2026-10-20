@@ -11,11 +11,15 @@ The project follows Semantic Versioning once the first firmware release is tagge
 - a **Navigation** mode: road speed low and large, the receiver's clock top left, and an
   arrow top right pointing where the car is going with north at twelve o'clock. Three
   readouts the device already computed in three separate modes, on one screen
-- the **unit sits beside the speed rather than under it**, which is the one place this
-  screen departs from Speed Only and the reason its face is 208 px against Speed Only's
-  248. Three digits plus `MPH` and its gap have to fit 540 px, which leaves 454 px for the
-  digits and so caps the face at 208. Speed Only keeps 248 and its label underneath - it
-  has the whole panel to answer a narrower question in, and is not changed to match
+- the speed is **261 px**, larger than Speed Only's 248 and the largest numeral on the
+  device. 248 is the ceiling for a centred block with 30 px margins; at this height the
+  number is the only thing across the panel, so it takes a 16 px margin instead and three
+  cells reach 564 px. The unit sits under it, as Speed Only's does and for Speed Only's
+  reason - beside it would reserve width the three-digit case needs, which is exactly the
+  compromise that costs the face its size
+- the number and its unit are **centred in the band under the arrow's ring** rather than
+  pushed onto the bottom margin, which puts the digits 96 px higher than a first pass that
+  sat them low
 - the arrow is **absent whenever the heading is not trustworthy**, with the reason in the
   ring where it would have been. The board has no magnetometer, so the direction is course
   over ground and a parked car has no heading at all - not a stale one, not north. The

@@ -33,24 +33,34 @@ constexpr std::int32_t separator_width_for(const std::int32_t font_px) noexcept
     return font_px * 288 / 1000;
 }
 
-// What the inline unit is allowed to take, and what the face is sized against.
-//
-// "MPH" at montserrat_28 measures around 66 px; 72 is that with room for a metrics change.
-// The gap is what stops the unit reading as a fourth digit.
-constexpr std::int32_t kUnitWidthBudget = 72;
-constexpr std::int32_t kUnitGap = 14;
+// The arrow's ring, in the top right corner and as large as the corner allows. Declared
+// here rather than with the rest of its own geometry below, because how low it reaches is
+// what decides how high the speed can sit.
+constexpr std::int32_t kRingRadius = 64;
+constexpr std::int32_t kRingCentreX = kScreenWidth - kSideMargin - kRingRadius - 2;
+constexpr std::int32_t kRingCentreY = 92;
+constexpr std::int32_t kRingBottom = kRingCentreY + kRingRadius;
 
-// 208 px, and the arithmetic is the whole reason it is not Speed Only's 248.
+// The unit sits under the number, so it costs the digits no width at all and the face is
+// capped only by how wide three cells can be.
 //
-// Three digits plus the unit and its gap have to fit 540 px. That leaves 454 px for the
-// digits, so a cell may be 151 px, so the face may be 151 / 0.7235 = 208 px. The inline
-// unit costs 40 px of face and 49 px of glyph height against Speed Only, which is what
-// buys the clock and the arrow a band to live in.
-constexpr std::int32_t kSpeedPx = 208;
+// It did sit beside them, which capped the face at 208 px: three digits plus "MPH" and a
+// gap had to share 540 px. Lifting the number off the bottom margin put the space below it
+// back, and the space below it is free - which is the whole reason Speed Only puts its
+// label there. 261 px is 25% more face for nothing given up.
+constexpr std::int32_t kUnitGap = 8;
+// Montserrat 28's line height. Used to centre the pair vertically, not to position the
+// label, so an approximation here moves the group by a pixel or two and nothing else.
+constexpr std::int32_t kUnitHeight = 30;
+
+// A tighter side margin than the rest of the panel keeps, because at this height the
+// digits are the only thing across the panel and have nothing to clear.
+constexpr std::int32_t kDigitsSideMargin = 16;
+constexpr std::int32_t kSpeedPx = 261;
 constexpr std::int32_t kDigitCellWidth = cell_width_for(kSpeedPx);
 constexpr std::int32_t kDigitCellHeight = cell_height_for(kSpeedPx);
-static_assert(kDigitCellWidth * 3 + kUnitGap + kUnitWidthBudget <= kUsableWidth,
-              "a three-digit speed and the inline unit must both fit across the panel");
+static_assert(kDigitCellWidth * 3 <= kScreenWidth - 2 * kDigitsSideMargin,
+              "a three-digit speed must fit across the panel");
 
 // Printed low, which is what Navigation asks for and Speed Only does not do - and low
 // means the *ink* is low, not the cell.
@@ -70,12 +80,25 @@ constexpr std::int32_t descent_for(const std::int32_t font_px) noexcept
 {
     return font_px * 251 / 1000;
 }
-constexpr std::int32_t kSpeedBaseline = kScreenHeight - kBottomMargin;
+// Montserrat's figures are about 0.70 em tall, which is what a reader sees of the line.
+constexpr std::int32_t kSpeedInkHeight = kSpeedPx * 70 / 100;
+// The number and its unit are centred together in what is left under the arrow's ring,
+// rather than pushed down onto the bottom margin. Sitting them low was what the first
+// layout asked for; a number this size reads better with air under it, and the ring is
+// what decides how high the group can go.
+constexpr std::int32_t kSpeedBand = kScreenHeight - kBottomMargin - kRingBottom;
+constexpr std::int32_t kSpeedGroupHeight = kSpeedInkHeight + kUnitGap + kUnitHeight;
+constexpr std::int32_t kSpeedInkTop =
+    kRingBottom + (kSpeedBand - kSpeedGroupHeight) / 2;
+constexpr std::int32_t kSpeedBaseline = kSpeedInkTop + kSpeedInkHeight;
+constexpr std::int32_t kUnitTop = kSpeedBaseline + kUnitGap;
+// The cell is taller than the ink and hangs above it, which is harmless - the box is
+// transparent and the glyphs start at kSpeedInkTop - but it must still be on the panel.
 constexpr std::int32_t kDigitsTop =
     kSpeedBaseline - (kDigitCellHeight - descent_for(kSpeedPx));
-// Where the ink starts. Montserrat's figures are about 0.70 em tall; this guards a gap of
-// a hundred-odd pixels, so the estimate is ample for what it is asked to do.
-constexpr std::int32_t kSpeedInkTop = kSpeedBaseline - kSpeedPx * 70 / 100;
+static_assert(kDigitsTop >= 0, "the digit cells must start on the panel");
+static_assert(kUnitTop + kUnitHeight <= kScreenHeight - kBottomMargin,
+              "the unit must sit above the bottom margin");
 
 // The clock. Large enough to read at a glance, small enough to leave the arrow its corner.
 constexpr std::int32_t kTimePx = 48;
@@ -105,11 +128,7 @@ constexpr std::int32_t time_cell_left(const std::size_t index) noexcept
 }
 constexpr std::int32_t kTimeWidth = time_cell_left(8) - kSideMargin;
 
-// The arrow's ring, in the top right corner and as large as the corner allows.
-constexpr std::int32_t kRingRadius = 64;
-constexpr std::int32_t kRingCentreX = kScreenWidth - kSideMargin - kRingRadius - 2;
-constexpr std::int32_t kRingCentreY = 92;
-static_assert(kRingCentreY + kRingRadius < kSpeedInkTop,
+static_assert(kRingBottom < kSpeedInkTop,
               "the ring must clear the speed it sits above");
 static_assert(kRingCentreX - kRingRadius > kSideMargin + kTimeWidth,
               "the ring must clear the clock beside it");
@@ -182,32 +201,13 @@ lv_obj_t* make_cell(lv_obj_t* const parent, const lv_font_t* const font,
     return cell;
 }
 
-// How far a font's baseline sits below the top of its line box.
-//
-// Used for the unit alone, and only because the unit is a built-in face that is the same
-// font on the host as on the panel - so unlike the numeral above it, measuring it tells
-// the truth in both places. It is what sits the unit on the digits' baseline instead of at
-// an offset picked by eye, which would not survive either face being resized.
-[[nodiscard]] std::int32_t baseline_offset(const lv_font_t* const font,
-                                           const std::int32_t fallback) noexcept
+// Where a block of `count` cells starts so that it is centred on the panel.
+constexpr std::int32_t block_left_for(const std::size_t count) noexcept
 {
-    if (font == nullptr) {
-        return fallback;
-    }
-    return static_cast<std::int32_t>(lv_font_get_line_height(font)) -
-           static_cast<std::int32_t>(font->base_line);
+    return kScreenWidth / 2 - static_cast<std::int32_t>(count) * kDigitCellWidth / 2;
 }
-
-[[nodiscard]] std::int32_t measure(const lv_font_t* const font,
-                                   const char* const text) noexcept
-{
-    if (font == nullptr) {
-        return 0;
-    }
-    lv_point_t size{};
-    lv_text_get_size(&size, text, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    return size.x;
-}
+static_assert(block_left_for(3) >= kDigitsSideMargin,
+              "a three-digit speed must stay inside its margin");
 
 }  // namespace
 
@@ -266,31 +266,21 @@ NavigationScreen::NavigationScreen(lv_obj_t* const root) noexcept : root_(root)
         lv_obj_add_flag(arrow_[index], LV_OBJ_FLAG_HIDDEN);
     }
 
-    // The speed, low and large. The unit is measured first, because where the digits are
-    // centred depends on how much width is left once it has taken its own.
-    const auto* unit_font = font_for(Typography::timer_secondary);
-    const auto measured = measure(unit_font, "MPH");
-    unit_width_ = measured > 0 ? measured : kUnitWidthBudget;
-    const auto unit_left = kScreenWidth - kSideMargin - unit_width_;
-    digits_centre_ = (kSideMargin + unit_left - kUnitGap) / 2;
-
+    // The speed, as large as three cells across the panel allow.
     const auto* speed_font = countdown_font(kSpeedPx);
     for (std::size_t index = 0; index < digits_.size(); ++index) {
-        digits_[index] = make_cell(root_, speed_font, kDigitCellWidth, kDigitCellHeight,
-                                   digits_centre_ -
-                                       static_cast<std::int32_t>(digits_.size()) *
-                                           kDigitCellWidth / 2 +
-                                       static_cast<std::int32_t>(index) * kDigitCellWidth,
-                                   kDigitsTop);
+        digits_[index] =
+            make_cell(root_, speed_font, kDigitCellWidth, kDigitCellHeight,
+                      block_left_for(digits_.size()) +
+                          static_cast<std::int32_t>(index) * kDigitCellWidth,
+                      kDigitsTop);
         digits_shown_[index] = '\0';
     }
     shown_count_ = digits_.size();
 
-    unit_ = create_label(root_, Typography::timer_secondary, color::text_secondary,
-                         LV_TEXT_ALIGN_LEFT);
-    lv_obj_set_width(unit_, unit_width_ + 4);
-    // Sat on the digits' own baseline rather than at a measured-by-eye offset.
-    lv_obj_set_pos(unit_, unit_left, kSpeedBaseline - baseline_offset(unit_font, 25));
+    unit_ = create_label(root_, Typography::timer_secondary, color::text_secondary);
+    lv_obj_set_width(unit_, kScreenWidth);
+    lv_obj_set_pos(unit_, 0, kUnitTop);
     lv_label_set_text(unit_, "");
 
     time_status_shown_[0] = '\0';
@@ -361,13 +351,12 @@ void NavigationScreen::update(const NavigationViewModel& model) noexcept
     }
 
     // The block is centred on the digits actually shown, so every reading is centred
-    // rather than only the two-digit ones. The unit does not move with it.
+    // rather than only the two-digit ones. The unit is centred on the panel and stays put.
     const auto count = std::strlen(model.speed.speed.data());
     const auto shown = count == 0 || count > digits_.size() ? digits_.size() : count;
     if (shown != shown_count_) {
         shown_count_ = shown;
-        const auto left =
-            digits_centre_ - static_cast<std::int32_t>(shown) * kDigitCellWidth / 2;
+        const auto left = block_left_for(shown);
         for (std::size_t index = 0; index < digits_.size(); ++index) {
             lv_obj_set_pos(digits_[index],
                            left + static_cast<std::int32_t>(index) * kDigitCellWidth,
