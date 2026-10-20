@@ -14,6 +14,7 @@
 #include "track_timer/track/definition.hpp"
 #include "track_timer/track/matching.hpp"
 #include "track_timer/ui/foundation.hpp"
+#include "track_timer/ui/navigation_mode.hpp"
 #include "track_timer/ui/presenter.hpp"
 
 #include <SDL2/SDL.h>
@@ -192,12 +193,14 @@ Options parse_options(const int argc, char** argv)
                 options.initial_screen != "gps-only" &&
                 options.initial_screen != "speed-only" &&
                 options.initial_screen != "compass" &&
+                options.initial_screen != "navigation" &&
                 options.initial_screen != "clock" &&
                 options.initial_screen != "review" &&
                 options.initial_screen != "diagnostics") {
                 throw std::invalid_argument(
                     "--screen must be ready, setup, settings, tracks, gate-capture, g-meter, "
-                    "gps-only, speed-only, compass, clock, review, or diagnostics");
+                    "gps-only, speed-only, compass, navigation, clock, review, or "
+                    "diagnostics");
             }
         }
         else if (argument == "--imu-state") {
@@ -256,7 +259,7 @@ Options parse_options(const int argc, char** argv)
         else if (argument == "--help") {
             std::cout << "Usage: track_timer_simulator [--scenario NAME] [--headless] "
                          "[--frames COUNT] [--frame-ms MS] [--gnss-rate 20|25] "
-                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|gate-capture|g-meter|gps-only|speed-only|compass|clock|review|diagnostics] "
+                         "[--gnss-fixture FILE] [--screen ready|setup|settings|tracks|gate-capture|g-meter|gps-only|speed-only|compass|navigation|clock|review|diagnostics] "
                          "[--track-state STATE] [--review-state STATE] "
                          "[--diagnostics-state STATE] [--display-state STATE] [--imu-state STATE] [--workflow-state STATE] [--trackday-mode saved|enabled|disabled] "
                          "[--snapshot FILE]\n"
@@ -668,6 +671,9 @@ int run(const Options& options)
             else if (options.initial_screen == "compass") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::compass);
             }
+            else if (options.initial_screen == "navigation") {
+                screen.open_setup_page(track_timer::simulator::SetupPage::navigation);
+            }
             else if (options.initial_screen == "clock") {
                 screen.open_setup_page(track_timer::simulator::SetupPage::clock);
             }
@@ -799,6 +805,17 @@ int run(const Options& options)
                      track_timer::ui::compass_state(screen.gps_only()))
               << " compass-deg="
               << track_timer::ui::compass_view(screen.gps_only()).degrees.data()
+              << " nav-speed="
+              << track_timer::ui::navigation_view({screen.gps_only(), screen.clock()})
+                     .speed.speed.data()
+              << " nav-heading="
+              << track_timer::ui::navigation_view({screen.gps_only(), screen.clock()})
+                     .heading.degrees.data()
+              << " nav-shared-fault="
+              << (track_timer::ui::navigation_view({screen.gps_only(), screen.clock()})
+                          .has_shared_fault
+                      ? "yes"
+                      : "no")
               << " clock-state="
               << track_timer::ui::clock_state_name(
                      track_timer::ui::clock_state(screen.clock()))

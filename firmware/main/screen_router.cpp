@@ -29,6 +29,7 @@
 #include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/acceleration_screen.hpp"
 #include "track_timer/ui/compass_screen.hpp"
+#include "track_timer/ui/navigation_screen.hpp"
 #include "track_timer/ui/gate_capture_screen.hpp"
 #include "track_timer/ui/speed_only_screen.hpp"
 #include "track_timer/ui/gesture_input.hpp"
@@ -418,6 +419,10 @@ constexpr ui::CarouselEntry kModeEntries[] = {
     // Beside Speed, because it is the same kind of readout from the same fix - and like
     // it, a driving display rather than something reached when a thing has gone wrong.
     {LV_SYMBOL_REFRESH, "COMPASS", kAzure, "course over ground"},
+    // After Compass, because it is that reading with the speed and the clock around it.
+    // The caption names the thing the driver cannot see from the label: the arrow is the
+    // same course over ground, so it needs the car to be moving.
+    {LV_SYMBOL_UP, "NAV", kAzure, "speed, GMT and heading"},
     {LV_SYMBOL_CHARGE, "0-X", kRuby, "standing start to a target"},
     {LV_SYMBOL_GPS, "GPS ONLY", kAzure},
     // Last, after the diagnostic. It is the mode least likely to be wanted on a track day,
@@ -456,6 +461,7 @@ static_assert(mode_entry_is(ui::DeviceMode::race, "RACE"));
 static_assert(mode_entry_is(ui::DeviceMode::g_only, "G-ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::speed_only, "SPEED"));
 static_assert(mode_entry_is(ui::DeviceMode::compass, "COMPASS"));
+static_assert(mode_entry_is(ui::DeviceMode::navigation, "NAV"));
 static_assert(mode_entry_is(ui::DeviceMode::acceleration, "0-X"));
 static_assert(mode_entry_is(ui::DeviceMode::gps_only, "GPS ONLY"));
 static_assert(mode_entry_is(ui::DeviceMode::clock, "CLOCK"));
@@ -983,6 +989,14 @@ class ScreenRouter {
             lv_screen_active() == compass_root_) {
             compass_->update(ui::compass_view(gps_only_snapshot_));
         }
+        // Fourth reading of the same snapshot, so "no fix" still has one definition. The
+        // clock half is rebuilt here rather than reused, for Clock mode's reason: what it
+        // shows depends on how long ago the reading arrived, and that changes between
+        // polls as well as between fixes.
+        if (nav_mode_ != nullptr && nav_mode_root_ != nullptr &&
+            lv_screen_active() == nav_mode_root_) {
+            nav_mode_->update(ui::navigation_view({gps_only_snapshot_, clock_snapshot()}));
+        }
         if (acceleration_ != nullptr && acceleration_root_ != nullptr &&
             lv_screen_active() == acceleration_root_) {
             acceleration_->update(acceleration_run_.view_model(acceleration_snapshot()));
@@ -1070,6 +1084,14 @@ class ScreenRouter {
         }
         compass_ = new (compass_storage_) ui::CompassScreen(compass_root_);
         ui::attach_gesture_input(compass_root_, on_input, this);
+
+        // Navigation owns the whole panel as well, with nothing on it to press.
+        nav_mode_root_ = lv_obj_create(nullptr);
+        if (nav_mode_root_ == nullptr) {
+            return false;
+        }
+        nav_mode_ = new (nav_mode_storage_) ui::NavigationScreen(nav_mode_root_);
+        ui::attach_gesture_input(nav_mode_root_, on_input, this);
 
         // 0-X owns the whole panel. It does take a tap - that is its reset - which the
         // shell handler routes before reaching the menu.
@@ -1623,6 +1645,9 @@ class ScreenRouter {
         case ui::DeviceMode::compass:
             trackday_->set_mode_note("COMPASS  -  course over ground, needs movement");
             break;
+        case ui::DeviceMode::navigation:
+            trackday_->set_mode_note("NAV  -  speed, GMT and heading");
+            break;
         case ui::DeviceMode::acceleration:
             trackday_->set_mode_note("0-X  -  standing start to a target speed");
             break;
@@ -1662,6 +1687,8 @@ class ScreenRouter {
             return speed_only_root_;
         case ui::DeviceMode::compass:
             return compass_root_;
+        case ui::DeviceMode::navigation:
+            return nav_mode_root_;
         case ui::DeviceMode::acceleration:
             return acceleration_root_;
         case ui::DeviceMode::gps_only:
@@ -2562,6 +2589,8 @@ class ScreenRouter {
     lv_obj_t* speed_only_root_{nullptr};
     ui::CompassScreen* compass_{nullptr};
     lv_obj_t* compass_root_{nullptr};
+    ui::NavigationScreen* nav_mode_{nullptr};
+    lv_obj_t* nav_mode_root_{nullptr};
     ui::AccelerationScreen* acceleration_{nullptr};
     lv_obj_t* acceleration_root_{nullptr};
     // Holds the run across fixes: the start instant has to be remembered, and the finish
@@ -2666,6 +2695,8 @@ class ScreenRouter {
     alignas(ui::SpeedOnlyScreen) std::byte
         speed_only_storage_[sizeof(ui::SpeedOnlyScreen)]{};
     alignas(ui::CompassScreen) std::byte compass_storage_[sizeof(ui::CompassScreen)]{};
+    alignas(ui::NavigationScreen)
+        std::byte nav_mode_storage_[sizeof(ui::NavigationScreen)]{};
     alignas(ui::AccelerationScreen) std::byte
         acceleration_storage_[sizeof(ui::AccelerationScreen)]{};
     alignas(ui::GateCaptureScreen) std::byte

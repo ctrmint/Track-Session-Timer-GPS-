@@ -8,6 +8,27 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Added
 
+- a **Navigation** mode: road speed low and large, the receiver's clock top left, and an
+  arrow top right pointing where the car is going with north at twelve o'clock. Three
+  readouts the device already computed in three separate modes, on one screen
+- the **unit sits beside the speed rather than under it**, which is the one place this
+  screen departs from Speed Only and the reason its face is 208 px against Speed Only's
+  248. Three digits plus `MPH` and its gap have to fit 540 px, which leaves 454 px for the
+  digits and so caps the face at 208. Speed Only keeps 248 and its label underneath - it
+  has the whole panel to answer a narrower question in, and is not changed to match
+- the arrow is **absent whenever the heading is not trustworthy**, with the reason in the
+  ring where it would have been. The board has no magnetometer, so the direction is course
+  over ground and a parked car has no heading at all - not a stale one, not north. The
+  gates are Compass mode's, reused rather than restated: the receiver's own `headAcc`
+  under 15 degrees, with a half-metre-per-second backstop under it
+- **one cause stated once**: with no receiver all three readouts are absent for the same
+  reason, and printing it beside the speed, under the clock and inside the ring would read
+  as three faults. Every other combination keeps its three separate statuses, because a
+  parked car with a fix and a time and no course really is three different things to say
+- the mode is appended to `OperatingMode`, so this is **one byte that already existed
+  changing value**: no settings format bump, no migration, and a device updating to this
+  firmware keeps its settings
+
 - **Race mode has its own running-session screen**: the lap in progress in `mm:ss.sss`,
   the fastest lap of the session, and the time left in it. Race previously borrowed Track
   Day's countdown, which - as that screen's own header says - has nowhere to put a lap

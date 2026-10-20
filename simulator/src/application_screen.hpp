@@ -25,6 +25,7 @@
 #include "track_timer/ui/clock_screen.hpp"
 #include "track_timer/ui/gps_only_screen.hpp"
 #include "track_timer/ui/compass_screen.hpp"
+#include "track_timer/ui/navigation_screen.hpp"
 #include "track_timer/ui/speed_only_screen.hpp"
 #include "track_timer/ui/track_selection.hpp"
 #include "track_timer/ui/track_selection_screen.hpp"
@@ -42,6 +43,7 @@ enum class SetupPage : std::uint8_t {
     gps_only,
     speed_only,
     compass,
+    navigation,
     clock,
 };
 
@@ -157,6 +159,7 @@ class ApplicationScreen {
     lv_obj_t* gps_only_root_{nullptr};
     lv_obj_t* speed_only_root_{nullptr};
     lv_obj_t* compass_root_{nullptr};
+    lv_obj_t* navigation_root_{nullptr};
     lv_obj_t* clock_root_{nullptr};
     lv_obj_t* rest_root_{nullptr};
     lv_obj_t* brightness_overlay_{nullptr};
@@ -181,6 +184,7 @@ class ApplicationScreen {
     ui::GpsOnlySnapshot gps_only_snapshot_{};
     ui::SpeedOnlyScreen speed_only_screen_;
     ui::CompassScreen compass_screen_;
+    ui::NavigationScreen navigation_screen_;
     ui::ClockScreen clock_screen_;
     ui::ClockSnapshot clock_snapshot_{};
     ui::RestSessionController rest_session_{};

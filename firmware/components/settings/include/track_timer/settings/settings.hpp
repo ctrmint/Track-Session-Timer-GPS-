@@ -30,6 +30,10 @@ enum class OperatingMode : std::uint8_t {
     compass,
     // Standing-start acceleration timing, to a target speed chosen in Setup.
     acceleration,
+    // Road speed, the receiver's clock and its course over ground on one screen. Appended
+    // for the reason every mode before it was: this enum's order *is* the stored format,
+    // so a new mode goes on the end whatever order it is offered to the driver in.
+    navigation,
 };
 
 enum class OrientationMode : std::uint8_t {
