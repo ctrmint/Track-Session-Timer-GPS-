@@ -1438,11 +1438,22 @@ class ScreenRouter {
         // The status rather than the action, because the status is the part that answers
         // why nothing happened: "moving" and "stale-fix" are refusals with different
         // causes, and from outside they look identical.
-        ESP_LOGI("track_timer", "capture: %s - gate %u %s, %u of 8 endpoints",
+        ESP_LOGI("track_timer", "capture: %s - gate %u %s, %u of %u endpoints",
                  ui::gate_capture_status_name(gate_capture_.status()),
                  static_cast<unsigned>(gate_capture_.gate_index()),
                  gate_capture_.right_endpoint_selected() ? "right" : "left",
-                 static_cast<unsigned>(gate_capture_.captured_endpoint_count()));
+                 static_cast<unsigned>(gate_capture_.captured_endpoint_count()),
+                 static_cast<unsigned>(ui::kGateCaptureEndpointCount));
+        // Which check refused the geometry, not just that one did. This is logged at the
+        // circuit, where the difference between a line too short, a line outside the
+        // geofence and a line too close to the direction of travel is the difference
+        // between walking ten metres and giving up on the session.
+        if (gate_capture_.status() == ui::GateCaptureStatus::invalid_geometry) {
+            const auto& refusal = gate_capture_.refusal();
+            ESP_LOGW("track_timer", "capture: geometry refused - %s at %s",
+                     track::track_load_result_name(refusal.result),
+                     track::track_definition_field_name(refusal.error_field));
+        }
         refresh_gate_capture();
     }
 

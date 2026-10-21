@@ -146,8 +146,18 @@ struct TrackLoadReport {
 
 [[nodiscard]] TrackLoadReport load_track_definition(std::string_view json,
                                                     TrackDefinition& output) noexcept;
+// Serialising validates: the candidate is written, read back through
+// load_track_definition, and refused if it does not survive the round trip. That is what
+// keeps an invalid definition from reaching the card, and it is why the reason is worth
+// having - pass `refusal` to receive the round trip's report rather than only the fact
+// that there was one. A capture refused at a circuit has to say which check failed,
+// because a line that is too short, one outside the geofence and one at too shallow an
+// angle to the direction of travel have nothing in common but the refusal.
+//
+// Only written when the round trip fails; a serialized definition leaves it untouched.
 [[nodiscard]] TrackSerializeResult serialize_track_definition(
-    const TrackDefinition& definition, TrackDefinitionBlob& output) noexcept;
+    const TrackDefinition& definition, TrackDefinitionBlob& output,
+    TrackLoadReport* refusal = nullptr) noexcept;
 [[nodiscard]] std::uint64_t hash_track_definition(std::string_view bytes) noexcept;
 void format_definition_hash(std::uint64_t hash, std::array<char, 17>& output) noexcept;
 [[nodiscard]] bool track_timing_ready(const TrackDefinition& definition) noexcept;

@@ -9,6 +9,17 @@
 
 namespace track_timer::ui {
 
+// What a circuit is made of, stated once. Two directed gates, each with a left and a right
+// endpoint, so four endpoints in all.
+//
+// It was eight until pit entry and exit were removed (#227). The controller followed; the
+// text it hands the screen did not, so the device went on instructing the driver to capture
+// eight endpoints across four gates while save unlocked at four and two. Counting from
+// here, or naming the gates rather than counting them, is what keeps the next change to
+// this shape from leaving the same kind of lie on the panel.
+inline constexpr std::size_t kGateCaptureGateCount = 2;
+inline constexpr std::size_t kGateCaptureEndpointCount = kGateCaptureGateCount * 2;
+
 enum class GateCaptureStatus : std::uint8_t {
     closed,
     editing,
@@ -30,7 +41,10 @@ struct GateCaptureViewModel {
     std::array<char, 48> selection{};
     std::array<char, 96> fix{};
     std::array<char, 96> preview{};
-    std::array<char, 112> status{};
+    // Wide enough for the longest refusal: the status label is 560 px of caption text set
+    // to wrap, which is about 75 characters a line over two lines, and a geometry refusal
+    // has to name the gate and every check that could have produced it.
+    std::array<char, 144> status{};
     std::array<char, 24> endpoint_label{};
     std::array<char, 24> save_label{};
     std::uint32_t status_color_rgb{0xFFFFFF};
@@ -57,6 +71,8 @@ class GateCaptureController {
     [[nodiscard]] bool right_endpoint_selected() const noexcept;
     [[nodiscard]] std::size_t captured_endpoint_count() const noexcept;
     [[nodiscard]] const track::TrackDefinition& draft() const noexcept;
+    // Meaningful only while the status is invalid_geometry.
+    [[nodiscard]] const track::TrackLoadReport& refusal() const noexcept;
     [[nodiscard]] GateCaptureViewModel view_model() const noexcept;
 
   private:
@@ -69,7 +85,12 @@ class GateCaptureController {
     domain::GnssFix latest_fix_{};
     std::int64_t evaluation_monotonic_us_{domain::kUnavailableTime};
     // Two endpoints for each of the two gates that remain.
-    std::array<bool, 4> captured_{};
+    std::array<bool, kGateCaptureEndpointCount> captured_{};
+    // Why the last save was refused, when it was refused by the geometry rather than by
+    // the card. Kept because the three ways a captured line fails validation have three
+    // different remedies, and "GATE GEOMETRY FAILED SAFETY VALIDATION" names none of them
+    // to somebody standing at the circuit with the engine off.
+    track::TrackLoadReport refusal_{};
     std::size_t gate_index_{0};
     bool right_endpoint_{false};
     GateCaptureStatus status_{GateCaptureStatus::closed};

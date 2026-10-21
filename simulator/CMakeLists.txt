@@ -235,7 +235,7 @@ if(BUILD_TESTING)
     set_tests_properties(
         simulator-gate-capture
         PROPERTIES
-            PASS_REGULAR_EXPRESSION "Two-gate capture, safety rejection, atomic persistence, and recovery passed"
+            PASS_REGULAR_EXPRESSION "Two-gate capture, the instructions matching it, named geometry refusals, safety rejection, atomic persistence, and recovery passed"
             TIMEOUT 20
     )
 

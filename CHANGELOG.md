@@ -364,6 +364,25 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- gate capture **stopped asking for eight endpoints that no longer exist.** Removing pit
+  entry and exit (#227) took the circuit from four gates to two, and the controller
+  followed - but the text it hands the screen did not, so the device went on instructing
+  the driver to capture 8 endpoints across FOUR GATES while save unlocked at four across
+  two, and the selection line counted up to `8` it could never reach. The count is now
+  taken from `kGateCaptureEndpointCount`, or the gates are named instead of counted
+  (`CAPTURE BOTH ENDS OF THE START AND FINISH LINES`), and a host test asserts the
+  instructions against the stated shape rather than a number typed into it (#204)
+- a capture refused by validation now **says which check refused it.** `SAVE BLOCKED - GATE
+  GEOMETRY FAILED SAFETY VALIDATION` named none of the three things that could have gone
+  wrong, to somebody standing at a circuit with the engine off. A line whose ends are under
+  a metre apart, a line outside the circuit's geofence and a line too long or too close to
+  the direction of travel have nothing in common but the refusal, and three different
+  remedies. `serialize_track_definition` already round-trips its candidate through
+  `load_track_definition` - that is what keeps invalid geometry off the card - so the
+  report it was discarding is now passed back and both the panel and the log name it. Where
+  one result covers several checks, all of them are listed rather than one being picked and
+  presented as the cause (#204)
+
 - the rule sending a running session to **Race's screen rather than Track Day's is now a
   host-tested function** instead of a comparison inside the router's screen lookup. Track
   Day withholding live lap times is a compliance rule, and the screen it is drawn on has
