@@ -176,13 +176,57 @@ void track_day_shows_the_timer_only()
     assert(!visibility.g_meter);
 }
 
-void race_shows_laps_delta_and_remaining()
+// Three figures and no fourth: the lap in progress, the fastest lap and the time left.
+// The delta flag was granted when Race's screen had no lap fields at all, and is now
+// false on purpose - a permission for something nothing draws describes a display that
+// does not exist, and a delta worth trusting is #58 (#219).
+void race_shows_laps_and_remaining_but_no_delta()
 {
     const auto visibility = ui::visibility_for(ui::DeviceMode::race);
     assert(visibility.session_timer);
     assert(visibility.lap_times);
-    assert(visibility.lap_delta);
+    assert(!visibility.lap_delta);
     assert(!visibility.g_meter);
+}
+
+// No mode may claim a delta while no screen draws one.
+void no_mode_claims_a_delta_nothing_draws()
+{
+    for (std::size_t index = 0; index < ui::kDeviceModeCount; ++index) {
+        assert(!ui::visibility_for(static_cast<ui::DeviceMode>(index)).lap_delta);
+    }
+}
+
+// The routing half of the compliance rule. Track Day's screen has no lap labels in it,
+// so the mode check is the only thing standing between a Track Day session and a lap
+// time on the panel - and that check had never been asserted anywhere (#219).
+void a_running_session_goes_to_the_screen_its_mode_allows()
+{
+    assert(ui::running_screen_for(ui::DeviceMode::race) == ui::RunningScreen::race);
+    assert(ui::running_screen_for(ui::DeviceMode::track_day) ==
+           ui::RunningScreen::trackday);
+
+    // Stated for every mode rather than the two that matter, because the default is what
+    // a mode added without a thought for this rule inherits, and it must be the screen
+    // that cannot show a lap time.
+    for (std::size_t index = 0; index < ui::kDeviceModeCount; ++index) {
+        const auto mode = static_cast<ui::DeviceMode>(index);
+        const auto expected = mode == ui::DeviceMode::race ? ui::RunningScreen::race
+                                                           : ui::RunningScreen::trackday;
+        assert(ui::running_screen_for(mode) == expected);
+    }
+}
+
+// The two rules have to agree. Lap times granted to a mode drawn on TrackdayScreen would
+// simply never appear, which is the bug #219 reported; a mode without them routed to
+// RaceScreen would show exactly what it is forbidden to.
+void the_screen_a_mode_gets_matches_the_laps_it_is_allowed()
+{
+    for (std::size_t index = 0; index < ui::kDeviceModeCount; ++index) {
+        const auto mode = static_cast<ui::DeviceMode>(index);
+        const auto on_race_screen = ui::running_screen_for(mode) == ui::RunningScreen::race;
+        assert(on_race_screen == ui::visibility_for(mode).lap_times);
+    }
 }
 
 void g_only_shows_nothing_but_the_meter()
@@ -290,7 +334,10 @@ int main()
     navigation_shows_three_readouts_and_no_timer();
     every_mode_has_a_name_a_label_and_a_summary();
     track_day_shows_the_timer_only();
-    race_shows_laps_delta_and_remaining();
+    race_shows_laps_and_remaining_but_no_delta();
+    no_mode_claims_a_delta_nothing_draws();
+    a_running_session_goes_to_the_screen_its_mode_allows();
+    the_screen_a_mode_gets_matches_the_laps_it_is_allowed();
     g_only_shows_nothing_but_the_meter();
     every_field_offers_its_values_directly();
     any_average_lap_is_reachable_on_the_roller();
@@ -299,7 +346,7 @@ int main()
     turning_off_average_lap_resets_the_dependent_field();
     mode_owned_settings_are_not_offered_as_fields();
 
-    std::cout << "Mode derivation, per-mode visibility rules, and one-press direct value "
-                 "selection passed\n";
+    std::cout << "Mode derivation, per-mode visibility rules, running-screen routing, "
+                 "and one-press direct value selection passed\n";
     return 0;
 }

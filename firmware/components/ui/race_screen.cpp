@@ -4,6 +4,7 @@
 #include "track_timer/ui/lvgl_visual_system.hpp"
 #include "track_timer/ui/timer_font.hpp"
 
+#include <cstdio>
 #include <cstring>
 
 namespace track_timer::ui {
@@ -226,7 +227,11 @@ void RaceScreen::set_track_name(const char* const name) noexcept
     if (track_label_ == nullptr || name == nullptr) {
         return;
     }
-    lv_label_set_text(track_label_, name);
+    if (std::strncmp(shown_track_.data(), name, shown_track_.size() - 1) == 0) {
+        return;
+    }
+    std::snprintf(shown_track_.data(), shown_track_.size(), "%s", name);
+    lv_label_set_text(track_label_, shown_track_.data());
 }
 
 lv_obj_t* RaceScreen::root() const noexcept { return root_; }
