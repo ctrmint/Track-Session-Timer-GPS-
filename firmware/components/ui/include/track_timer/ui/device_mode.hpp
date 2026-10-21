@@ -51,10 +51,32 @@ inline constexpr std::size_t kDeviceModeCount = 9;
 struct ModeVisibility {
     bool session_timer{true};
     bool lap_times{false};
+    // A live gap to the best lap. Granted by no mode yet, and deliberately so: the
+    // reference mapping and the validity rules a trustworthy delta needs are #58, and
+    // until a screen draws one, a mode claiming the permission describes a display that
+    // does not exist. Race asked for and was given it when its screen had no lap fields
+    // at all (#219); the screen it has now shows three figures and no delta.
     bool lap_delta{false};
     bool g_meter{false};
     bool gnss_data{false};
 };
+
+// Which running-session screen a mode is drawn on. Two exist, and they differ in what
+// they are able to show rather than in what they are configured to show: TrackdayScreen
+// has no lap labels anywhere in it, so Track Day cannot leak a lap time through a mode
+// check that is wrong, and RaceScreen is the one with the lap figures on it.
+//
+// A rule rather than a lookup inside the router, so the choice is host-testable: the
+// compliance rule #132 established is only as good as the routing that enforces it.
+enum class RunningScreen : std::uint8_t {
+    trackday,
+    race,
+};
+
+// Invariant, asserted in test_device_mode: a mode is drawn on RaceScreen exactly when it
+// is permitted lap times. Granting laps to a mode routed to TrackdayScreen would show
+// nothing; routing a mode without them to RaceScreen would show what it must not.
+[[nodiscard]] RunningScreen running_screen_for(DeviceMode mode) noexcept;
 
 // Track Day withholds live lap times deliberately. Many track days run under regulations
 // that prohibit timing on circuit, so this is a compliance rule, not a preference. Laps

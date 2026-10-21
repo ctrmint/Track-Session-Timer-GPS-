@@ -364,6 +364,26 @@ The project follows Semantic Versioning once the first firmware release is tagge
 
 ### Fixed
 
+- the rule sending a running session to **Race's screen rather than Track Day's is now a
+  host-tested function** instead of a comparison inside the router's screen lookup. Track
+  Day withholding live lap times is a compliance rule, and the screen it is drawn on has
+  no lap labels anywhere in it - so that mode check was the only thing enforcing the rule,
+  and nothing asserted it. `ui::running_screen_for` states it once, the default is the
+  screen that *cannot* show a lap time, and the tests pin both halves for every mode plus
+  the invariant tying them together: a mode is drawn on the Race screen exactly when it is
+  permitted lap times (#219)
+- **no mode claims a live lap delta any more.** Race was granted `lap_delta` back when its
+  running screen had no lap fields at all; the screen it has now shows three figures and
+  no delta, and the reference mapping a trustworthy one needs is still #58. A permission
+  for something nothing draws describes a display that does not exist, which is the same
+  mistake as a plausible reading - so the flag is false everywhere until a screen draws
+  one, and a test holds it there (#219)
+- the Race screen's **track name is written only when it changes.** The router handed it
+  over on every display tick while the one thing it names - the armed track - cannot
+  change during a session, and `lv_label_set_text` invalidates whether or not the text
+  differs. That was a repaint of the widest label on the screen 25 times a second, next to
+  three lap rows that were already change-gated for exactly this reason (#213)
+
 - `SettingsField` gained `acceleration_target` without `kSettingsFieldCount` or the name
   array following it, so naming that field read past the end of the array. Found while
   removing the two pit entries from the same list

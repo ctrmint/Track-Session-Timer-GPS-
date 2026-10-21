@@ -9,7 +9,11 @@ ModeVisibility visibility_for(const DeviceMode mode) noexcept
         // Session countdown only. No lap time, no delta, on circuit.
         return {true, false, false, false, false};
     case DeviceMode::race:
-        return {true, true, true, false, false};
+        // Laps and the session clock, and no delta: the screen shows the lap in progress,
+        // the fastest lap and the time left, which is the design #219 asked for. The
+        // delta flag goes back to false until #58 gives a delta worth trusting and a
+        // screen draws it.
+        return {true, true, false, false, false};
     case DeviceMode::g_only:
         // The G meter owns the whole panel; no timer, no laps.
         return {false, false, false, true, false};
@@ -40,6 +44,15 @@ ModeVisibility visibility_for(const DeviceMode mode) noexcept
         return {false, false, false, false, true};
     }
     return {true, false, false, false, false};
+}
+
+RunningScreen running_screen_for(const DeviceMode mode) noexcept
+{
+    // Only Race has lap figures to draw. Everything else runs a session as a countdown,
+    // which is all TrackdayScreen has ever had on it, and the default is the withholding
+    // one on purpose: a mode added without a thought for this rule gets the screen that
+    // cannot show a lap time rather than the one that can.
+    return mode == DeviceMode::race ? RunningScreen::race : RunningScreen::trackday;
 }
 
 DeviceMode mode_from_settings(const settings::DeviceSettings& settings) noexcept

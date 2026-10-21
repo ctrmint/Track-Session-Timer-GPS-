@@ -45,6 +45,9 @@ class RaceScreen {
     static constexpr std::size_t kLapCells = 9;
     // m m : s s
     static constexpr std::size_t kSessionCells = 5;
+    // Long enough for the catalogue's longest name; a longer one is compared and drawn
+    // truncated rather than rewritten every tick.
+    static constexpr std::size_t kTrackNameCapacity = 48;
 
     lv_obj_t* root_{nullptr};
     lv_obj_t* track_label_{nullptr};
@@ -61,6 +64,11 @@ class RaceScreen {
     std::array<char, kLapCells + 1> shown_current_{};
     std::array<char, kLapCells + 1> shown_fastest_{};
     std::array<char, kSessionCells + 1> shown_session_{};
+    // The same gate for the title, which the router hands over on every display tick
+    // while the one thing it names - the armed track - cannot change during a session.
+    // lv_label_set_text invalidates whether or not the text differs, so writing it
+    // unconditionally was a repaint of the widest label on the screen 25 times a second.
+    std::array<char, kTrackNameCapacity> shown_track_{};
 };
 
 }  // namespace track_timer::ui

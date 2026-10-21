@@ -1669,7 +1669,8 @@ class ScreenRouter {
     // times and Track Day must not; every other mode keeps the countdown.
     [[nodiscard]] lv_obj_t* running_screen() noexcept
     {
-        if (ui::mode_from_settings(settings_) == ui::DeviceMode::race &&
+        if (ui::running_screen_for(ui::mode_from_settings(settings_)) ==
+                ui::RunningScreen::race &&
             race_root_ != nullptr) {
             return race_root_;
         }
