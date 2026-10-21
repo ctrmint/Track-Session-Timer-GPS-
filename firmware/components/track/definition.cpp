@@ -1262,7 +1262,8 @@ bool write_gate(JsonWriter& writer, const DirectedGateDefinition& gate) noexcept
 }  // namespace
 
 TrackSerializeResult serialize_track_definition(
-    const TrackDefinition& definition, TrackDefinitionBlob& output) noexcept
+    const TrackDefinition& definition, TrackDefinitionBlob& output,
+    TrackLoadReport* const refusal) noexcept
 {
     TrackDefinitionBlob candidate{};
     JsonWriter writer{candidate};
@@ -1305,9 +1306,12 @@ TrackSerializeResult serialize_track_definition(
         return TrackSerializeResult::capacity_exceeded;
     }
     TrackDefinition round_trip{};
-    if (load_track_definition(
-            {candidate.bytes.data(), candidate.size}, round_trip).result !=
-        TrackLoadResult::loaded) {
+    const auto report =
+        load_track_definition({candidate.bytes.data(), candidate.size}, round_trip);
+    if (report.result != TrackLoadResult::loaded) {
+        if (refusal != nullptr) {
+            *refusal = report;
+        }
         return TrackSerializeResult::invalid_definition;
     }
     output = candidate;

@@ -11,7 +11,7 @@
 namespace track_timer::ui {
 namespace {
 
-constexpr std::array<const char*, 2> kGateNames{"START", "FINISH"};
+constexpr std::array<const char*, kGateCaptureGateCount> kGateNames{"START", "FINISH"};
 
 const char* status_text(const GateCaptureStatus status) noexcept
 {
@@ -21,7 +21,8 @@ const char* status_text(const GateCaptureStatus status) noexcept
     case GateCaptureStatus::editing:
         return "PARK SAFELY AT THE PHYSICAL ENDPOINT, THEN CAPTURE";
     case GateCaptureStatus::endpoint_captured:
-        return "ENDPOINT CAPTURED - CONTINUE UNTIL ALL 8 ARE COMPLETE";
+        // Written with the live count in write_status; this is the fallback.
+        return "ENDPOINT CAPTURED";
     case GateCaptureStatus::active_session:
         return "CAPTURE BLOCKED - STOP THE ACTIVE SESSION FIRST";
     case GateCaptureStatus::moving:
@@ -33,17 +34,75 @@ const char* status_text(const GateCaptureStatus status) noexcept
     case GateCaptureStatus::poor_accuracy:
         return "CAPTURE BLOCKED - GPS ACCURACY MUST BE 5 M OR BETTER";
     case GateCaptureStatus::incomplete:
-        return "SAVE BLOCKED - CAPTURE BOTH ENDS OF ALL FOUR GATES";
+        // The gates are named rather than counted: a count goes stale when the shape of a
+        // circuit changes, as this text did, and "START AND FINISH" is also the clearer
+        // instruction to somebody holding the device at the line.
+        return "SAVE BLOCKED - CAPTURE BOTH ENDS OF THE START AND FINISH LINES";
     case GateCaptureStatus::invalid_geometry:
         return "SAVE BLOCKED - GATE GEOMETRY FAILED SAFETY VALIDATION";
     case GateCaptureStatus::overwrite_confirmation:
         return "EXISTING JSON FOUND - PRESS CONFIRM OVERWRITE TO REPLACE IT";
     case GateCaptureStatus::saved:
-        return "SAVED AND RELOADED - FOUR-GATE DEFINITION IS READY";
+        return "SAVED AND RELOADED - START AND FINISH LINES ARE READY";
     case GateCaptureStatus::storage_error:
         return "SAVE FAILED - PREVIOUS VALID JSON REMAINS IN PLACE";
     }
     return "GATE CAPTURE";
+}
+
+// Why validation refused the captured geometry, in the terms of the thing to go and do
+// about it. Three results are worth translating because they are the three a capture can
+// actually produce; anything else is reported as the validator named it rather than
+// guessed at.
+void write_refusal(std::array<char, 144>& status,
+                   const track::TrackLoadReport& refusal) noexcept
+{
+    switch (refusal.result) {
+    case track::TrackLoadResult::degenerate_start_gate:
+    case track::TrackLoadResult::degenerate_finish_gate:
+        std::snprintf(status.data(), status.size(),
+                      "SAVE BLOCKED - LINE TOO SHORT: THE TWO ENDS MUST BE AT LEAST 1 M "
+                      "APART");
+        return;
+    case track::TrackLoadResult::geometry_outside_geofence:
+        std::snprintf(status.data(), status.size(),
+                      "SAVE BLOCKED - AN ENDPOINT IS OUTSIDE THIS CIRCUIT'S GEOFENCE");
+        return;
+    case track::TrackLoadResult::invalid_value:
+        // Three checks share this result for a captured line: the projection failing
+        // because the endpoints are nowhere near the circuit, a line over a kilometre
+        // long, and a line within ten degrees of the direction of travel. From here there
+        // is no telling which of them refused it, so all three are named rather than one
+        // being picked and presented as the cause.
+        std::snprintf(status.data(), status.size(),
+                      "SAVE BLOCKED - %s REFUSED. CHECK ITS LENGTH, ITS ANGLE TO THE "
+                      "DIRECTION OF TRAVEL, AND THAT IT IS AT THIS CIRCUIT",
+                      track::track_definition_field_name(refusal.error_field));
+        return;
+    default:
+        break;
+    }
+    std::snprintf(status.data(), status.size(), "SAVE BLOCKED - GEOMETRY REFUSED: %s",
+                  track::track_load_result_name(refusal.result));
+}
+
+// The status line. Counted states are formatted from kGateCaptureEndpointCount rather than
+// from a number typed into a string, which is how the eight-endpoint instruction outlived
+// the eight endpoints.
+void write_status(std::array<char, 144>& status, const GateCaptureStatus state,
+                  const std::size_t captured, const track::TrackLoadReport& refusal) noexcept
+{
+    if (state == GateCaptureStatus::endpoint_captured) {
+        std::snprintf(status.data(), status.size(),
+                      "ENDPOINT CAPTURED - %zu OF %zu DONE", captured,
+                      kGateCaptureEndpointCount);
+        return;
+    }
+    if (state == GateCaptureStatus::invalid_geometry) {
+        write_refusal(status, refusal);
+        return;
+    }
+    std::snprintf(status.data(), status.size(), "%s", status_text(state));
 }
 
 GateCaptureStatus from_endpoint_result(const track::EndpointCaptureResult result) noexcept
@@ -87,6 +146,7 @@ void GateCaptureController::begin(const track::TrackDefinition& definition,
     }
     latest_fix_ = {};
     evaluation_monotonic_us_ = domain::kUnavailableTime;
+    refusal_ = {};
     captured_.fill(false);
     gate_index_ = 0;
     right_endpoint_ = false;
@@ -106,7 +166,7 @@ void GateCaptureController::previous_gate() noexcept
     if (status_ == GateCaptureStatus::closed) {
         return;
     }
-    gate_index_ = gate_index_ == 0 ? 1 : gate_index_ - 1;
+    gate_index_ = gate_index_ == 0 ? kGateCaptureGateCount - 1 : gate_index_ - 1;
     status_ = GateCaptureStatus::editing;
 }
 
@@ -115,7 +175,7 @@ void GateCaptureController::next_gate() noexcept
     if (status_ == GateCaptureStatus::closed) {
         return;
     }
-    gate_index_ = (gate_index_ + 1) % 2;
+    gate_index_ = (gate_index_ + 1) % kGateCaptureGateCount;
     status_ = GateCaptureStatus::editing;
 }
 
@@ -171,8 +231,17 @@ void GateCaptureController::save(const bool confirm_overwrite) noexcept
     candidate.provenance.geometry_status =
         track::TrackGeometryStatus::device_captured;
     track::TrackDefinitionBlob blob{};
-    if (track::serialize_track_definition(candidate, blob) !=
-        track::TrackSerializeResult::serialized) {
+    refusal_ = {};
+    const auto serialized =
+        track::serialize_track_definition(candidate, blob, &refusal_);
+    if (serialized != track::TrackSerializeResult::serialized) {
+        // The round trip leaves its report; a blob that would not fit at all leaves none,
+        // so the one result that says so is set here rather than reported as an empty
+        // definition the validator never saw.
+        if (serialized == track::TrackSerializeResult::capacity_exceeded) {
+            refusal_ = {track::TrackLoadResult::capacity_exceeded, 0,
+                        track::TrackDefinitionField::none};
+        }
         status_ = GateCaptureStatus::invalid_geometry;
         return;
     }
@@ -226,14 +295,19 @@ const track::TrackDefinition& GateCaptureController::draft() const noexcept
     return draft_;
 }
 
+const track::TrackLoadReport& GateCaptureController::refusal() const noexcept
+{
+    return refusal_;
+}
+
 GateCaptureViewModel GateCaptureController::view_model() const noexcept
 {
     GateCaptureViewModel model{};
     std::snprintf(model.track.data(), model.track.size(), "%.44s | REV %u",
                   draft_.name.data(), static_cast<unsigned>(draft_.revision));
-    std::snprintf(model.selection.data(), model.selection.size(), "%s | %s | %u/8",
+    std::snprintf(model.selection.data(), model.selection.size(), "%s | %s | %zu/%zu",
                   kGateNames[gate_index_], right_endpoint_ ? "RIGHT" : "LEFT",
-                  static_cast<unsigned>(captured_endpoint_count()));
+                  captured_endpoint_count(), kGateCaptureEndpointCount);
     std::snprintf(model.endpoint_label.data(), model.endpoint_label.size(), "%s ENDPOINT",
                   right_endpoint_ ? "RIGHT" : "LEFT");
     std::snprintf(model.save_label.data(), model.save_label.size(), "%s",
@@ -270,7 +344,7 @@ GateCaptureViewModel GateCaptureController::view_model() const noexcept
                       "LINE PREVIEW: LEFT %s | RIGHT %s",
                       left_done ? "OK" : "MISSING", right_done ? "OK" : "MISSING");
     }
-    std::snprintf(model.status.data(), model.status.size(), "%s", status_text(status_));
+    write_status(model.status, status_, captured_endpoint_count(), refusal_);
     model.status_color_rgb = status_ == GateCaptureStatus::saved ||
                                      status_ == GateCaptureStatus::endpoint_captured
                                  ? color::positive_bright

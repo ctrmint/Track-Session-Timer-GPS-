@@ -70,8 +70,9 @@ track_timer::domain::GnssFix fix_at(
 void capture_all(track_timer::ui::GateCaptureController& controller,
                  const track_timer::track::TrackDefinition& source)
 {
-    const std::array<track_timer::track::DirectedGateDefinition, 2> gates{
-        source.gates.start, source.gates.finish};
+    const std::array<track_timer::track::DirectedGateDefinition,
+                     track_timer::ui::kGateCaptureGateCount>
+        gates{source.gates.start, source.gates.finish};
     std::uint32_t sequence = 10;
     for (std::size_t gate_index = 0; gate_index < gates.size(); ++gate_index) {
         auto left = fix_at(gates[gate_index].left, sequence++);
@@ -128,12 +129,37 @@ int main()
     controller.capture(false);
     assert(controller.status() == ui::GateCaptureStatus::poor_accuracy);
 
+    // What the screen tells the driver to do has to match what the controller will accept.
+    // It did not: the status asked for eight endpoints across four gates while save
+    // unlocked at four across two, because the pit gates went (#227) and this text did not
+    // (#204). Asserted against the stated count rather than a number typed in here, so the
+    // next change to the shape of a circuit cannot pass this test with stale instructions.
+    controller.begin(source, &store, false);
+    auto empty = controller.view_model();
+    assert(!empty.can_save);
+    controller.save(false);
+    assert(controller.status() == ui::GateCaptureStatus::incomplete);
+    empty = controller.view_model();
+    assert(std::strstr(empty.status.data(), "START AND FINISH") != nullptr);
+    assert(std::strstr(empty.status.data(), "FOUR GATES") == nullptr);
+    assert(std::strstr(empty.selection.data(), "0/4") != nullptr);
+
+    controller.begin(source, &store, false);
+    auto first = fix_at(source.gates.start.left, 7);
+    controller.update_fix(first, first.arrival_monotonic_us + 10'000);
+    controller.capture(false);
+    assert(controller.status() == ui::GateCaptureStatus::endpoint_captured);
+    const auto after_one = controller.view_model();
+    assert(std::strstr(after_one.status.data(), "1 OF 4 DONE") != nullptr);
+    assert(std::strstr(after_one.status.data(), "8") == nullptr);
+
     controller.begin(source, &store, false);
     capture_all(controller, source);
-    assert(controller.captured_endpoint_count() == 4);
+    assert(controller.captured_endpoint_count() == ui::kGateCaptureEndpointCount);
     auto model = controller.view_model();
     assert(model.can_save);
     assert(std::strstr(model.preview.data(), "LINE READY") != nullptr);
+    assert(std::strstr(model.selection.data(), "4/4") != nullptr);
     controller.save(false);
     assert(controller.status() == ui::GateCaptureStatus::saved);
     assert(controller.draft().revision == source.revision + 1);
@@ -160,19 +186,56 @@ int main()
     assert(controller.status() == ui::GateCaptureStatus::storage_error);
     store.fail_write = false;
 
+    // Every endpoint taken at the same spot: both lines are a point, which validation
+    // refuses as degenerate. The refusal has to reach the panel as the thing to go and do
+    // about it - the three ways a captured line fails have three different remedies, and
+    // "GATE GEOMETRY FAILED SAFETY VALIDATION" names none of them to somebody standing at
+    // the circuit with the engine off (#204).
     controller.begin(source, &store, false);
     const auto writes_before_invalid = store.write_count;
-    for (int endpoint = 0; endpoint < 8; ++endpoint) {
+    for (std::size_t endpoint = 0; endpoint < ui::kGateCaptureEndpointCount; ++endpoint) {
         controller.update_fix(good, good.arrival_monotonic_us);
         controller.capture(false);
         controller.toggle_endpoint();
-        if (endpoint % 2 == 1 && endpoint != 7) {
+        if (endpoint % 2 == 1 && endpoint + 1 < ui::kGateCaptureEndpointCount) {
             controller.next_gate();
         }
     }
     controller.save(true);
     assert(controller.status() == ui::GateCaptureStatus::invalid_geometry);
+    assert(controller.refusal().result == track::TrackLoadResult::degenerate_start_gate);
+    const auto refused = controller.view_model();
+    assert(std::strstr(refused.status.data(), "LINE TOO SHORT") != nullptr);
+    assert(std::strstr(refused.status.data(), "SAFETY VALIDATION") == nullptr);
     assert(store.write_count == writes_before_invalid);
+
+    // The refusal a bench test produces, and the reason this is checkable away from a
+    // circuit at all: a line captured in the garden is a valid line in the wrong place.
+    // Both ends of both gates are shifted a few kilometres north, keeping each line its
+    // original length, so nothing is degenerate and the geofence is what refuses it.
+    {
+        auto distant = source;
+        constexpr double kNorthDeg = 0.05;
+        distant.gates.start.left.latitude_deg += kNorthDeg;
+        distant.gates.start.right.latitude_deg += kNorthDeg;
+        distant.gates.finish.left.latitude_deg += kNorthDeg;
+        distant.gates.finish.right.latitude_deg += kNorthDeg;
+        controller.begin(source, &store, false);
+        capture_all(controller, distant);
+        const auto writes_before = store.write_count;
+        controller.save(true);
+        assert(controller.status() == ui::GateCaptureStatus::invalid_geometry);
+        assert(controller.refusal().result ==
+               track::TrackLoadResult::geometry_outside_geofence);
+        const auto outside = controller.view_model();
+        assert(std::strstr(outside.status.data(), "OUTSIDE THIS CIRCUIT'S GEOFENCE") !=
+               nullptr);
+        assert(store.write_count == writes_before);
+    }
+
+    // And the reason does not outlive the attempt it belongs to.
+    controller.begin(source, &store, false);
+    assert(controller.refusal().result == track::TrackLoadResult::empty);
     controller.cancel();
     assert(controller.status() == ui::GateCaptureStatus::closed);
 
@@ -222,6 +285,7 @@ int main()
         assert(std::strlen(ui::gate_capture_status_name(status)) > 0);
     }
 
-    std::cout << "Two-gate capture, safety rejection, atomic persistence, and recovery passed\n";
+    std::cout << "Two-gate capture, the instructions matching it, named geometry "
+                 "refusals, safety rejection, atomic persistence, and recovery passed\n";
     return 0;
 }
